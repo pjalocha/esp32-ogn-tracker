@@ -8,13 +8,13 @@ If you need to change the pins assigned to various periferials, see the top of t
 To compile and upload use the standard ESP32 toolchain and esp-idf
 
 To wire the UART GPS follow the pins defined in the hal.cpp
-
+```
                                   // wire colours for VK2828U GPS
 #define PIN_GPS_TXD  GPIO_NUM_12  // green
 #define PIN_GPS_RXD  GPIO_NUM_35  // blue
 #define PIN_GPS_PPS  GPIO_NUM_34  // white
 #define PIN_GPS_ENA  GPIO_NUM_13  // yellow -> well, I had a problem here, thus I tied the enable wire to 3.3V for the time being.
-
+```
 Note the yellow wire: put it to 3.3V to start with.
 An attempt to control it from the CPU did not work, to be followed.
 
