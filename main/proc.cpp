@@ -1,0 +1,321 @@
+#include <stdint.h>
+
+#include "hal.h"
+#include "proc.h"
+
+#include "ogn.h"
+
+#include "rf.h"
+#include "gps.h"
+
+static char           Line[128];      // for printing out to serial port, etc.
+
+static LDPC_Decoder     Decoder;      // error corrector for the OGN Gallager code
+
+// #define DEBUG_PRINT
+
+// ==================================================================
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+
+static OGN_PrioQueue<16> RelayQueue;  // received packets and candidates to be relayed
+
+static void PrintRelayQueue(uint8_t Idx)                    // for debug
+{ uint8_t Len=0;
+  // Len+=Format_String(Line+Len, "");
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  // Format_String(CONS_UART_Write, Line, Len);
+  Line[Len++]='['; Len+=Format_Hex(Line+Len, Idx); Line[Len++]=']'; Line[Len++]=' ';
+  Len+=RelayQueue.Print(Line+Len);
+  Format_String(CONS_UART_Write, Line);
+  xSemaphoreGive(CONS_Mutex);
+}
+
+static bool GetRelayPacket(OGN_TxPacket *Packet)      // prepare a packet to be relayed
+{ if(RelayQueue.Sum==0) return 0;
+  XorShift32(RX_Random);
+  uint8_t Idx=RelayQueue.getRand(RX_Random);
+  if(RelayQueue.Packet[Idx].Rank==0) return 0;
+  memcpy(Packet->Packet.Byte(), RelayQueue[Idx]->Byte(), OGN_Packet::Bytes);
+  Packet->Packet.Header.RelayCount+=1;
+  Packet->Packet.Whiten(); Packet->calcFEC();
+  // PrintRelayQueue(Idx);  // for debug
+  RelayQueue.decrRank(Idx);
+  return 1; }
+
+static void CleanRelayQueue(uint32_t Time, uint32_t Delay=20)
+{ RelayQueue.cleanTime((Time-Delay)%60); }
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+
+static void ReadStatus(OGN_TxPacket &StatPacket)
+{
+
+  // uint16_t MCU_VCC   = Measure_MCU_VCC();                                    // [0.001V]
+  // StatPacket.Packet.EncodeVoltage(((MCU_VCC<<3)+62)/125);                    // [1/64V]
+  // int16_t MCU_Temp  = Measure_MCU_Temp();                                   // [0.1degC]
+  // if(StatPacket.Packet.Status.Pressure==0) StatPacket.Packet.EncodeTemperature(MCU_Temp); // [0.1degC]
+  StatPacket.Packet.Status.RadioNoise = RX_AverRSSI;                         // [-0.5dBm] write radio noise to the status packet
+
+  StatPacket.Packet.Status.TxPower = Parameters.getTxPower()-4;
+
+  uint16_t RxRate = RX_OGN_Count64;
+  uint8_t RxRateLog2=0; RxRate>>=1; while(RxRate) { RxRate>>=1; RxRateLog2++; }
+  StatPacket.Packet.Status.RxRate = RxRateLog2;
+
+ { uint8_t Len=0;
+    Len+=Format_String(Line+Len, "$POGNR,");                                 // NMEA report: radio status
+    Len+=Format_UnsDec(Line+Len, RF_FreqPlan.Plan);                          // which frequency plan
+    Line[Len++]=',';
+    Len+=Format_UnsDec(Line+Len, RX_OGN_Count64);                            // number of OGN packets received
+    Line[Len++]=',';
+    Line[Len++]=',';
+    Len+=Format_SignDec(Line+Len, -5*RX_AverRSSI, 2, 1);                     // average RF level (over all channels)
+    Line[Len++]=',';
+    Len+=Format_UnsDec(Line+Len, (uint16_t)TX_Credit);
+    Line[Len++]=',';
+    Len+=Format_SignDec(Line+Len, (int16_t)RF_Temp);                         // the temperature of the RF chip
+    Line[Len++]=',';
+    // Len+=Format_SignDec(Line+Len, MCU_Temp, 2, 1);
+    Line[Len++]=',';
+    // Len+=Format_UnsDec(Line+Len, (MCU_VCC+5)/10, 3, 2);
+
+    Len+=NMEA_AppendCheckCRNL(Line, Len);                                    // append NMEA check-sum and CR+NL
+    // LogLine(Line);
+    // if(CONS_UART_Free()>=128)
+    { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, Line, Len);                               // send the NMEA out to the console
+      xSemaphoreGive(CONS_Mutex); }
+#ifdef WITH_SDLOG
+    if(Log_Free()>=128)
+    { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
+      Format_String(Log_Write, Line, Len);                                     // send the NMEA out to the log file
+      xSemaphoreGive(Log_Mutex); }
+#endif
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+
+static void ProcessRxPacket(OGN_RxPacket *RxPacket, uint8_t RxPacketIdx)              // process every (correctly) received packet
+{ int32_t LatDist=0, LonDist=0; uint8_t Warn=0;
+  if( RxPacket->Packet.Header.Other || RxPacket->Packet.Header.Encrypted ) return ; // status packet or encrypted: ignore
+  uint8_t MyOwnPacket = ( RxPacket->Packet.Header.Address  == Parameters.Address  )
+                     && ( RxPacket->Packet.Header.AddrType == Parameters.AddrType );
+  bool DistOK = RxPacket->Packet.calcDistanceVector(LatDist, LonDist, GPS_Latitude, GPS_Longitude, GPS_LatCosine)>=0;
+  if(DistOK)
+  { if(!MyOwnPacket)
+    { RxPacket->calcRelayRank(GPS_Altitude/10);              // calculate the relay-rank (priority for relay)
+      RelayQueue.addNew(RxPacketIdx); }
+    uint8_t Len=RxPacket->WritePOGNT(Line);                  // print on the console as $POGNT
+    if(!MyOwnPacket)
+    { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, Line, Len);
+      xSemaphoreGive(CONS_Mutex); }
+#ifdef WITH_LOOKOUT
+    const LookOut_Target *Tgt=Look.ProcessTarget(RxPacket->Packet);  // process the received target postion
+    if(Tgt) Warn=Tgt->WarnLevel;                                     // remember warning level of this target
+#ifdef WITH_BEEPER
+  if(KNOB_Tick>12) Play(Play_Vol_1 | Play_Oct_2 | (7+2*Warn), 3+16*Warn);          // if Knob>12 => make a beep for every received packet
+#endif
+#else // WITH_LOOKOUT
+#ifdef WITH_BEEPER
+  if(KNOB_Tick>12) Play(Play_Vol_1 | Play_Oct_2 | 7, 3);          // if Knob>12 => make a beep for every received packet
+#endif
+#endif // WITH_LOOKOUT
+#ifdef WITH_SDLOG
+    if(Log_Free()>=128)
+    { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
+      Format_String(Log_Write, Line, Len);
+      xSemaphoreGive(Log_Mutex); }
+#endif
+#ifdef WITH_PFLAA
+    if(!MyOwnPacket)
+    { Len=RxPacket->Packet.WritePFLAA(Line, Warn, LatDist, LonDist, RxPacket->Packet.DecodeAltitude()-GPS_Altitude/10); // print on the console $
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, Line, Len);
+      xSemaphoreGive(CONS_Mutex); }
+#endif
+#ifdef WITH_MAVLINK
+    if(!MyOwnPacket)
+    { MAV_ADSB_VEHICLE MAV_RxReport;
+      RxPacket->Packet.Encode(MAV_RxReport);
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      MAV_RxMsg::Send(sizeof(MAV_RxReport), MAV_Seq++, MAV_SysID, MAV_COMP_ID_ADSB, MAV_ID_ADSB_VEHICLE, (const uint8_t *)&MAV_RxReport, CONS_UART_Write);
+      xSemaphoreGive(CONS_Mutex); }
+#endif
+  }
+}
+
+static void DecodeRxPacket(RFM_RxPktData *RxPkt)
+{
+  uint8_t RxPacketIdx  = RelayQueue.getNew();                   // get place for this new packet
+  OGN_RxPacket *RxPacket = RelayQueue[RxPacketIdx];
+  // PrintRelayQueue(RxPacketIdx);                              // for debug
+  // RxPacket->RxRSSI=RxPkt.RSSI;
+  // TickType_t ExecTime=xTaskGetTickCount();
+
+  RX_OGN_Packets++;
+  uint8_t Check = RxPkt->Decode(*RxPacket, Decoder);
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "RxPacket: ");
+  Format_Hex(CONS_UART_Write, RxPacket->Packet.HeaderWord);
+  CONS_UART_Write(' ');
+  Format_UnsDec(CONS_UART_Write, (uint16_t)Check);
+  CONS_UART_Write('/');
+  Format_UnsDec(CONS_UART_Write, (uint16_t)RxPacket->RxErr);
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
+  if( (Check==0) && (RxPacket->RxErr<15) )                     // what limit on number of detected bit errors ?
+  { RxPacket->Packet.Dewhiten();
+    ProcessRxPacket(RxPacket, RxPacketIdx); }
+
+}
+
+// -------------------------------------------------------------------------------------------------------------------
+
+#ifdef __cplusplus
+  extern "C"
+#endif
+void vTaskPROC(void* pvParameters)
+{
+  RelayQueue.Clear();
+
+  OGN_TxPacket PosPacket;       // position packet
+  uint32_t     PosTime=0;       // [sec] when the position was recorded
+  OGN_TxPacket StatPacket;      // status report packet
+
+  for( ; ; )
+  { vTaskDelay(1);
+    static uint32_t PrevSlotTime=0;
+    uint32_t SlotTime = TimeSync_Time();
+    if(TimeSync_msTime()<300) SlotTime--;
+
+    RFM_RxPktData *RxPkt = RF_RxFIFO.getRead();  // check for new received packets
+    if(RxPkt)
+    {
+#ifdef DEBUG_PRINT
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60, 2);
+      CONS_UART_Write('.');
+      Format_UnsDec(CONS_UART_Write, TimeSync_msTime(), 3);
+      Format_String(CONS_UART_Write, " RF_RxFIFO -> ");
+      RxPkt->Print(CONS_UART_Write);
+      // CONS_UART_Write('\r'); CONS_UART_Write('\n');
+      xSemaphoreGive(CONS_Mutex);
+#endif
+      DecodeRxPacket(RxPkt);                     // decode and process the received packet
+      RF_RxFIFO.Read(); }
+
+    if(SlotTime==PrevSlotTime) continue;
+    PrevSlotTime=SlotTime;
+                                                                        // this part of the loop is executed only once per slot-time
+    GPS_Position *Position = GPS_getPosition();
+    if(Position) Position->EncodeStatus(StatPacket.Packet);             // encode GPS altitude and pressure
+    if( Position && Position->Ready && (!Position->Sent) && Position->GPS && Position->isValid() )
+    { int16_t AverSpeed=GPS_AverageSpeed();                             // [0.1m/s] average speed, including the vertical speed
+      RF_FreqPlan.setPlan(Position->Latitude, Position->Longitude);     // set the frequency plan according to the GPS position
+/*
+#ifdef DEBUG_PRINT
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60);
+      CONS_UART_Write('.');
+      Format_UnsDec(CONS_UART_Write, TimeSync_msTime(), 3);
+      Format_String(CONS_UART_Write, " -> Sent\n");
+      xSemaphoreGive(CONS_Mutex);
+#endif
+*/
+      PosTime=Position->getUnixTime();
+      PosPacket.Packet.HeaderWord=0;
+      PosPacket.Packet.Header.Address    = Parameters.Address;         // set address
+      PosPacket.Packet.Header.AddrType   = Parameters.AddrType;        // address-type
+      PosPacket.Packet.calcAddrParity();                               // parity of (part of) the header
+      Position->Encode(PosPacket.Packet);                              // encode position/altitude/speed/etc. from GPS position
+      PosPacket.Packet.Position.Stealth  = Parameters.Stealth;
+      PosPacket.Packet.Position.AcftType = Parameters.AcftType;        // aircraft-type
+      OGN_TxPacket *TxPacket = RF_TxFIFO.getWrite();
+      TxPacket->Packet = PosPacket.Packet;                             // copy the position packet to the TxFIFO
+      TxPacket->Packet.Whiten(); TxPacket->calcFEC();                  // whiten and calculate FEC code
+#ifdef DEBUG_PRINT
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60);
+      CONS_UART_Write('.');
+      Format_UnsDec(CONS_UART_Write, TimeSync_msTime(), 3);
+      Format_String(CONS_UART_Write, " TxFIFO <- ");
+      Format_Hex(CONS_UART_Write, TxPacket->Packet.HeaderWord);
+      CONS_UART_Write('\r'); CONS_UART_Write('\n');
+      xSemaphoreGive(CONS_Mutex);
+#endif
+      XorShift32(RX_Random);
+      if( (AverSpeed>10) || ((RX_Random&0x3)==0) )                      // send only some positions if the speed is less than 1m/s
+        RF_TxFIFO.Write();                                              // complete the write into the TxFIFO
+      Position->Sent=1;
+
+    } else // if GPS position is not complete, contains no valid position, etc.
+    { if((SlotTime-PosTime)>=30) { PosPacket.Packet.Position.Time=0x3F; } // if no valid position for more than 30 seconds then set the time as unknown for the transmitted packet
+      OGN_TxPacket *TxPacket = RF_TxFIFO.getWrite();
+      TxPacket->Packet = PosPacket.Packet;
+      TxPacket->Packet.Whiten(); TxPacket->calcFEC();                 // whiten and calculate FEC code
+#ifdef DEBUG_PRINT
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, "TxFIFO: ");
+      Format_Hex(CONS_UART_Write, TxPacket->Packet.HeaderWord);
+      CONS_UART_Write('\r'); CONS_UART_Write('\n');
+      xSemaphoreGive(CONS_Mutex);
+#endif
+      XorShift32(RX_Random);
+      if(PosTime && ((RX_Random&0x3)==0) )                              // send if some position in the packet and at 1/4 normal rate
+        RF_TxFIFO.Write();                                              // complete the write into the TxFIFO
+      if(Position) Position->Sent=1;
+    }
+#ifdef DEBUG_PRINT
+    // char Line[128];
+    Line[0]='0'+RF_TxFIFO.Full(); Line[1]=' ';                  // print number of packets in the TxFIFO
+    RelayQueue.Print(Line+2);                                   // dump the relay queue
+    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    Format_String(CONS_UART_Write, Line);
+    xSemaphoreGive(CONS_Mutex);
+#endif
+    StatPacket.Packet.HeaderWord=0;
+    StatPacket.Packet.Header.Address    = Parameters.Address;    // set address
+    StatPacket.Packet.Header.AddrType   = Parameters.AddrType;   // address-type
+    StatPacket.Packet.Header.Other=1;
+    StatPacket.Packet.calcAddrParity();                          // parity of (part of) the header
+    StatPacket.Packet.Status.Hardware=HARDWARE_ID;
+    StatPacket.Packet.Status.Firmware=SOFTWARE_ID;
+
+    ReadStatus(StatPacket);
+    XorShift32(RX_Random);
+    if( ((RX_Random&0x1F)==0) && (RF_TxFIFO.Full()<2) )
+    { OGN_TxPacket *StatusPacket = RF_TxFIFO.getWrite();
+     *StatusPacket = StatPacket;
+      StatusPacket->Packet.Whiten();
+      StatusPacket->calcFEC();
+      RF_TxFIFO.Write();
+    }
+
+    while(RF_TxFIFO.Full()<2)
+    { OGN_TxPacket *RelayPacket = RF_TxFIFO.getWrite();
+      if(!GetRelayPacket(RelayPacket)) break;
+      // xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      // Format_String(CONS_UART_Write, "Relayed: ");
+      // Format_Hex(CONS_UART_Write, RelayPacket->Packet.HeaderWord);
+      // CONS_UART_Write('\r'); CONS_UART_Write('\n');
+      // xSemaphoreGive(CONS_Mutex);
+#ifdef DEBUG_PRINT
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, "TxFIFO: ");
+      Format_Hex(CONS_UART_Write, RelayPacket->Packet.HeaderWord);
+      CONS_UART_Write('\r'); CONS_UART_Write('\n');
+      xSemaphoreGive(CONS_Mutex);
+#endif
+      RF_TxFIFO.Write();
+    }
+    CleanRelayQueue(SlotTime);
+
+  }
+
+
+}

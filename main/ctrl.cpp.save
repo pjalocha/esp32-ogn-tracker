@@ -1,0 +1,43 @@
+#include "hal.h"
+
+#include "ctrl.h"
+
+void PrintTasks(void (*CONS_UART_Write)(char))
+{ char Line[32];
+
+  size_t FreeHeap = xPortGetFreeHeapSize();
+  Format_String(CONS_UART_Write, "Task           Pr. Stack, ");
+  Format_UnsDec(CONS_UART_Write, (uint32_t)FreeHeap, 4, 3);
+  Format_String(CONS_UART_Write, "kB free\n");
+
+  UBaseType_t uxArraySize = uxTaskGetNumberOfTasks();
+  TaskStatus_t *pxTaskStatusArray = (TaskStatus_t *)pvPortMalloc( uxArraySize * sizeof( TaskStatus_t ) );
+  if(pxTaskStatusArray==0) return;
+  uxArraySize = uxTaskGetSystemState( pxTaskStatusArray, uxArraySize, NULL );
+  for(UBaseType_t T=0; T<uxArraySize; T++)
+  { TaskStatus_t *Task = pxTaskStatusArray+T;
+    uint8_t Len=Format_String(Line, Task->pcTaskName);
+    for( ; Len<=configMAX_TASK_NAME_LEN; )
+      Line[Len++]=' ';
+    Len+=Format_UnsDec(Line+Len, Task->uxCurrentPriority, 2); Line[Len++]=' ';
+    // Line[Len++]='0'+Task->uxCurrentPriority; Line[Len++]=' ';
+    Len+=Format_UnsDec(Line+Len, Task->usStackHighWaterMark, 3);
+    Line[Len++]='\n'; Line[Len++]=0;
+    Format_String(CONS_UART_Write, Line);
+  }
+  vPortFree( pxTaskStatusArray );
+}
+
+extern "C"
+void vTaskCTRL(void* pvParameters)
+{
+  while(1)
+  { vTaskDelay(10000);
+    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    printf("10000 ticks...\n");
+
+    xSemaphoreGive(CONS_Mutex);                                       // give back Console to other tasks
+  }
+}
+
+
