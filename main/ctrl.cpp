@@ -39,30 +39,34 @@ void PrintTasks(void (*CONS_UART_Write)(char))
 // ========================================================================================================================
 
 #ifdef WITH_OLED
-int OLED_DisplayStatus(uint32_t Time, GPS_Position *GPS=0)
+int OLED_DisplayStatus(uint32_t Time, uint8_t LineIdx=0)
 { char Line[20];
   Format_String(Line   , "OGN Tx/Rx      ");
   Format_HHMMSS(Line+10, Time);
-  OLED_PutLine(0, Line);
+  OLED_PutLine(LineIdx++, Line);
   Parameters.Print(Line);
-  OLED_PutLine(1, Line);
+  OLED_PutLine(LineIdx++, Line);
+  return 0; }
+
+int OLED_DisplayPosition(GPS_Position *GPS=0, uint8_t LineIdx=2)
+{ char Line[20];
   if(GPS && GPS->isValid())
   { Line[0]=' ';
     Format_SignDec(Line+1,  GPS->Latitude /60, 6, 4); Line[9]=' ';
     Format_UnsDec (Line+10, GPS->Altitude /10, 5, 0); Line[15]='m';
-    OLED_PutLine(2, Line);
+    OLED_PutLine(LineIdx  , Line);
     Format_SignDec(Line,    GPS->Longitude/60, 7, 4);
     Format_SignDec(Line+10, GPS->ClimbRate,    4, 1);
-    OLED_PutLine(3, Line);
+    OLED_PutLine(LineIdx+1, Line);
     Format_UnsDec (Line   , GPS->Speed, 4, 1); Format_String(Line+5, "m/s  ");
     Format_UnsDec (Line+10, GPS->Heading, 4, 1); Line[15]='^';
-    OLED_PutLine(4, Line);
+    OLED_PutLine(LineIdx+2, Line);
     Format_String(Line, "0D/00sat DOP00.0");
     Line[0]+=GPS->FixMode; Format_UnsDec(Line+3, GPS->Satellites, 2);
     Format_UnsDec(Line+12, (uint16_t)GPS->HDOP, 3, 1);
-    OLED_PutLine(5, Line);
+    OLED_PutLine(LineIdx+3, Line);
   }
-  else { OLED_PutLine(2, 0); OLED_PutLine(3, 0); OLED_PutLine(4, 0); }
+  else { OLED_PutLine(LineIdx, 0); OLED_PutLine(LineIdx+1, 0); OLED_PutLine(LineIdx+2, 0); OLED_PutLine(LineIdx+3, 0); }
   if(GPS && GPS->isDateValid())
   { Format_UnsDec (Line   , (uint16_t)GPS->Day,   2, 0); Line[2]='.';
     Format_UnsDec (Line+ 3, (uint16_t)GPS->Month, 2, 0); Line[5]='.';
@@ -73,13 +77,13 @@ int OLED_DisplayStatus(uint32_t Time, GPS_Position *GPS=0)
     Format_UnsDec (Line+12, (uint16_t)GPS->Min,   2, 0);
     Format_UnsDec (Line+14, (uint16_t)GPS->Sec,   2, 0);
   } else Line[10]=0;
-  OLED_PutLine(6, Line);
+  OLED_PutLine(LineIdx+4, Line);
   Line[0]=0;
-  if(GPS && GPS->Baro)
+  if(GPS && GPS->hasBaro)
   { Format_String(Line   , "0000.0hPa 00000m");
     Format_UnsDec(Line   , GPS->Pressure/4, 5, 1);
     Format_UnsDec(Line+10, GPS->StdAltitude/10, 5, 0); }
-  OLED_PutLine(7, Line);
+  OLED_PutLine(LineIdx+5, Line);
   return 0; }
 #endif
 
@@ -102,7 +106,8 @@ static void ReadParameters(void)  // read parameters requested by the user in th
   { PrintParameters();
     if(NMEA.Parms==0)                                                      // if no parameter given
     { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);                           // print a help message
-      Format_String(CONS_UART_Write, "$POGNS,<aircraft-type>,<addr-type>,<address>,<RFM69(H)W>,<Tx-power[dBm]>,<freq.corr.[kHz]>,<console baudrate[bps]>,<RF temp. corr.[degC]>,<pressure corr.[Pa]>\n");
+      // Format_String(CONS_UART_Write, "$POGNS,<aircraft-type>,<addr-type>,<address>,<RFM69(H)W>,<Tx-power[dBm]>,<freq.corr.[kHz]>,<console baudrate[bps]>,<RF temp. corr.[degC]>,<pressure corr.[Pa]>\n");
+      Format_String(CONS_UART_Write, "$POGNS[,<Name>=<Value>]\n");
       xSemaphoreGive(CONS_Mutex);                                          //
       return; }
     Parameters.ReadPOGNS(NMEA);
@@ -131,6 +136,9 @@ static void ProcessCtrlC(void)                                  // print system 
   Format_String(CONS_UART_Write, "GPS: ");
   Format_UnsDec(CONS_UART_Write, GPS_getBaudRate(), 1);
   Format_String(CONS_UART_Write, "bps");
+  CONS_UART_Write(',');
+  Format_UnsDec(CONS_UART_Write, GPS_PosPeriod, 3, 2);
+  CONS_UART_Write('s');
   if(GPS_Status.PPS)         Format_String(CONS_UART_Write, ",PPS");
   if(GPS_Status.NMEA)        Format_String(CONS_UART_Write, ",NMEA");
   if(GPS_Status.UBX)         Format_String(CONS_UART_Write, ",UBX");
@@ -174,10 +182,11 @@ void vTaskCTRL(void* pvParameters)
     GPS_Position *GPS = GPS_getPosition();
     bool TimeChange = Time!=PrevTime;
     bool GPSchange  = GPS!=PrevGPS;
-    if( (Time==PrevTime) && (GPS==PrevGPS) ) continue;
+    if( (!TimeChange) && (!GPSchange) ) continue;
     PrevTime=Time; PrevGPS=GPS;
 #ifdef WITH_OLED
-    OLED_DisplayStatus(Time, GPS);
+    if(TimeChange) OLED_DisplayStatus(Time, 0);
+    if(GPSchange)  OLED_DisplayPosition(GPS, 2);
 #endif
 #ifdef DEBUG_PRINT
     if(!TimeChange || (Time%60)!=0) continue;

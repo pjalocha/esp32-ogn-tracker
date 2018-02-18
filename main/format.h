@@ -9,7 +9,7 @@ char HexDigit(uint8_t Val);
 inline void Format_Bytes ( void (*Output)(char), const    char *Bytes,  uint8_t Len) { Format_Bytes(Output, (const uint8_t *)Bytes,  Len); }
 
        void Format_String( void (*Output)(char), const    char *String);
-inline void Format_String( void (*Output)(char), const    char *String, uint8_t Len) { Format_Bytes(Output, (const uint8_t *)String, Len); }
+       void Format_String( void (*Output)(char), const    char *String, uint8_t MinLen, uint8_t MaxLen);
 
 void Format_Hex( void (*Output)(char), uint8_t  Byte );
 void Format_Hex( void (*Output)(char), uint16_t Word );
@@ -21,8 +21,11 @@ void Format_SignDec( void (*Output)(char),  int16_t Value, uint8_t MinDigits=1, 
 void Format_UnsDec ( void (*Output)(char), uint32_t Value, uint8_t MinDigits=1, uint8_t DecPoint=0);
 void Format_SignDec( void (*Output)(char),  int32_t Value, uint8_t MinDigits=1, uint8_t DecPoint=0);
 
+void Format_UnsDec ( void (*Output)(char), uint64_t Value, uint8_t MinDigits=1, uint8_t DecPoint=0);
+void Format_SignDec( void (*Output)(char),  int64_t Value, uint8_t MinDigits=1, uint8_t DecPoint=0);
+
 uint8_t Format_String(char *Str, const char *String);
-uint8_t Format_String(char *Str, const char *String, uint8_t Len);
+uint8_t Format_String(char *Str, const char *String, uint8_t MinLen, uint8_t MaxLen);
 
 uint8_t Format_UnsDec (char *Str, uint32_t Value, uint8_t MinDigits=1, uint8_t DecPoint=0);
 uint8_t Format_SignDec(char *Str,  int32_t Value, uint8_t MinDigits=1, uint8_t DecPoint=0);

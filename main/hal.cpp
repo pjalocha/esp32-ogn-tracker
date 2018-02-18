@@ -1,4 +1,6 @@
+#include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 // #include <sys/select.h>
 
 #include "freertos/FreeRTOS.h"
@@ -34,7 +36,7 @@
 
 // ======================================================================================================
 /*
-The HELTEC Automation board WiFi LoRa 32 with sx1276 (RFM95) for 868/915MHz
+The HELTEC AUtomation board WiFi LoRa 32 with sx1278 (RFM95)
 
 Referenced:   http://esp32.net/
 Pinout:       http://esp32.net/images/Heltec/WIFI-LoRa-32/Heltec_WIFI-LoRa-32_DiagramPinoutFromTop.jpg
@@ -49,7 +51,7 @@ OLED datasheet: https://cdn-shop.adafruit.com/datasheets/SSD1306.pdf
 OLED example: https://github.com/yanbe/ssd1306-esp-idf-i2c
 OLED article: http://robotcantalk.blogspot.co.uk/2015/03/interfacing-arduino-with-ssd1306-driven.html
 
-SX1276 pins:
+SX1278 pins:
 14 = GPIO14 = RST
  5 = GPIO5  = SCK
 18 = GPIO18 = CS  = SS
@@ -85,6 +87,8 @@ UART2 pins:
 */
 
 #define PIN_LED_PCB  GPIO_NUM_25  // status LED on the PCB
+// #define PIN_LED_TX   GPIO_NUM_??
+// #define PIN_LED_RX   GPIO_NUM_??
 
 #define PIN_RFM_RST  GPIO_NUM_14  // Reset
 #define PIN_RFM_IRQ  GPIO_NUM_26  // packet done on receive or transmit
@@ -93,11 +97,13 @@ UART2 pins:
 #define PIN_RFM_MISO GPIO_NUM_19  // SPI MISO
 #define PIN_RFM_MOSI GPIO_NUM_27  // SPI MOSI
 
-                                  // wire colours for VK2828U GPS
-#define PIN_GPS_TXD  GPIO_NUM_12  // green
-#define PIN_GPS_RXD  GPIO_NUM_35  // blue
+                                  // VK2828U GPS   MAVlink port
+#define PIN_GPS_TXD  GPIO_NUM_12  // green         green
+#define PIN_GPS_RXD  GPIO_NUM_35  // blue          yellow
 #define PIN_GPS_PPS  GPIO_NUM_34  // white
-#define PIN_GPS_ENA  GPIO_NUM_13  // yellow -> well, I had a problem here, thus I tied the enable wire to 3.3V for the time being.
+#define PIN_GPS_ENA  GPIO_NUM_13  // yellow
+
+// Note: I had a problem GPS ENABLE on GPIO13, thus I tied the enable wire to 3.3V for the time being.
 
 #define CONS_UART UART_NUM_0      // UART0 for the console (the system does this for us)
 #define GPS_UART  UART_NUM_1      // UART1 for GPS data read and dialog
@@ -116,6 +122,25 @@ UART2 pins:
 uint64_t getUniqueID(void)
 { uint64_t ID=0; esp_err_t ret=esp_efuse_mac_get_default((uint8_t *)&ID); return ID; }
 
+uint32_t getUniqueAddress(void)
+{ uint32_t ID = getUniqueID()>>24;
+  ID &= 0x00FFFFFF;
+  ID = (ID>>16) | (ID&0x00FF00) | (ID<<16);
+  ID &= 0x00FFFFFF;
+  return ID; }
+
+// ======================================================================================================
+
+#ifdef WITH_MAVLINK
+uint8_t  MAV_Seq=0;                   // sequence number for MAVlink message sent out
+#endif
+
+// ======================================================================================================
+
+// system_get_time()  - return s 32-bit time in microseconds since the system start
+// gettimeofday()
+// xthal_get_ccount() - gets Xtal or master clock counts ?
+
 // ======================================================================================================
 
 FlashParameters Parameters;
@@ -123,6 +148,7 @@ FlashParameters Parameters;
 //--------------------------------------------------------------------------------------------------------
 // STatus LED
 
+void LED_PCB_Dir  (void) { gpio_set_direction(PIN_LED_PCB, GPIO_MODE_OUTPUT); }
 void LED_PCB_On   (void) { gpio_set_level(PIN_LED_PCB, 1); }  // LED is on GPIO25
 void LED_PCB_Off  (void) { gpio_set_level(PIN_LED_PCB, 0); }
 
@@ -131,6 +157,15 @@ void LED_PCB_Off  (void) { gpio_set_level(PIN_LED_PCB, 0); }
 
 SemaphoreHandle_t CONS_Mutex;
 
+/*
+bool CONS_InpReady(void)
+{ struct timeval tv = { tv_sec:0, tv_usec:0} ;
+  fd_set fds;
+  FD_ZERO(&fds);
+  FD_SET(STDIN_FILENO, &fds);
+  select(STDIN_FILENO+1, &fds, NULL, NULL, &tv);
+  return (FD_ISSET(0, &fds)); }
+*/
 // int  CONS_UART_Read       (uint8_t &Byte) { return uart_read_bytes  (CONS_UART, &Byte, 1, 0); }  // non-blocking
 // void CONS_UART_Write      (char     Byte) {        uart_write_bytes (CONS_UART, &Byte, 1);    }  // blocking ?
 void CONS_UART_Write (char     Byte)  { putchar(Byte); }
@@ -155,14 +190,24 @@ bool GPS_PPS_isOn(void) { return gpio_get_level(PIN_GPS_PPS); }
 //--------------------------------------------------------------------------------------------------------
 // RF chip
 
+inline void RFM_RESET_Dir (void) { gpio_set_direction(PIN_RFM_RST, GPIO_MODE_OUTPUT); }
 inline void RFM_RESET_High(void) { gpio_set_level(PIN_RFM_RST, 1); }
 inline void RFM_RESET_Low (void) { gpio_set_level(PIN_RFM_RST, 0); }
 
+#ifdef WITH_RFM95
 void RFM_RESET(uint8_t On)
 { if(On) RFM_RESET_Low();
     else RFM_RESET_High(); }
+#endif
 
-bool RFM_DIO0_isOn(void)   { return gpio_get_level(PIN_RFM_IRQ); }
+#ifdef WITH_RFM69
+void RFM_RESET(uint8_t On)
+{ if(On) RFM_RESET_High();
+    else RFM_RESET_Low(); }
+#endif
+
+inline void RFM_IRQ_Dir (void) { gpio_set_direction(PIN_RFM_IRQ, GPIO_MODE_INPUT); }
+       bool RFM_IRQ_isOn(void) { return gpio_get_level(PIN_RFM_IRQ); }
 
 static spi_device_handle_t RFM_SPI;
 
@@ -248,8 +293,17 @@ esp_err_t OLED_Clear(void)
 //--------------------------------------------------------------------------------------------------------
 
 volatile uint8_t LED_PCB_Counter = 0;
-
 void LED_PCB_Flash(uint8_t Time) { if(Time>LED_PCB_Counter) LED_PCB_Counter=Time; } // [ms]
+
+#ifdef WITH_LED_TX
+volatile uint8_t LED_TX_Counter = 0;
+void LED_TX_Flash(uint8_t Time) { if(Time>LED_TX_Counter) LED_TX_Counter=Time; } // [ms]
+#endif
+
+#ifdef WITH_LED_RX
+volatile uint8_t LED_RX_Counter = 0;
+void LED_RX_Flash(uint8_t Time) { if(Time>LED_RX_Counter) LED_RX_Counter=Time; } // [ms]
+#endif
 
 void LED_TimerCheck(uint8_t Ticks)
 { uint8_t Counter=LED_PCB_Counter;
@@ -259,6 +313,24 @@ void LED_TimerCheck(uint8_t Ticks)
     if(Counter) LED_PCB_On();
            else LED_PCB_Off();
     LED_PCB_Counter=Counter; }
+#ifdef WITH_LED_TX
+  Counter=LED_TX_Counter;
+  if(Counter)
+  { if(Ticks<Counter) Counter-=Ticks;
+                 else Counter =0;
+    if(Counter) LED_TX_On();
+           else LED_TX_Off();
+    LED_TX_Counter=Counter; }
+#endif
+#ifdef WITH_LED_TX
+  Counter=LED_RX_Counter;
+  if(Counter)
+  { if(Ticks<Counter) Counter-=Ticks;
+                 else Counter =0;
+    if(Counter) LED_RX_On();
+           else LED_RX_Off();
+    LED_RX_Counter=Counter; }
+#endif
 }
 
 /*
@@ -275,15 +347,18 @@ void vApplicationTickHook(void) // RTOS timer tick hook
 
 //--------------------------------------------------------------------------------------------------------
 
+// void CONS_Configuration(void)
+// {
+//   CONS_Mutex = xSemaphoreCreateMutex();
+// }
+
 void IO_Configuration(void)
 {
-  CONS_Mutex = xSemaphoreCreateMutex();
-
-  gpio_set_direction(PIN_LED_PCB, GPIO_MODE_OUTPUT);      // LED
+  LED_PCB_Dir();
   LED_PCB_Off();
 
-  gpio_set_direction(PIN_RFM_RST, GPIO_MODE_OUTPUT);      // RF chip GPIO pins
-  gpio_set_direction(PIN_RFM_IRQ, GPIO_MODE_INPUT);
+  RFM_RESET_Dir();
+  RFM_IRQ_Dir();
   RFM_RESET(0);
 
   spi_bus_config_t BusCfg =                               // RF chip SPI
@@ -360,24 +435,60 @@ void IO_Configuration(void)
 
 // ======================================================================================================
 
-static const esp_spp_mode_t esp_spp_mode = ESP_SPP_MODE_CB;
+// ~/esp-idf/components/bt/bluedroid/api/include/esp_spp_api.h
+// esp_err_t esp_spp_write(uint32_t handle, int len, uint8_t *p_data);
 
-static void esp_spp_cb(esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
-{ xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+#ifdef WITH_BT_SPP
+
+static const esp_spp_mode_t esp_spp_mode = ESP_SPP_MODE_CB;
+static const esp_spp_sec_t  sec_mask     = ESP_SPP_SEC_NONE;
+static const esp_spp_role_t role_slave   = ESP_SPP_ROLE_SLAVE;
+
+// static uint32_t ConnHandle=0;
+
+extern "C"
+void esp_spp_cb(esp_spp_cb_event_t Event, esp_spp_cb_param_t *Param)
+{ switch (Event)
+  { case ESP_SPP_INIT_EVT:
+      esp_bt_dev_set_device_name("TRACKER");
+      esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
+      esp_spp_start_srv(sec_mask, role_slave, 0, "OGN");
+      break;
+/*
+    case ESP_SPP_SRV_OPEN_EVT:  // open connection: new handle comes
+      // Param->open.handle, Param->open.rem_bda
+    case ESP_SPP_SRV_CLOSE_EVT: // connection closes for given handle
+      // Param->close.handle, Param->close.rem_bda
+      break;
+    case ESP_SPP_DATA_IND_EVT:  // data is sent by the client
+      // Param->data_ind.handle, Param->data_ind.data, Param->data_ind.len
+      break;
+    case ESP_SPP_WRITE_EVT:     // data has been sent to the cielnt
+      break;
+*/
+    default:
+      break;
+  }
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   Format_String(CONS_UART_Write, "BT_SPP: ");
-  Format_Hex(CONS_UART_Write, (uint32_t)event);
+  Format_Hex(CONS_UART_Write, (uint32_t)Event);
+  CONS_UART_Write(' ');
   Format_String(CONS_UART_Write, "\n");
-  xSemaphoreGive(CONS_Mutex); }
+  xSemaphoreGive(CONS_Mutex);
+}
 
 int BT_SPP_Init(void)
 { esp_bt_controller_config_t BTconf = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-  esp_err_t Err = esp_bt_controller_init(&BTconf); if(Err!=ESP_OK) return Err;
+  esp_err_t Err;
+  Err = esp_bt_controller_init(&BTconf); if(Err!=ESP_OK) return Err;
   Err = esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT); if(Err!=ESP_OK) return Err;
   Err = esp_bluedroid_init(); if(Err!=ESP_OK) return Err;
   Err = esp_bluedroid_enable(); if(Err!=ESP_OK) return Err;
   Err = esp_spp_register_callback(esp_spp_cb); if(Err!=ESP_OK) return Err;
   Err = esp_spp_init(esp_spp_mode); if(Err!=ESP_OK) return Err;
   return Err; }
+
+#endif // WITH_BT_SPP
 
 // ======================================================================================================
 
@@ -387,9 +498,9 @@ int NVS_Init(void)
   { nvs_flash_erase();
     Err = nvs_flash_init(); }
 
-  if(Parameters.ReadFromNVS()!=ESP_OK)
-  { Parameters.setDefault(getUniqueID());
-    Parameters.WriteToNVS(); }
+  // if(Parameters.ReadFromNVS()!=ESP_OK)
+  // { Parameters.setDefault(getUniqueID());
+  //   Parameters.WriteToNVS(); }
 
   return Err; }
 

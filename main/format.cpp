@@ -26,12 +26,27 @@ uint8_t Format_String(char *Str, const char *String)
     Str[OutLen++]=ch; }
   return OutLen; }
 
-uint8_t Format_String(char *Str, const char *String, uint8_t Len)
-{ uint8_t OutLen=0;
-  for(uint8_t Idx=0; Idx<Len; Idx++)
-  { char ch = (*String++);
+void Format_String( void (*Output)(char), const char *String, uint8_t MinLen, uint8_t MaxLen)
+{ if(MaxLen<MinLen) MaxLen=MinLen;
+  uint8_t Idx;
+  for(Idx=0; Idx<MaxLen; Idx++)
+  { char ch = String[Idx]; if(ch==0) break;
+    if(ch=='\n') (*Output)('\r');
+    (*Output)(ch); }
+  for(    ; Idx<MinLen; Idx++)
+    (*Output)(' ');
+}
+
+uint8_t Format_String(char *Str, const char *String, uint8_t MinLen, uint8_t MaxLen)
+{ if(MaxLen<MinLen) MaxLen=MinLen;
+  uint8_t OutLen=0;
+  uint8_t Idx;
+  for(Idx=0; Idx<MaxLen; Idx++)
+  { char ch = String[Idx]; if(ch==0) break;
     if(ch=='\n') Str[OutLen++]='\r';
     Str[OutLen++]=ch; }
+  for(    ; Idx<MinLen; Idx++)
+    Str[OutLen++]=' ';
   return OutLen; }
 
 void Format_Hex( void (*Output)(char), uint8_t Byte )
@@ -86,6 +101,25 @@ void Format_UnsDec( void (*Output)(char), uint32_t Value, uint8_t MinDigits, uin
 }
 
 void Format_SignDec( void (*Output)(char), int32_t Value, uint8_t MinDigits, uint8_t DecPoint)
+{ if(Value<0) { (*Output)('-'); Value=(-Value); }
+         else { (*Output)('+'); }
+  Format_UnsDec(Output, (uint32_t)Value, MinDigits, DecPoint); }
+
+void Format_UnsDec( void (*Output)(char), uint64_t Value, uint8_t MinDigits, uint8_t DecPoint)
+{ uint64_t Base; uint8_t Pos;
+  for( Pos=20, Base=10000000000000000000; Base; Base/=10, Pos--)
+  { uint8_t Dig;
+    if(Value>=Base)
+    { Dig=Value/Base; Value-=Dig*Base; }
+    else
+    { Dig=0; }
+    if(Pos==DecPoint) (*Output)('.');
+    if( (Pos<=MinDigits) || (Dig>0) || (Pos<=DecPoint) )
+    { (*Output)('0'+Dig); MinDigits=Pos; }
+  }
+}
+
+void Format_SignDec( void (*Output)(char), int64_t Value, uint8_t MinDigits, uint8_t DecPoint)
 { if(Value<0) { (*Output)('-'); Value=(-Value); }
          else { (*Output)('+'); }
   Format_UnsDec(Output, (uint32_t)Value, MinDigits, DecPoint); }

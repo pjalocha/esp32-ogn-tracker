@@ -167,7 +167,7 @@ extern "C"
   TRX.Deselect     = RFM_Deselect;
   TRX.TransferByte = RFM_TransferByte;
 #endif
-  TRX.DIO0_isOn    = RFM_DIO0_isOn;
+  TRX.DIO0_isOn    = RFM_IRQ_isOn;
   TRX.RESET        = RFM_RESET;
 
   RF_FreqPlan.setPlan(0);                  // 1 = Europe/Africa, 2 = USA/CA, 3 = Australia and South America
