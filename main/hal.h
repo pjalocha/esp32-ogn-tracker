@@ -31,7 +31,7 @@
 // #define WITH_MAVLINK
 
 // #define WITH_BMP180                        // BMP180 pressure sensor
-#define WITH_BMP280                        // BMP280 pressure sensor
+// #define WITH_BMP280                        // BMP280 pressure sensor
 // #define WITH_MS5607                        // MS5607 pressure sensor
 
 #define I2C_SPEED 1000000                  // [Hz]
@@ -40,7 +40,7 @@
 
 #define WITH_CONFIG                        // interpret the console input: $POGNS to change parameters
 
-// #define WITH_OLED                          // OLED display on the I2C
+#define WITH_OLED                          // OLED display on the I2C
 
 // #define WITH_BT_SPP                        // Bluetooth serial port fo smartphone/tablet link
 

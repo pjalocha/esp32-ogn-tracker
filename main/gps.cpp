@@ -620,9 +620,6 @@ static void GPS_MAV(void)                                                   // w
 void vTaskGPS(void* pvParameters)
 {
   GPS_Status.Flags = 0;
-#ifdef WITH_PPS_IRQ
-  GPS_PPS_IRQ_Callback = PPS_IRQ;
-#endif
 
   // PPS_TickCount=0;
   Burst_TickCount=0;

@@ -86,7 +86,7 @@ UART2 pins:
 
 */
 
-#define PIN_LED_PCB  GPIO_NUM_2   // status LED on the PCB: 25 or 2. GPIO25 id DAC2
+#define PIN_LED_PCB  GPIO_NUM_25  // status LED on the PCB: 25 or 2. GPIO25 id DAC2
 // #define PIN_LED_TX   GPIO_NUM_??
 // #define PIN_LED_RX   GPIO_NUM_??
 

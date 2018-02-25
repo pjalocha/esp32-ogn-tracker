@@ -22,7 +22,7 @@ class RFM_RxPktData                  // packet received by the RF chip
      Format_UnsDec(CONS_UART_Write, msTime, 4, 3);
      CONS_UART_Write(' '); Format_Hex(CONS_UART_Write, Channel);
      CONS_UART_Write('/');
-     Format_SignDec(CONS_UART_Write, -5*RSSI, 4, 1);
+     Format_SignDec(CONS_UART_Write, (int32_t)(-5*RSSI), 4, 1);
      Format_String(CONS_UART_Write, "dBm\n");
      if(WithData==0) return;
      for(uint8_t Idx=0; Idx<Bytes; Idx++)
@@ -114,6 +114,9 @@ class RFM_RxPktData                  // packet received by the RF chip
 
 #endif // of WITH_RFM95
 
+#if defined(WITH_SX1272)
+#include "sx1272.h"	// Registers are almost the same for the sx1272 and the sx1276
+#endif
                                      // bits in IrqFlags1 and IrfFlags2
 #define RF_IRQ_ModeReady      0x8000 // mode change done (between some modes)
 #define RF_IRQ_RxReady        0x4000
@@ -332,7 +335,7 @@ class RFM_TRX
 //              ^ 8 or 9 ?
 #endif
 
-#ifdef WITH_RFM95
+#if defined(WITH_RFM95) || defined(WITH_SX1272)
    void WriteSYNC(uint8_t WriteSize, uint8_t SyncTol, const uint8_t *SyncData)
    { if(SyncTol>7) SyncTol=7;
      if(WriteSize>8) WriteSize=8;
@@ -412,7 +415,7 @@ class RFM_TRX
      return 0; }
 #endif
 
-#ifdef WITH_RFM95
+#if defined(WITH_RFM95) || defined(WITH_SX1272)
 
    void WriteTxPower(int8_t TxPower=0)
    { if(TxPower<2) TxPower=2;
@@ -467,7 +470,7 @@ class RFM_TRX
      uint8_t RunningTemp(void) { return ReadByte(REG_TEMP1) & 0x04; }      // still running ?
      uint8_t ReadTemp(void)    { return ReadByte(REG_TEMP2); }             // read value: -1 deg/LSB
 #endif
-#ifdef WITH_RFM95
+#if defined(WITH_RFM95) || defined(WITH_SX1272)
      uint8_t ReadTemp(void)    { return ReadByte(REG_TEMP); }              // read value: -1 deg/LSB
 #endif
 /*
