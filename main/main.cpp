@@ -8,6 +8,7 @@
 #include "rf.h"                   // RF control/transmission/reception task
 #include "proc.h"                 // GPS/RF process taskk
 #include "gps.h"                  // GPS control data acquisiton
+#include "sens.h"
 #include "ctrl.h"                 // Control task
 
 extern "C"
@@ -15,7 +16,8 @@ void app_main(void)
 {
     // printf("OGN Tracker on ESP32\n");
 
-    CONS_Mutex = xSemaphoreCreateMutex();    // semaphore used for writing to the console
+    CONS_Mutex = xSemaphoreCreateMutex();    // semaphore for sharing the writing to the console
+    I2C_Mutex  = xSemaphoreCreateMutex();    // semaphore for sharing the I2C bus
 
     NVS_Init();                              // initialize Non-Volatile-Storage in Flash and read the tracker parameters
 
@@ -34,6 +36,7 @@ void app_main(void)
     xTaskCreate(vTaskRF,    "RF",    2048, 0, tskIDLE_PRIORITY+4, 0);
     xTaskCreate(vTaskPROC,  "PROC",  2048, 0, tskIDLE_PRIORITY+3, 0);
     xTaskCreate(vTaskGPS,   "GPS",   2048, 0, tskIDLE_PRIORITY+4, 0);
+    xTaskCreate(vTaskSENS,  "SENS",  2048, 0, tskIDLE_PRIORITY+4, 0);
     // xTaskCreate(vTaskCTRL,  "CTRL",  1536, 0, tskIDLE_PRIORITY+2, 0);
     vTaskCTRL(0); // run directly the CTRL task, instead of creating a separate one.
 

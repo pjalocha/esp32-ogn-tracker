@@ -1,6 +1,7 @@
 #include <stdint.h>
 
 #include "hal.h"
+
 #include "proc.h"
 #include "ctrl.h"
 

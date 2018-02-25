@@ -137,24 +137,6 @@ class OGN_Packet           // Packet structure for the OGN tracker
    } Position;
 
    struct
-   {   signed int    Latitude:24; //                  // Latitude
-     unsigned int        Time: 6; // [sec]            // time, just second thus ambiguity every every minute
-     unsigned int            : 2; //
-       signed int   Longitude:24; //                  // Longitude
-     unsigned int            : 6; //                  //
-     unsigned int     BaroMSB: 1; //                  // negated bit #8 of the altitude difference between baro and GPS
-     unsigned int            : 1; //
-     unsigned int    Altitude:14; // [m] VR           // RRRR RRRR SSSS SSSS SSAA AAAA AAAA AAAA  RR..=turn Rate:8, SS..=Speed:10, AA..=Alt:14
-     unsigned int       Speed:10; // [0.1m/s] VR
-     unsigned int            : 8; //
-     unsigned int     Heading:10; //                  // BBBB BBBB YYYY PCCC CCCC CCDD DDDD DDDD  BB..=Baro altitude:8, YYYY=AcftType:4, P=Stealth:1, CC..=Climb:9, DD..=Heading:10
-     unsigned int   ClimbRate: 9; // [0.1m/s] VR
-     unsigned int            : 1;
-     unsigned int  ReportType: 4; //                  // 1 for wind/thermal report
-     unsigned int BaroAltDiff: 8; // [m]              // lower 8 bits of the altitude difference between baro and GPS
-   } Wind;
-
-   struct
    { unsigned int Pulse     : 8; // [bpm]               // pilot: heart pulse rate
      unsigned int Oxygen    : 7; // [%]                 // pilot: oxygen level in the blood
      unsigned int FEScurr   : 5; // [A]                 // FES current
@@ -171,9 +153,34 @@ class OGN_Packet           // Packet structure for the OGN tracker
      unsigned int Firmware  : 8; // [ ]                 // firmware version
      unsigned int Hardware  : 8; // [ ]                 // hardware version
      unsigned int TxPower   : 4; // [dBm]               // RF trancmitter power
-     unsigned int ReportType: 4; // [ ]                 // 0 for the status report
+     unsigned int ReportType: 4; // [0]                 // 0 for the status report
      unsigned int Voltage   : 8; // [1/64V] VR          // supply/battery voltage
    } Status;
+
+   struct
+   {      uint8_t Data[14];      // [16x7bit]packed string of 16-char: 7bit/char
+     unsigned int DataChars:  4; // [int] number of characters in the packed string
+     unsigned int ReportType: 4; // [1]                 // 1 for the Info packets
+          uint8_t Check;         // CRC check
+   } Info;
+
+   struct
+   {   signed int    Latitude:24; //                  // Latitude of the measurement
+     unsigned int        Time: 6; // [sec]            // time, just second thus ambiguity every every minute
+     unsigned int            : 2; //                  // spare
+       signed int   Longitude:24; //                  // Longitude of the measurement
+     unsigned int            : 6; //                  // spare
+     unsigned int     BaroMSB: 1; //                  // negated bit #8 of the altitude difference between baro and GPS
+     unsigned int            : 1; //                  // spare
+     unsigned int    Altitude:14; // [m] VR           // Altitude of the measurement
+     unsigned int       Speed:10; // [0.1m/s] VR      // Horizontal wind speed
+     unsigned int            : 8; //                  // spare
+     unsigned int     Heading:10; //                  // Wind direction
+     unsigned int   ClimbRate: 9; // [0.1m/s] VR      // Vertical wind speed
+     unsigned int            : 1; //                  // spare
+     unsigned int  ReportType: 4; //                  // 2 for wind/thermal report
+     unsigned int BaroAltDiff: 8; // [m]              // lower 8 bits of the altitude difference between baro and GPS
+   } Wind;
 
   } ;
 
@@ -502,7 +509,7 @@ class OGN_Packet           // Packet structure for the OGN tracker
    bool hasBaro(void) const             { return Position.BaroMSB || Position.BaroAltDiff; }
    void clrBaro(void)                   { Position.BaroMSB=0; Position.BaroAltDiff=0; }
    int16_t getBaroAltDiff(void) const   { int16_t AltDiff=Position.BaroAltDiff; if(Position.BaroMSB==0) AltDiff|=0xFF00; return AltDiff; }
-   void setBaroAltDiff(int16_t AltDiff)
+   void setBaroAltDiff(int32_t AltDiff)
    { if(AltDiff<(-255)) AltDiff=(-255); else if(AltDiff>255) AltDiff=255;
      Position.BaroMSB = (AltDiff&0xFF00)==0; Position.BaroAltDiff=AltDiff&0xFF; }
    void EncodeStdAltitude(int32_t StdAlt) { setBaroAltDiff((StdAlt-DecodeAltitude())); }
@@ -676,6 +683,34 @@ class OGN_Packet           // Packet structure for the OGN tracker
 
    void EncodeVoltage(uint16_t Voltage)   { Status.Voltage=EncodeUR2V6(Voltage); }      // [1/64V]
   uint16_t DecodeVoltage(void) const      { return DecodeUR2V6(Status.Voltage); }
+
+// --------------------------------------------------------------------------------------------------------------
+// Info fields: pack and unpack 7-bit char into the Info packets
+
+   void setInfoChar(uint8_t Char, uint8_t Idx)                           // put 7-bit Char onto give position
+   { if(Idx>=16) return;
+     Char&=0x7F;
+     uint8_t BitIdx = Idx*7;                                             // [bits] bit index to the target field
+             Idx = BitIdx>>3;                                            // [bytes] index of the first byte to change
+     uint8_t Ofs = BitIdx&0x07;
+     if(Ofs==0) { Info.Data[Idx] = (Info.Data[Idx]&0x80) |  Char     ; return; }
+     if(Ofs==1) { Info.Data[Idx] = (Info.Data[Idx]&0x01) | (Char<<1) ; return; }
+     uint8_t Len1 = 8-Ofs;
+     uint8_t Len2 = Ofs-1;
+     uint8_t Msk1 = 0xFF; Msk1<<=Ofs;
+     uint8_t Msk2 = 0x01; Msk2 = (Msk2<<Len2)-1;
+     Info.Data[Idx  ] = (Info.Data[Idx  ]&(~Msk1)) | (Char<<Ofs);
+     Info.Data[Idx+1] = (Info.Data[Idx+1]&(~Msk2)) | (Char>>Len1); }
+
+   uint8_t getInfoChar(uint8_t Idx)                                      // get 7-bit Char from given position
+   { if(Idx>=16) return 0;
+     uint8_t BitIdx = Idx*7;                                             // [bits] bit index to the target field
+             Idx = BitIdx>>3;                                            // [bytes] index of the first byte to change
+     uint8_t Ofs = BitIdx&0x07;
+     if(Ofs==0) return Info.Data[Idx]&0x7F;
+     if(Ofs==1) return Info.Data[Idx]>>1;
+     uint8_t Len = 8-Ofs;
+     return (Info.Data[Idx]>>Ofs) | ((Info.Data[Idx+1]<<Len)&0x7F); }
 
 // --------------------------------------------------------------------------------------------------------------
 

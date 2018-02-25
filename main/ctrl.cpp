@@ -24,13 +24,13 @@ void PrintTasks(void (*CONS_UART_Write)(char))
   uxArraySize = uxTaskGetSystemState( pxTaskStatusArray, uxArraySize, NULL );
   for(UBaseType_t T=0; T<uxArraySize; T++)
   { TaskStatus_t *Task = pxTaskStatusArray+T;
-    uint8_t Len=Format_String(Line, Task->pcTaskName);
-    for( ; Len<=configMAX_TASK_NAME_LEN; )
-      Line[Len++]=' ';
+    uint8_t Len=Format_String(Line, Task->pcTaskName, configMAX_TASK_NAME_LEN, 0);
+    // for( ; Len<=configMAX_TASK_NAME_LEN; )
+    //   Line[Len++]=' ';
     Len+=Format_UnsDec(Line+Len, Task->uxCurrentPriority, 2); Line[Len++]=' ';
     // Line[Len++]='0'+Task->uxCurrentPriority; Line[Len++]=' ';
     Len+=Format_UnsDec(Line+Len, Task->usStackHighWaterMark, 3);
-    Line[Len++]='\n'; Line[Len++]=0;
+    Line[Len++]='\n'; Line[Len]=0;
     Format_String(CONS_UART_Write, Line);
   }
   vPortFree( pxTaskStatusArray );
@@ -81,7 +81,7 @@ int OLED_DisplayPosition(GPS_Position *GPS=0, uint8_t LineIdx=2)
   Line[0]=0;
   if(GPS && GPS->hasBaro)
   { Format_String(Line   , "0000.0hPa 00000m");
-    Format_UnsDec(Line   , GPS->Pressure/4, 5, 1);
+    Format_UnsDec(Line   , GPS->Pressure/40, 5, 1);
     Format_UnsDec(Line+10, GPS->StdAltitude/10, 5, 0); }
   OLED_PutLine(LineIdx+5, Line);
   return 0; }

@@ -18,12 +18,13 @@ void Format_String( void (*Output)(char), const char *String)
     (*Output)(ch); }
 }
 
-uint8_t Format_String(char *Str, const char *String)
+uint8_t Format_String(char *Out, const char *String)
 { uint8_t OutLen=0;
   for( ; ; )
   { char ch = (*String++); if(ch==0) break;
-    if(ch=='\n') Str[OutLen++]='\r';
-    Str[OutLen++]=ch; }
+    if(ch=='\n') Out[OutLen++]='\r';
+    Out[OutLen++]=ch; }
+  // Out[OutLen]=0;
   return OutLen; }
 
 void Format_String( void (*Output)(char), const char *String, uint8_t MinLen, uint8_t MaxLen)
@@ -37,16 +38,17 @@ void Format_String( void (*Output)(char), const char *String, uint8_t MinLen, ui
     (*Output)(' ');
 }
 
-uint8_t Format_String(char *Str, const char *String, uint8_t MinLen, uint8_t MaxLen)
+uint8_t Format_String(char *Out, const char *String, uint8_t MinLen, uint8_t MaxLen)
 { if(MaxLen<MinLen) MaxLen=MinLen;
   uint8_t OutLen=0;
   uint8_t Idx;
   for(Idx=0; Idx<MaxLen; Idx++)
   { char ch = String[Idx]; if(ch==0) break;
-    if(ch=='\n') Str[OutLen++]='\r';
-    Str[OutLen++]=ch; }
+    if(ch=='\n') Out[OutLen++]='\r';
+    Out[OutLen++]=ch; }
   for(    ; Idx<MinLen; Idx++)
-    Str[OutLen++]=' ';
+    Out[OutLen++]=' ';
+  // Out[OutLen++]=0;
   return OutLen; }
 
 void Format_Hex( void (*Output)(char), uint8_t Byte )
@@ -59,13 +61,13 @@ void Format_Hex( void (*Output)(char), uint32_t Word )
 { Format_Hex(Output, (uint8_t)(Word>>24)); Format_Hex(Output, (uint8_t)(Word>>16));
   Format_Hex(Output, (uint8_t)(Word>>8));  Format_Hex(Output, (uint8_t)Word); }
 
-uint8_t Format_HHMMSS(char *Str, uint32_t Time)
+uint8_t Format_HHMMSS(char *Out, uint32_t Time)
 { uint32_t DayTime=Time%86400;
   uint32_t Hour=DayTime/3600; DayTime-=Hour*3600;
   uint32_t Min=DayTime/60; DayTime-=Min*60;
   uint32_t Sec=DayTime;
   uint32_t HHMMSS = 10000*Hour + 100*Min + Sec;
-  return Format_UnsDec(Str, HHMMSS, 6); }
+  return Format_UnsDec(Out, HHMMSS, 6); }
 
 void Format_UnsDec( void (*Output)(char), uint16_t Value, uint8_t MinDigits, uint8_t DecPoint)
 { uint16_t Base; uint8_t Pos;
@@ -126,7 +128,7 @@ void Format_SignDec( void (*Output)(char), int64_t Value, uint8_t MinDigits, uin
 
 // ------------------------------------------------------------------------------------------
 
-uint8_t Format_UnsDec(char *Str, uint32_t Value, uint8_t MinDigits, uint8_t DecPoint)
+uint8_t Format_UnsDec(char *Out, uint32_t Value, uint8_t MinDigits, uint8_t DecPoint)
 { uint32_t Base; uint8_t Pos, Len=0;
   for( Pos=10, Base=1000000000; Base; Base/=10, Pos--)
   { uint8_t Dig;
@@ -134,16 +136,17 @@ uint8_t Format_UnsDec(char *Str, uint32_t Value, uint8_t MinDigits, uint8_t DecP
     { Dig=Value/Base; Value-=Dig*Base; }
     else
     { Dig=0; }
-    if(Pos==DecPoint) { (*Str++)='.'; Len++; }
+    if(Pos==DecPoint) { (*Out++)='.'; Len++; }
     if( (Pos<=MinDigits) || (Dig>0) || (Pos<=DecPoint) )
-    { (*Str++)='0'+Dig; Len++; MinDigits=Pos; }
+    { (*Out++)='0'+Dig; Len++; MinDigits=Pos; }
+    // (*Out)=0;
   }
   return Len; }
 
-uint8_t Format_SignDec(char *Str, int32_t Value, uint8_t MinDigits, uint8_t DecPoint)
-{ if(Value<0) { (*Str++)='-'; Value=(-Value); }
-         else { (*Str++)='+'; }
-  return 1+Format_UnsDec(Str, Value, MinDigits, DecPoint); }
+uint8_t Format_SignDec(char *Out, int32_t Value, uint8_t MinDigits, uint8_t DecPoint)
+{ if(Value<0) { (*Out++)='-'; Value=(-Value); }
+         else { (*Out++)='+'; }
+  return 1+Format_UnsDec(Out, Value, MinDigits, DecPoint); }
 
 uint8_t Format_Hex( char *Output, uint8_t Byte )
 { (*Output++) = HexDigit(Byte>>4); (*Output++)=HexDigit(Byte&0x0F); return 2; }

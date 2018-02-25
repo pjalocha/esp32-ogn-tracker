@@ -1,7 +1,3 @@
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/semphr.h"
-
 #include "hal.h"
 #include "rf.h"
 

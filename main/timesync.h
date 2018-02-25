@@ -3,8 +3,7 @@
 
 #include <stdint.h>
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+#include "hal.h"
 
 void TimeSync_HardPPS(TickType_t Tick);                                     // hardware PPS at the give system tick
 void TimeSync_HardPPS(void);

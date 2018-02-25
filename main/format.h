@@ -8,8 +8,8 @@ char HexDigit(uint8_t Val);
        void Format_Bytes ( void (*Output)(char), const uint8_t *Bytes,  uint8_t Len);
 inline void Format_Bytes ( void (*Output)(char), const    char *Bytes,  uint8_t Len) { Format_Bytes(Output, (const uint8_t *)Bytes,  Len); }
 
-       void Format_String( void (*Output)(char), const    char *String);
-       void Format_String( void (*Output)(char), const    char *String, uint8_t MinLen, uint8_t MaxLen);
+void Format_String( void (*Output)(char), const    char *String);
+void Format_String( void (*Output)(char), const    char *String, uint8_t MinLen, uint8_t MaxLen);
 
 void Format_Hex( void (*Output)(char), uint8_t  Byte );
 void Format_Hex( void (*Output)(char), uint16_t Word );
@@ -24,27 +24,27 @@ void Format_SignDec( void (*Output)(char),  int32_t Value, uint8_t MinDigits=1, 
 void Format_UnsDec ( void (*Output)(char), uint64_t Value, uint8_t MinDigits=1, uint8_t DecPoint=0);
 void Format_SignDec( void (*Output)(char),  int64_t Value, uint8_t MinDigits=1, uint8_t DecPoint=0);
 
-uint8_t Format_String(char *Str, const char *String);
-uint8_t Format_String(char *Str, const char *String, uint8_t MinLen, uint8_t MaxLen);
+uint8_t Format_String(char *Out, const char *String);
+uint8_t Format_String(char *Out, const char *String, uint8_t MinLen, uint8_t MaxLen);
 
-uint8_t Format_UnsDec (char *Str, uint32_t Value, uint8_t MinDigits=1, uint8_t DecPoint=0);
-uint8_t Format_SignDec(char *Str,  int32_t Value, uint8_t MinDigits=1, uint8_t DecPoint=0);
+uint8_t Format_UnsDec (char *Out, uint32_t Value, uint8_t MinDigits=1, uint8_t DecPoint=0);
+uint8_t Format_SignDec(char *Out,  int32_t Value, uint8_t MinDigits=1, uint8_t DecPoint=0);
 
 uint8_t Format_Hex( char *Output, uint8_t  Byte );
 uint8_t Format_Hex( char *Output, uint16_t Word );
 uint8_t Format_Hex( char *Output, uint32_t Word );
 uint8_t Format_Hex( char *Output, uint32_t Word, uint8_t Digits);
 
-uint8_t Format_HHMMSS(char *Str, uint32_t Time);
+uint8_t Format_HHMMSS(char *Out, uint32_t Time);
 
-   int8_t  Read_Hex1(char Digit);
-   int16_t Read_Hex2(const char *Inp);
+int8_t  Read_Hex1(char Digit);
+int16_t Read_Hex2(const char *Inp);
 
-   int8_t  Read_Dec1(char Digit);                  // convert single digit into an integer
-   inline int8_t Read_Dec1(const char *Inp) { return Read_Dec1(Inp[0]); }
-   int8_t  Read_Dec2(const char *Inp);             // convert two digit decimal number into an integer
-   int16_t Read_Dec3(const char *Inp);             // convert three digit decimal number into an integer
-   int16_t Read_Dec4(const char *Inp);             // convert three digit decimal number into an integer
+int8_t  Read_Dec1(char Digit);                  // convert single digit into an integer
+inline int8_t Read_Dec1(const char *Inp) { return Read_Dec1(Inp[0]); }
+int8_t  Read_Dec2(const char *Inp);             // convert two digit decimal number into an integer
+int16_t Read_Dec3(const char *Inp);             // convert three digit decimal number into an integer
+int16_t Read_Dec4(const char *Inp);             // convert three digit decimal number into an integer
 
   template <class Type>
    int8_t Read_Hex(Type &Int, const char *Inp)            // convert variable number of digits hexadecimal number into an integer

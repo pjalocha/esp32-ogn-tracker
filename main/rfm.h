@@ -351,7 +351,7 @@ class RFM_TRX
    void ClearIrqFlags(void)    { WriteWord(RF_IRQ_FifoOverrun | RF_IRQ_Rssi, REG_IRQFLAGS1); }
 
 #ifdef WITH_RFM69
-   void WriteTxPower_W(int8_t TxPower=10) const // [dBm] for RFM69W: -18..+13dBm
+   void WriteTxPower_W(int8_t TxPower=10)       // [dBm] for RFM69W: -18..+13dBm
    { if(TxPower<(-18)) TxPower=(-18);           // check limits
      if(TxPower>  13 ) TxPower=  13 ;
      WriteByte(  0x80+(18+TxPower), REG_PALEVEL);
@@ -360,7 +360,7 @@ class RFM_TRX
      WriteByte(  0x70             , REG_TESTPA2);
    }
 
-   void WriteTxPower_HW(int8_t TxPower=10) const // [dBm] // for RFM69HW: -14..+20dBm
+   void WriteTxPower_HW(int8_t TxPower=10)       // [dBm] // for RFM69HW: -14..+20dBm
    { if(TxPower<(-14)) TxPower=(-14);            // check limits
      if(TxPower>  20 ) TxPower=  20 ;
      if(TxPower<=17)
@@ -376,12 +376,12 @@ class RFM_TRX
      }
    }
 
-   void WriteTxPower(int8_t TxPower, uint8_t isHW) const
+   void WriteTxPower(int8_t TxPower, uint8_t isHW)
    { WriteByte(  0x09, REG_PARAMP); // Tx ramp up/down time 0x06=100us, 0x09=40us, 0x0C=20us, 0x0F=10us (page 66)
      if(isHW) WriteTxPower_HW(TxPower);
          else WriteTxPower_W (TxPower);  }
 
-   void WriteTxPowerMin(void) const { WriteTxPower_W(-18); } // set minimal Tx power and setup for reception
+   void WriteTxPowerMin(void) { WriteTxPower_W(-18); } // set minimal Tx power and setup for reception
 
    int Configure(int16_t Channel, const uint8_t *Sync)
    { WriteMode(RF_OPMODE_STANDBY);          // mode = STDBY

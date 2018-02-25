@@ -51,7 +51,7 @@ OLED datasheet: https://cdn-shop.adafruit.com/datasheets/SSD1306.pdf
 OLED example: https://github.com/yanbe/ssd1306-esp-idf-i2c
 OLED article: http://robotcantalk.blogspot.co.uk/2015/03/interfacing-arduino-with-ssd1306-driven.html
 
-SX1278 pins:
+SX1276 pins:
 14 = GPIO14 = RST
  5 = GPIO5  = SCK
 18 = GPIO18 = CS  = SS
@@ -86,7 +86,7 @@ UART2 pins:
 
 */
 
-#define PIN_LED_PCB  GPIO_NUM_25  // status LED on the PCB
+#define PIN_LED_PCB  GPIO_NUM_2   // status LED on the PCB: 25 or 2. GPIO25 id DAC2
 // #define PIN_LED_TX   GPIO_NUM_??
 // #define PIN_LED_RX   GPIO_NUM_??
 
@@ -96,12 +96,13 @@ UART2 pins:
 #define PIN_RFM_SCK  GPIO_NUM_5   // SPI clock
 #define PIN_RFM_MISO GPIO_NUM_19  // SPI MISO
 #define PIN_RFM_MOSI GPIO_NUM_27  // SPI MOSI
+#define RFM_SPI_SPEED 4000000     // [Hz] 4MHz SPI clock rate for RF chip
 
-                                  // VK2828U GPS   MAVlink port
-#define PIN_GPS_TXD  GPIO_NUM_12  // green         green
-#define PIN_GPS_RXD  GPIO_NUM_35  // blue          yellow
-#define PIN_GPS_PPS  GPIO_NUM_34  // white
-#define PIN_GPS_ENA  GPIO_NUM_13  // yellow
+                                  // VK2828U   GN-801   MAVlink
+#define PIN_GPS_TXD  GPIO_NUM_12  // green     green    green
+#define PIN_GPS_RXD  GPIO_NUM_35  // blue      yellow   yellow
+#define PIN_GPS_PPS  GPIO_NUM_34  // white     blue
+#define PIN_GPS_ENA  GPIO_NUM_13  // yellow    white
 
 // Note: I had a problem GPS ENABLE on GPIO13, thus I tied the enable wire to 3.3V for the time being.
 
@@ -109,12 +110,14 @@ UART2 pins:
 #define GPS_UART  UART_NUM_1      // UART1 for GPS data read and dialog
 
 #define I2C_BUS     I2C_NUM_1     // use bus #1 to talk to OLED and Baro sensor
-#define I2C_SPEED   1000000       // 1MHz clock on I2C
+// #define I2C_SPEED   1000000       // [Hz] 1MHz clock on I2C - defined inb hal.h
 #define PIN_I2C_SCL GPIO_NUM_15   // SCL pin
 #define PIN_I2C_SDA GPIO_NUM_4    // SDA pin
 
+uint8_t BARO_I2C = (uint8_t)I2C_BUS;
+
 #define OLED_I2C_ADDR 0x3C        // I2C address of the OLED display
-#define PIN_OLED_RST GPIO_NUM_16  // OLED RESET pin
+#define PIN_OLED_RST GPIO_NUM_16  // OLED RESET: low-active
 
 // ======================================================================================================
 // 48-bit unique ID of the chip
@@ -190,20 +193,21 @@ bool GPS_PPS_isOn(void) { return gpio_get_level(PIN_GPS_PPS); }
 //--------------------------------------------------------------------------------------------------------
 // RF chip
 
-inline void RFM_RESET_Dir (void) { gpio_set_direction(PIN_RFM_RST, GPIO_MODE_OUTPUT); }
-inline void RFM_RESET_High(void) { gpio_set_level(PIN_RFM_RST, 1); }
-inline void RFM_RESET_Low (void) { gpio_set_level(PIN_RFM_RST, 0); }
+inline void RFM_RESET_Dir (void)      { gpio_set_direction(PIN_RFM_RST, GPIO_MODE_OUTPUT); }
+inline void RFM_RESET_Set (bool High) { gpio_set_level(PIN_RFM_RST, High); }
+// inline void RFM_RESET_High(void) { gpio_set_level(PIN_RFM_RST, 1); }
+// inline void RFM_RESET_Low (void) { gpio_set_level(PIN_RFM_RST, 0); }
 
 #ifdef WITH_RFM95
-void RFM_RESET(uint8_t On)
-{ if(On) RFM_RESET_Low();
-    else RFM_RESET_High(); }
+void RFM_RESET(uint8_t On) { RFM_RESET_Set(~On); }
+// { if(On) RFM_RESET_Low();
+//     else RFM_RESET_High(); }
 #endif
 
 #ifdef WITH_RFM69
-void RFM_RESET(uint8_t On)
-{ if(On) RFM_RESET_High();
-    else RFM_RESET_Low(); }
+void RFM_RESET(uint8_t On) { RFM_RESET_Set(On); }
+// { if(On) RFM_RESET_High();
+//     else RFM_RESET_Low(); }
 #endif
 
 inline void RFM_IRQ_Dir (void) { gpio_set_direction(PIN_RFM_IRQ, GPIO_MODE_INPUT); }
@@ -347,11 +351,6 @@ void vApplicationTickHook(void) // RTOS timer tick hook
 
 //--------------------------------------------------------------------------------------------------------
 
-// void CONS_Configuration(void)
-// {
-//   CONS_Mutex = xSemaphoreCreateMutex();
-// }
-
 void IO_Configuration(void)
 {
   LED_PCB_Dir();
@@ -377,7 +376,7 @@ void IO_Configuration(void)
     duty_cycle_pos: 0,
     cs_ena_pretrans: 0,
     cs_ena_posttrans: 0,
-    clock_speed_hz: 4000000,
+    clock_speed_hz: RFM_SPI_SPEED,
     spics_io_num: PIN_RFM_SS,
     flags: 0,
     queue_size: 3,
@@ -518,30 +517,35 @@ int SPIFFS_Info(size_t &Total, size_t &Used, const char *Label)
 { return esp_spiffs_info(Label, &Total, &Used); }
 
 // ======================================================================================================
-/*
-uint8_t I2C_Read(i2c_port_t Bus, uint8_t Addr, uint8_t Reg, uint8_t *Data, uint8_t Len, uint8_t Wait=10)
+
+SemaphoreHandle_t I2C_Mutex;
+
+uint8_t I2C_Read(uint8_t Bus, uint8_t Addr, uint8_t Reg, uint8_t *Data, uint8_t Len, uint8_t Wait)
 { i2c_cmd_handle_t Cmd = i2c_cmd_link_create();
   i2c_master_start(Cmd);
-  i2c_master_write_byte(Cmd, (Addr<<1) | I2C_MASTER_READ , I2C_MASTER_ACK);
-  i2c_master_write_byte(Cmd, Reg , I2C_MASTER_ACK);
+  i2c_master_write_byte(Cmd, (Addr<<1) | I2C_MASTER_WRITE, I2C_MASTER_ACK);
+  i2c_master_write_byte(Cmd, Reg, I2C_MASTER_ACK);
   i2c_master_start(Cmd);
+  i2c_master_write_byte(Cmd, (Addr<<1) | I2C_MASTER_READ, I2C_MASTER_ACK);
   i2c_master_read(Cmd, Data, Len, I2C_MASTER_LAST_NACK);
   i2c_master_stop(Cmd);
-  esp_err_t Ret = i2c_master_cmd_begin(Bus, Cmd, Wait);
+  esp_err_t Ret = i2c_master_cmd_begin((i2c_port_t)Bus, Cmd, Wait);
   i2c_cmd_link_delete(Cmd);
   return Ret; }
 
-
-uint8_t I2C_Write(i2c_port_t Bus, uint8_t Addr, uint8_t Reg, uint8_t *Data, uint8_t Len, uint8_t Wait=10)
+uint8_t I2C_Write(uint8_t Bus, uint8_t Addr, uint8_t Reg, uint8_t *Data, uint8_t Len, uint8_t Wait)
 { i2c_cmd_handle_t Cmd = i2c_cmd_link_create();
   i2c_master_start(Cmd);
   i2c_master_write_byte(Cmd, (Addr<<1) | I2C_MASTER_WRITE , I2C_MASTER_ACK);
   i2c_master_write_byte(Cmd, Reg , I2C_MASTER_ACK);
   i2c_master_write(Cmd, Data, Len, I2C_MASTER_NACK);
   i2c_master_stop(Cmd);
-  esp_err_t Ret = i2c_master_cmd_begin(Bus, Cmd, Wait);
+  esp_err_t Ret = i2c_master_cmd_begin((i2c_port_t)Bus, Cmd, Wait);
   i2c_cmd_link_delete(Cmd);
   return Ret; }
-*/
+
+uint8_t I2C_Restart(uint8_t Bus)
+{ return 0; }
+
 // ======================================================================================================
 

@@ -22,7 +22,7 @@
 // #define WITH_LED_RX
 // #define WITH_LED_TX
 
-// #define WITH_GPS_ENABLE                 // use GPS_ENABLE control line to turn the GPS ON/OFF
+// #define WITH_GPS_ENABLE                    // use GPS_ENABLE control line to turn the GPS ON/OFF
 #define WITH_GPS_PPS                       // use the PPS signal from GPS for precise time-sync.
 #define WITH_GPS_CONFIG                    // attempt to configure higher GPS baud rate and airborne mode
 #define WITH_GPS_UBX                       // GPS understands UBX
@@ -30,13 +30,23 @@
 // #define WITH_GPS_SRF
 // #define WITH_MAVLINK
 
+// #define WITH_BMP180                        // BMP180 pressure sensor
+#define WITH_BMP280                        // BMP280 pressure sensor
+// #define WITH_MS5607                        // MS5607 pressure sensor
+
+#define I2C_SPEED 1000000                  // [Hz]
+
 #define WITH_PFLAA                         // PFLAU and PFLAA for compatibility with XCsoar and LK8000
+
 #define WITH_CONFIG                        // interpret the console input: $POGNS to change parameters
-#define WITH_OLED                          // OLED display on the I2C
+
+// #define WITH_OLED                          // OLED display on the I2C
 
 // #define WITH_BT_SPP                        // Bluetooth serial port fo smartphone/tablet link
 
 // ============================================================================================================
+
+extern uint8_t BARO_I2C;
 
 #ifdef WITH_MAVLINK
 const  uint8_t  MAV_SysID = 1;             // System-ID for MAVlink messages we send out
@@ -46,6 +56,7 @@ extern uint8_t  MAV_Seq;                   // sequence number for MAVlink messag
 // ============================================================================================================
 
 extern SemaphoreHandle_t CONS_Mutex;       // console port Mutex
+extern SemaphoreHandle_t I2C_Mutex;        // I2C port Mutex (OLED and Baro)
 
 uint64_t getUniqueID(void);                // get some unique ID of the CPU/chip
 uint32_t getUniqueAddress(void);           // get unique 24-bit address for the transmitted IF
@@ -102,5 +113,18 @@ int  BT_SPP_Init(void);
 
 int  SPIFFS_Register(const char *Path="/spiffs", const char *Label=0, size_t MaxOpenFiles=5);
 int  SPIFFS_Info(size_t &Total, size_t &Used, const char *Label=0);
+
+uint8_t I2C_Read (uint8_t Bus, uint8_t Addr, uint8_t Reg, uint8_t *Data, uint8_t Len, uint8_t Wait=10);
+uint8_t I2C_Write(uint8_t Bus, uint8_t Addr, uint8_t Reg, uint8_t *Data, uint8_t Len, uint8_t Wait=10);
+
+template <class Type>
+ inline uint8_t I2C_Write(uint8_t Bus, uint8_t Addr, uint8_t Reg, Type &Object, uint8_t Wait=10)
+{ return I2C_Write(Bus, Addr, Reg, (uint8_t *)&Object, sizeof(Type), Wait); }
+
+template <class Type>
+ inline uint8_t I2C_Read (uint8_t Bus, uint8_t Addr, uint8_t Reg, Type &Object, uint8_t Wait=10)
+{ return I2C_Read (Bus, Addr, Reg, (uint8_t *)&Object, sizeof(Type), Wait); }
+
+uint8_t I2C_Restart(uint8_t Bus);
 
 #endif // __HAL_H__
