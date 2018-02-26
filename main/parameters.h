@@ -51,12 +51,19 @@ class FlashParameters
 
    int16_t  GeoidSepar;      // [0.1m] Geoid-Separation, apparently ArduPilot MAVlink does not give this value (although present in the format)
   uint16_t  SoftPPSdelay;    // [ms]
-     char   Pilot[16];
-     char   Manuf[16];
-     char    Type[16];
-     char     Reg[16];
-     char    Base[16];
-     char     ICE[16];
+
+   static const uint8_t InfoParmLen = 16; // [char] max. size of an infp-parameter
+   static const uint8_t InfoParmNum =  6; // [int]  number of info-parameters
+         char *InfoParmValue(uint8_t Idx)       { return Idx<InfoParmNum ? Pilot + Idx*InfoParmLen:0; }
+   const char *InfoParmName(uint8_t Idx) const { static const char *Name[InfoParmNum] = { "Pilot", "Manuf", "Model", "Reg", "Base", "ICE" } ;
+                                                  return Idx<InfoParmNum ? Name[Idx]:0; }
+     char   Pilot[InfoParmLen];
+     char   Manuf[InfoParmLen];
+     char   Model[InfoParmLen];
+     char     Reg[InfoParmLen];
+     char    Base[InfoParmLen];
+     char     ICE[InfoParmLen];
+
    // char BTname[8];
    // char  BTpin[4];
    // char Pilot[16];
@@ -64,6 +71,7 @@ class FlashParameters
    // char Category[16]
 
    // static const uint32_t Words=sizeof(FlashParameters)/sizeof(uint32_t);
+
   public:
    int8_t getTxPower(void) const { int8_t Pwr=RFchipTxPower&0x7F; if(Pwr&0x40) Pwr|=0x80; return Pwr; }
    void   setTxPower(int8_t Pwr) { RFchipTxPower = (RFchipTxPower&0x80) | (Pwr&0x7F); }
@@ -96,7 +104,7 @@ class FlashParameters
 
     Pilot[0]    = 0;
     Manuf[0]    = 0;
-    Type[0]     = 0;
+    Model[0]    = 0;
     Reg[0]      = 0;
     Base[0]     = 0;
     ICE[0]      = 0;
@@ -241,10 +249,7 @@ class FlashParameters
   { if( (ch>='0') && (ch<='9') ) return 1;  // numbers
     if( (ch>='A') && (ch<='Z') ) return 1;  // uppercase letters
     if( (ch>='a') && (ch<='z') ) return 1;  // lowercase letters
-    if(ch=='.') return 1;
-    if(ch=='-') return 1;
-    if(ch=='+') return 1;
-    if(ch=='_') return 1;
+    if(strchr(".@-+_/#", ch)) return 1;     // any of the listed special characters
     return 0; }
 
   static int8_t Read_String(char *Value, const char *Inp, uint8_t MaxLen)
@@ -293,18 +298,9 @@ class FlashParameters
       TimeCorr=Corr; return 1; }
     if(strcmp(Name, "GeoidSepar")==0)
     { return Read_Float1(GeoidSepar, Value)<=0; }
-    if(strcmp(Name, "Pilot")==0)
-    { return Read_String(Pilot, Value, 16)<=0; }
-    if(strcmp(Name, "Manuf")==0)
-    { return Read_String(Manuf, Value, 16 )<=0; }
-    if(strcmp(Name, "Type")==0)
-    { return Read_String(Type , Value, 16)<=0; }
-    if(strcmp(Name, "Reg")==0)
-    { return Read_String(Reg  , Value, 16)<=0; }
-    if(strcmp(Name, "Base")==0)
-    { return Read_String(Base , Value, 16)<=0; }
-    if(strcmp(Name, "ICE")==0)
-    { return Read_String(ICE , Value, 16)<=0; }
+    for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
+    { if(strcmp(Name, InfoParmName(Idx))==0)
+        return Read_String(InfoParmValue(Idx), Value, 16)<=0; }
     return 0; }
 
   bool ReadLine(char *Line)                                                     // read a parameter line
@@ -381,13 +377,9 @@ class FlashParameters
     Write_Float1 (Line, "PressCorr" , (int32_t)PressCorr*10/4   ); strcat(Line, " #  [   Pa]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_SignDec(Line, "TimeCorr"  , (int32_t)TimeCorr         ); strcat(Line, " #  [    s]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Float1 (Line, "GeoidSepar",          GeoidSepar       ); strcat(Line, " #  [    m]\n"); if(fputs(Line, File)==EOF) return EOF;
-    Write_String (Line, "Pilot"     ,          Pilot            ); strcat(Line, " #  [16char]\n"); if(fputs(Line, File)==EOF) return EOF;
-    Write_String (Line, "Manuf"     ,          Manuf            ); strcat(Line, " #  [16char]\n"); if(fputs(Line, File)==EOF) return EOF;
-    Write_String (Line, "Type"      ,          Type             ); strcat(Line, " #  [16char]\n"); if(fputs(Line, File)==EOF) return EOF;
-    Write_String (Line, "Reg"       ,          Reg              ); strcat(Line, " #  [16char]\n"); if(fputs(Line, File)==EOF) return EOF;
-    Write_String (Line, "Base"      ,          Base             ); strcat(Line, " #  [16char]\n"); if(fputs(Line, File)==EOF) return EOF;
-    Write_String (Line, "ICE"       ,          ICE              ); strcat(Line, " #  [16char]\n"); if(fputs(Line, File)==EOF) return EOF;
-    return 16; }
+    for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
+    { Write_String (Line, InfoParmName(Idx), InfoParmValue(Idx)); strcat(Line, " #  [char]\n"); if(fputs(Line, File)==EOF) return EOF; }
+    return 10+InfoParmNum; }
 
   int WriteFile(const char *Name = "/spiffs/TRACKER.CFG")
   { FILE *File=fopen(Name, "wt"); if(File==0) return 0;
@@ -406,12 +398,8 @@ class FlashParameters
     Write_Float1 (Line, "PressCorr" , (int32_t)PressCorr*10/4   ); strcat(Line, " #  [   Pa]\n"); Format_String(Output, Line);
     Write_SignDec(Line, "TimeCorr"  , (int32_t)TimeCorr         ); strcat(Line, " #  [    s]\n"); Format_String(Output, Line);
     Write_Float1 (Line, "GeoidSepar",          GeoidSepar       ); strcat(Line, " #  [    m]\n"); Format_String(Output, Line);
-    Write_String (Line, "Pilot"     ,          Pilot            ); strcat(Line, " #  [16char]\n"); Format_String(Output, Line);
-    Write_String (Line, "Manuf"     ,          Manuf            ); strcat(Line, " #  [16char]\n"); Format_String(Output, Line);
-    Write_String (Line, "Type"      ,          Type             ); strcat(Line, " #  [16char]\n"); Format_String(Output, Line);
-    Write_String (Line, "Reg"       ,          Reg              ); strcat(Line, " #  [16char]\n"); Format_String(Output, Line);
-    Write_String (Line, "Base"      ,          Base             ); strcat(Line, " #  [16char]\n"); Format_String(Output, Line);
-    Write_String (Line, "ICE"       ,          ICE              ); strcat(Line, " #  [16char]\n"); Format_String(Output, Line);
+    for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
+    { Write_String (Line, InfoParmName(Idx), InfoParmValue(Idx)); strcat(Line, " #  [char]\n"); Format_String(Output, Line); }
   }
 
 } ;
