@@ -86,7 +86,12 @@ UART2 pins:
 
 */
 
+#ifdef WITH_TTGO
+#define PIN_LED_PCB  GPIO_NUM_2   // status LED on the PCB: 25 or 2. GPIO25 id DAC2
+#endif
+#ifdef WITH_HELTEC
 #define PIN_LED_PCB  GPIO_NUM_25  // status LED on the PCB: 25 or 2. GPIO25 id DAC2
+#endif
 // #define PIN_LED_TX   GPIO_NUM_??
 // #define PIN_LED_RX   GPIO_NUM_??
 
@@ -445,26 +450,32 @@ static const esp_spp_role_t role_slave   = ESP_SPP_ROLE_SLAVE;
 
 // static uint32_t ConnHandle=0;
 
-extern "C"
+// extern "C"
 void esp_spp_cb(esp_spp_cb_event_t Event, esp_spp_cb_param_t *Param)
 { switch (Event)
   { case ESP_SPP_INIT_EVT:
       esp_bt_dev_set_device_name("TRACKER");
       esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
-      esp_spp_start_srv(sec_mask, role_slave, 0, "OGN");
+      esp_spp_start_srv(sec_mask, role_slave, 0, "SPP_SERVER");
       break;
-/*
-    case ESP_SPP_SRV_OPEN_EVT:  // open connection: new handle comes
+    case ESP_SPP_DISCOVERY_COMP_EVT:
+      break;
+    case ESP_SPP_START_EVT:                                       // SPP server started succesfully
+      break;
+    case ESP_SPP_SRV_OPEN_EVT:                                    // server connection opens: new handle comes
       // Param->open.handle, Param->open.rem_bda
-    case ESP_SPP_SRV_CLOSE_EVT: // connection closes for given handle
+      break;
+    case ESP_SPP_OPEN_EVT:                                        // connection opens
       // Param->close.handle, Param->close.rem_bda
       break;
-    case ESP_SPP_DATA_IND_EVT:  // data is sent by the client
+    case ESP_SPP_CLOSE_EVT:                                       // connection closes for given handle
+      // Param->close.handle, Param->close.rem_bda
+      break;
+    case ESP_SPP_DATA_IND_EVT:                                    // data is sent by the client
       // Param->data_ind.handle, Param->data_ind.data, Param->data_ind.len
       break;
-    case ESP_SPP_WRITE_EVT:     // data has been sent to the cielnt
+    case ESP_SPP_WRITE_EVT:                                       // (queued) data has been sent to the client
       break;
-*/
     default:
       break;
   }
@@ -481,8 +492,8 @@ int BT_SPP_Init(void)
   esp_err_t Err;
   Err = esp_bt_controller_init(&BTconf); if(Err!=ESP_OK) return Err;
   Err = esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT); if(Err!=ESP_OK) return Err;
-  Err = esp_bluedroid_init(); if(Err!=ESP_OK) return Err;
-  Err = esp_bluedroid_enable(); if(Err!=ESP_OK) return Err;
+  Err = esp_bluedroid_init(); if(Err!=ESP_OK) return Err;                                   // init the BT stack
+  Err = esp_bluedroid_enable(); if(Err!=ESP_OK) return Err;                                 // enable the BT stack
   Err = esp_spp_register_callback(esp_spp_cb); if(Err!=ESP_OK) return Err;
   Err = esp_spp_init(esp_spp_mode); if(Err!=ESP_OK) return Err;
   return Err; }
@@ -518,7 +529,7 @@ int SPIFFS_Info(size_t &Total, size_t &Used, const char *Label)
 
 // ======================================================================================================
 
-SemaphoreHandle_t I2C_Mutex;
+// SemaphoreHandle_t I2C_Mutex;
 
 uint8_t I2C_Read(uint8_t Bus, uint8_t Addr, uint8_t Reg, uint8_t *Data, uint8_t Len, uint8_t Wait)
 { i2c_cmd_handle_t Cmd = i2c_cmd_link_create();

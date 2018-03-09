@@ -17,7 +17,7 @@ void app_main(void)
     // printf("OGN Tracker on ESP32\n");
 
     CONS_Mutex = xSemaphoreCreateMutex();    // semaphore for sharing the writing to the console
-    I2C_Mutex  = xSemaphoreCreateMutex();    // semaphore for sharing the I2C bus
+    // I2C_Mutex  = xSemaphoreCreateMutex();    // semaphore for sharing the I2C bus
 
     NVS_Init();                              // initialize Non-Volatile-Storage in Flash and read the tracker parameters
 
@@ -27,16 +27,16 @@ void app_main(void)
 
     SPIFFS_Register();                       // initialize the file system in the Flash
 
+    IO_Configuration();                      // initialize the GPIO/UART/I2C/SPI for Radio, GPS, OLED, Baro
+
 #ifdef WITH_BT_SPP
     BT_SPP_Init();                           // start BT SPP
 #endif
 
-    IO_Configuration();                      // initialize the GPIO/UART/I2C/SPI for Radio, GPS, OLED, Baro
-
     xTaskCreate(vTaskRF,    "RF",    2048, 0, tskIDLE_PRIORITY+4, 0);
     xTaskCreate(vTaskPROC,  "PROC",  2048, 0, tskIDLE_PRIORITY+3, 0);
     xTaskCreate(vTaskGPS,   "GPS",   2048, 0, tskIDLE_PRIORITY+4, 0);
-#if defined(WITH_BMP180) || defined(WITH_BMP280) || defined(WITH_MS5607)
+#if defined(WITH_BMP180) || defined(WITH_BMP280) || defined(BME280) || defined(WITH_MS5607)
     xTaskCreate(vTaskSENS,  "SENS",  2048, 0, tskIDLE_PRIORITY+4, 0);
 #endif
     // xTaskCreate(vTaskCTRL,  "CTRL",  1536, 0, tskIDLE_PRIORITY+2, 0);

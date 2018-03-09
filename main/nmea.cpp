@@ -15,5 +15,5 @@ uint8_t NMEA_AppendCheck(uint8_t *NMEA, uint8_t Len)
 
 uint8_t NMEA_AppendCheckCRNL(uint8_t *NMEA, uint8_t Len)
 { uint8_t CheckLen=NMEA_AppendCheck(NMEA, Len);
-  Len+=CheckLen; NMEA[Len]='\r'; NMEA[Len+1]='\n';
-  return CheckLen+2; }
+  Len+=CheckLen; NMEA[Len]='\n';
+  return CheckLen+1; }

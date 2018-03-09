@@ -1,7 +1,6 @@
 #include <stdint.h>
 
 #include "hal.h"
-
 #include "proc.h"
 #include "ctrl.h"
 
@@ -26,6 +25,7 @@ static LDPC_Decoder     Decoder;      // error corrector for the OGN Gallager co
 
 static OGN_PrioQueue<16> RelayQueue;  // received packets and candidates to be relayed
 
+#ifdef DEBUG_PRINT
 static void PrintRelayQueue(uint8_t Idx)                    // for debug
 { uint8_t Len=0;
   // Len+=Format_String(Line+Len, "");
@@ -34,27 +34,27 @@ static void PrintRelayQueue(uint8_t Idx)                    // for debug
   Line[Len++]='['; Len+=Format_Hex(Line+Len, Idx); Line[Len++]=']'; Line[Len++]=' ';
   Len+=RelayQueue.Print(Line+Len);
   Format_String(CONS_UART_Write, Line);
-  xSemaphoreGive(CONS_Mutex);
-}
+  xSemaphoreGive(CONS_Mutex); }
+#endif
 
 static bool GetRelayPacket(OGN_TxPacket *Packet)      // prepare a packet to be relayed
-{ if(RelayQueue.Sum==0) return 0;
-  XorShift32(RX_Random);
-  uint8_t Idx=RelayQueue.getRand(RX_Random);
-  if(RelayQueue.Packet[Idx].Rank==0) return 0;
-  memcpy(Packet->Packet.Byte(), RelayQueue[Idx]->Byte(), OGN_Packet::Bytes);
-  Packet->Packet.Header.RelayCount+=1;
-  Packet->Packet.Whiten(); Packet->calcFEC();
+{ if(RelayQueue.Sum==0) return 0;                     // if no packets in the relay queue
+  XorShift32(RX_Random);                              // produce a new random number
+  uint8_t Idx=RelayQueue.getRand(RX_Random);          // get weight-random packet from the relay queue
+  if(RelayQueue.Packet[Idx].Rank==0) return 0;        // should not happen ...
+  memcpy(Packet->Packet.Byte(), RelayQueue[Idx]->Byte(), OGN_Packet::Bytes); // copy the packet
+  Packet->Packet.Header.RelayCount+=1;                // increment the relay count (in fact we only do single relay)
+  Packet->Packet.Whiten(); Packet->calcFEC();         // whiten and calc. the FEC code => packet ready for transmission
   // PrintRelayQueue(Idx);  // for debug
-  RelayQueue.decrRank(Idx);
+  RelayQueue.decrRank(Idx);                           // reduce the rank of the packet selected for relay
   return 1; }
 
-static void CleanRelayQueue(uint32_t Time, uint32_t Delay=20)
-{ RelayQueue.cleanTime((Time-Delay)%60); }
+static void CleanRelayQueue(uint32_t Time, uint32_t Delay=20) // remove "old" packets from the relay queue
+{ RelayQueue.cleanTime((Time-Delay)%60); }            // remove packets 20(default) seconds into the past
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
 
-static void ReadStatus(OGN_TxPacket &StatPacket)
+static void ReadStatus(OGN_TxPacket &StatPacket)                            // read the device status and fill the status packet
 {
 
 #ifdef WITH_STM32
@@ -71,8 +71,8 @@ static void ReadStatus(OGN_TxPacket &StatPacket)
   uint16_t RxRate = RX_OGN_Count64+1;
   uint8_t RxRateLog2=0; RxRate>>=1; while(RxRate) { RxRate>>=1; RxRateLog2++; }
   StatPacket.Packet.Status.RxRate = RxRateLog2;
-
- { uint8_t Len=0;
+                                                                             // produce the POGNR sentence
+  { uint8_t Len=0;
     Len+=Format_String(Line+Len, "$POGNR,");                                 // NMEA report: radio status
     Len+=Format_UnsDec(Line+Len, RF_FreqPlan.Plan);                          // which frequency plan
     Line[Len++]=',';
@@ -98,7 +98,7 @@ static void ReadStatus(OGN_TxPacket &StatPacket)
 #ifdef WITH_SDLOG
     if(Log_Free()>=128)
     { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
-      Format_String(Log_Write, Line, Len);                                     // send the NMEA out to the log file
+      Format_String(Log_Write, Line, Len, 0);                                     // send the NMEA out to the log file
       xSemaphoreGive(Log_Mutex); }
 #endif
   }
@@ -126,7 +126,7 @@ static void ProcessRxPacket(OGN_RxPacket *RxPacket, uint8_t RxPacketIdx)        
 #ifdef WITH_SDLOG
     if(Log_Free()>=128)
     { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
-      Format_String(Log_Write, Line, Len);
+      Format_String(Log_Write, Line, Len, 0);
       xSemaphoreGive(Log_Mutex); }
 #endif
 #ifdef WITH_PFLAA
@@ -190,9 +190,13 @@ void vTaskPROC(void* pvParameters)
 #endif
   RelayQueue.Clear();
 
-  OGN_TxPacket PosPacket;                                               // position packet
-  uint32_t     PosTime=0;                                               // [sec] when the position was recorded
-  OGN_TxPacket StatPacket;                                              // status report packet
+  static uint16_t AverSpeed=0;                                          // [0.1m/s] average speed (including vertical)
+  static bool     isMoving=0;                                           // is the aircraft moving ?
+
+  static OGN_TxPacket PosPacket;                                        // position packet
+  static uint32_t     PosTime=0;                                        // [sec] when the position was recorded
+  static OGN_TxPacket StatPacket;                                       // status report packet
+  static OGN_TxPacket InfoPacket;                                       // information packet
 
   for( ; ; )
   { vTaskDelay(1);
@@ -240,7 +244,8 @@ void vTaskPROC(void* pvParameters)
     // GPS_Position *Position = GPS_getPosition();
     if(Position) Position->EncodeStatus(StatPacket.Packet);             // encode GPS altitude and pressure
     if( Position && Position->isReady && (!Position->Sent) && Position->isReady && Position->isValid() )
-    { int16_t AverSpeed=GPS_AverageSpeed();                             // [0.1m/s] average speed, including the vertical speed
+    { AverSpeed=GPS_AverageSpeed();                                     // [0.1m/s] average speed, including the vertical speed
+      isMoving = AverSpeed>10;
       RF_FreqPlan.setPlan(Position->Latitude, Position->Longitude);     // set the frequency plan according to the GPS position
 /*
 #ifdef DEBUG_PRINT
@@ -275,7 +280,7 @@ void vTaskPROC(void* pvParameters)
       xSemaphoreGive(CONS_Mutex);
 #endif
       XorShift32(RX_Random);
-      if( (AverSpeed>10) || ((RX_Random&0x3)==0) )                      // send only some positions if the speed is less than 1m/s
+      if( isMoving || ((RX_Random&0x3)==0) )                            // send only some positions if the speed is less than 1m/s
         RF_TxFIFO.Write();                                              // complete the write into the TxFIFO
       Position->Sent=1;
 #ifdef WITH_FLASHLOG
@@ -312,6 +317,13 @@ void vTaskPROC(void* pvParameters)
     Format_String(CONS_UART_Write, Line);
     xSemaphoreGive(CONS_Mutex);
 #endif
+    // Parameters.WriteHeader(InfoPacket.Packet);
+    InfoPacket.Packet.HeaderWord=0;
+    InfoPacket.Packet.Header.Address    = Parameters.Address;    // set address
+    InfoPacket.Packet.Header.AddrType   = Parameters.AddrType;   // address-type
+    InfoPacket.Packet.Header.Other=1;
+    InfoPacket.Packet.calcAddrParity();                          // parity of (part of) the header
+
     StatPacket.Packet.HeaderWord=0;
     StatPacket.Packet.Header.Address    = Parameters.Address;    // set address
     StatPacket.Packet.Header.AddrType   = Parameters.AddrType;   // address-type

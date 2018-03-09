@@ -17,8 +17,13 @@
 
 #define USE_BLOCK_SPI                      // use block SPI interface for RF chip
 
-#define WITH_RFM95                         // RF chip selection
+#define WITH_HELTEC                        // HELTEC module: PCB LED on GPI025
+// #define WITH_TTGO                          // TTGO module: PCB LED on GPIO2, GPIO25 free to use as DAC2 output
+#define WITH_OLED                          // OLED display on the I2C: some TTGO modules are without OLED display
+
+#define WITH_RFM95                         // RF chip selection:  both HELTEC and TTGO use sx1276 which is same af RFM95
 // #define WITH_RFM69
+
 // #define WITH_LED_RX
 // #define WITH_LED_TX
 
@@ -32,15 +37,14 @@
 
 // #define WITH_BMP180                        // BMP180 pressure sensor
 // #define WITH_BMP280                        // BMP280 pressure sensor
+// #define WITH_BME280                        // with humidity
 // #define WITH_MS5607                        // MS5607 pressure sensor
 
-#define I2C_SPEED 1000000                  // [Hz]
+#define I2C_SPEED 1000000                  // [Hz] bit rate on the I2C (nominally up to 400000)
 
 #define WITH_PFLAA                         // PFLAU and PFLAA for compatibility with XCsoar and LK8000
 
 #define WITH_CONFIG                        // interpret the console input: $POGNS to change parameters
-
-#define WITH_OLED                          // OLED display on the I2C
 
 // #define WITH_BT_SPP                        // Bluetooth serial port fo smartphone/tablet link
 
@@ -56,7 +60,7 @@ extern uint8_t  MAV_Seq;                   // sequence number for MAVlink messag
 // ============================================================================================================
 
 extern SemaphoreHandle_t CONS_Mutex;       // console port Mutex
-extern SemaphoreHandle_t I2C_Mutex;        // I2C port Mutex (OLED and Baro)
+// extern SemaphoreHandle_t I2C_Mutex;        // I2C port Mutex (OLED and Baro)
 
 uint64_t getUniqueID(void);                // get some unique ID of the CPU/chip
 uint32_t getUniqueAddress(void);           // get unique 24-bit address for the transmitted IF

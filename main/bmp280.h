@@ -65,6 +65,7 @@ class BMP280
     D   =      0; }
 
   uint8_t CheckID(void) // check ID, to make sure the BMP280 is connected and works correctly
+  			// if it finds a BME280 it will use it without the humidity part
    { uint8_t ID;
      ADDR=0;
      Error=I2C_Read(Bus, ADDR0, REG_ID, ID);

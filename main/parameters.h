@@ -6,6 +6,8 @@
 
 #include "hal.h"
 
+#include "ogn.h"
+
 #ifdef WITH_ESP32
 #include "nvs.h"
 #endif
@@ -53,20 +55,26 @@ class FlashParameters
   uint16_t  SoftPPSdelay;    // [ms]
 
    static const uint8_t InfoParmLen = 16; // [char] max. size of an infp-parameter
-   static const uint8_t InfoParmNum =  6; // [int]  number of info-parameters
-         char *InfoParmValue(uint8_t Idx)       { return Idx<InfoParmNum ? Pilot + Idx*InfoParmLen:0; }
-   const char *InfoParmName(uint8_t Idx) const { static const char *Name[InfoParmNum] = { "Pilot", "Manuf", "Model", "Reg", "Base", "ICE" } ;
+   static const uint8_t InfoParmNum = 11; // [int]  number of info-parameters
+         char *InfoParmValue(uint8_t Idx)      { return Idx<InfoParmNum ? Pilot + Idx*InfoParmLen:0; }
+      uint8_t  InfoParmValueLen(uint8_t Idx)   { return strlen(InfoParmValue(Idx)); }
+   const char *InfoParmName(uint8_t Idx) const { static const char *Name[InfoParmNum] =
+                                               { "Pilot", "Manuf", "Model", "Type", "SN", "Reg", "ID", "Class", "Task", "Base", "ICE" } ;
                                                   return Idx<InfoParmNum ? Name[Idx]:0; }
-     char   Pilot[InfoParmLen];
-     char   Manuf[InfoParmLen];
-     char   Model[InfoParmLen];
-     char     Reg[InfoParmLen];
-     char    Base[InfoParmLen];
-     char     ICE[InfoParmLen];
+     char   Pilot[InfoParmLen];                // Pilot name
+     char   Manuf[InfoParmLen];                // Manufacturer
+     char   Model[InfoParmLen];                // Model
+     char    Type[InfoParmLen];                // Type
+     char      SN[InfoParmLen];                // Serial Number
+     char     Reg[InfoParmLen];                // Registration
+     char      ID[InfoParmLen];                // Competition ID
+     char   Class[InfoParmLen];                // Competition class
+     char    Task[InfoParmLen];                // Competition task
+     char    Base[InfoParmLen];                // Base airfield
+     char     ICE[InfoParmLen];                // In Case of Emergency
 
    // char BTname[8];
    // char  BTpin[4];
-   // char Pilot[16];
    // char Copilot[16]
    // char Category[16]
 
@@ -102,13 +110,17 @@ class FlashParameters
     TimeCorr       =         0; // [sec]
     GeoidSepar     =       470; // [0.1m]
 
-    Pilot[0]    = 0;
-    Manuf[0]    = 0;
-    Model[0]    = 0;
-    Reg[0]      = 0;
-    Base[0]     = 0;
-    ICE[0]      = 0;
+    for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
+      InfoParmValue(Idx)[0] = 0;
+
   }
+
+// void WriteHeader(OGN_Packet &Packet)
+// { Packet.HeaderWord=0;
+//   Packet.Header.Address    = Parameters.Address;    // set address
+//   Packet.Header.AddrType   = Parameters.AddrType;   // address-type
+//   Packet.Header.Other=1;
+//   Packet.calcAddrParity(); }                        // parity of (part of) the header
 
 #ifdef WITH_ESP32
   esp_err_t WriteToNVS(const char *Name="Parameters", const char *NameSpace="TRACKER")
@@ -194,6 +206,9 @@ class FlashParameters
 #endif
 #ifdef WITH_RFM95
     Len+=Format_String(Line+Len, " RFM95");
+#endif
+#ifdef WITH_SX1272
+    Len+=Format_String(Line+Len, " SX1272");
 #endif
     Line[Len++]='/';
     Len+=Format_SignDec(Line+Len, (int16_t)getTxPower());

@@ -84,9 +84,9 @@ const uint8_t  GPS_dynModel       =     7; // for UBX GPS's: 6 = airborne with >
 int16_t GPS_AverageSpeed(void)                        // get average speed based on stored GPS positions
 { uint8_t Count=0;
   int16_t Speed=0;
-  for(uint8_t Idx=0; Idx<4; Idx++)                    // loop over GPS positions
+  for(uint8_t Idx=0; Idx<GPS_PosPipeSize; Idx++)      // loop over GPS positions
   { GPS_Position *Pos = Position+Idx;
-    if( !Pos->hasGPS || !Pos->isValid() ) continue;      // skip invalid positions
+    if( !Pos->hasGPS || !Pos->isValid() ) continue;   // skip invalid positions
     Speed += Pos->Speed +abs(Pos->ClimbRate); Count++;
   }
   if(Count==0) return -1;
@@ -400,11 +400,13 @@ static void GPS_NMEA(void)                                                 // wh
 }
 
 #ifdef WITH_GPS_UBX
+#ifdef DEBUG_PRINT
 static void DumpUBX(void)
 { Format_String(CONS_UART_Write, "UBX:");
   for(uint8_t Idx=0; Idx<20; Idx++)
   { CONS_UART_Write(' '); Format_Hex(CONS_UART_Write, UBX.Byte[Idx]); }
   Format_String(CONS_UART_Write, "\n"); }
+#endif // DEBUG_PRINT
 
 static void GPS_UBX(void)                                                         // when GPS gets an UBX packet
 { GPS_Status.UBX=1;

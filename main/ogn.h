@@ -625,8 +625,8 @@ class OGN_Packet           // Packet structure for the OGN tracker
    { return DecodeUR2V12(Position.Altitude); }
 
    void EncodeDOP(uint8_t DOP)
-   {      if(DOP<0)    DOP=0;
-     else if(DOP<0x10) { }
+   { // if(DOP<0)    DOP=0;
+          if(DOP<0x10) { }
      else if(DOP<0x30) DOP = 0x10 | ((DOP-0x10)>>1);
      else if(DOP<0x70) DOP = 0x20 | ((DOP-0x30)>>2);
      else if(DOP<0xF0) DOP = 0x30 | ((DOP-0x70)>>3);

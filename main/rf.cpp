@@ -79,8 +79,8 @@ static uint32_t ReceiveUntil(TickType_t End)
     vTaskDelay(1); }
   return Count; }
 
-static uint32_t ReceiveFor(TickType_t Ticks)                     // keep receiving packets for given period of time
-{ return ReceiveUntil(xTaskGetTickCount()+Ticks); }
+// static uint32_t ReceiveFor(TickType_t Ticks)                     // keep receiving packets for given period of time
+// { return ReceiveUntil(xTaskGetTickCount()+Ticks); }
 
 static uint8_t Transmit(uint8_t TxChan, const uint8_t *PacketByte, uint8_t Thresh, uint8_t MaxWait=7)
 {
