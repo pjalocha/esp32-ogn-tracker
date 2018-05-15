@@ -27,13 +27,14 @@
 // #define WITH_LED_RX
 // #define WITH_LED_TX
 
-// #define WITH_GPS_ENABLE                    // use GPS_ENABLE control line to turn the GPS ON/OFF
+#define WITH_GPS_ENABLE                    // use GPS_ENABLE control line to turn the GPS ON/OFF
 #define WITH_GPS_PPS                       // use the PPS signal from GPS for precise time-sync.
 #define WITH_GPS_CONFIG                    // attempt to configure higher GPS baud rate and airborne mode
 #define WITH_GPS_UBX                       // GPS understands UBX
 // #define WITH_GPS_MTK                       // GPS understands MTK
 // #define WITH_GPS_SRF
-// #define WITH_MAVLINK
+
+// #define WITH_MAVLINK                       // use MAVlink as source for the position/pressure data
 
 // #define WITH_BMP180                        // BMP180 pressure sensor
 // #define WITH_BMP280                        // BMP280 pressure sensor

@@ -3,10 +3,12 @@
 #include <stdbool.h>
 // #include <sys/select.h>
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/semphr.h"
-#include "freertos/queue.h"
+#include "hal.h"
+
+// #include "freertos/FreeRTOS.h"
+// #include "freertos/task.h"
+// #include "freertos/semphr.h"
+// #include "freertos/queue.h"
 
 #include "driver/gpio.h"
 #include "driver/uart.h"
@@ -21,13 +23,13 @@
 
 #include "esp_spiffs.h"
 
+#ifdef WITH_BT_SPP
 #include "esp_bt.h"
 #include "esp_bt_main.h"
 #include "esp_gap_bt_api.h"
 #include "esp_bt_device.h"
 #include "esp_spp_api.h"
-
-#include "hal.h"
+#endif
 
 #ifdef WITH_OLED
 #include "ssd1306.h"
@@ -410,7 +412,9 @@ void IO_Configuration(void)
   uart_set_pin       (GPS_UART, PIN_GPS_TXD, PIN_GPS_RXD, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
   uart_driver_install(GPS_UART, 256, 256, 0, 0, 0);
 
+#ifdef WITH_OLED
   gpio_set_direction(PIN_OLED_RST, GPIO_MODE_OUTPUT);
+#endif
 
   i2c_config_t I2C_Config =                            // I2C for OLED and pressue sensor
   { mode:          I2C_MODE_MASTER,
