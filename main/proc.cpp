@@ -310,6 +310,24 @@ void vTaskPROC(void* pvParameters)
         RF_TxFIFO.Write();                                              // complete the write into the TxFIFO
       if(Position) Position->Sent=1;
     }
+#ifdef WITH_MAVLINK
+    { MAV_HEARTBEAT MAV_HeartBeat;
+    // = { custom_mode:0,
+    //     type:0,
+    //     autopilot:0,
+    //     base_mode:0,
+    //     system_status:4,
+    //     mavlink_version:1
+    //   };
+      MAV_HeartBeat.custom_mode=0;
+      MAV_HeartBeat.type=0;
+      MAV_HeartBeat.autopilot=0;
+      MAV_HeartBeat.base_mode=0;
+      MAV_HeartBeat.system_status=4;
+      MAV_HeartBeat.mavlink_version=1;
+      MAV_RxMsg::Send(sizeof(MAV_HeartBeat), MAV_Seq++, MAV_SysID, MAV_COMP_ID_ADSB, MAV_ID_HEARTBEAT, (const uint8_t *)&MAV_HeartBeat, GPS_UART_Write);
+    }
+#endif
 #ifdef DEBUG_PRINT
     // char Line[128];
     Line[0]='0'+RF_TxFIFO.Full(); Line[1]=' ';                  // print number of packets in the TxFIFO
