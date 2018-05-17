@@ -536,7 +536,7 @@ static void GPS_MAV(void)                                                  // wh
   } else if(MsgID==MAV_ID_GPS_RAW_INT)
   { MAV_GPS_RAW_INT *RawGPS = (MAV_GPS_RAW_INT *)MAV.getPayload();
     uint64_t UnixTime_ms = RawGPS->time_usec/1000;
-    if(UnixTime_ms<(uint64)1000000000000) UnixTime_ms += MAV_TimeOfs_ms;
+    if(UnixTime_ms<1000000000000) UnixTime_ms += MAV_TimeOfs_ms;
     // RawGPS->time_usec += (int64_t)MAV_TimeOfs_ms*1000;
     Position[PosIdx].Read(RawGPS, UnixTime_ms);
 #ifdef DEBUG_PRINT
