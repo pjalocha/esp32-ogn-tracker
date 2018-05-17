@@ -194,7 +194,7 @@ static void GPS_BurstStart(void)                                           // wh
         Len += NMEA_AppendCheck(GPS_Cmd, Len);
         GPS_Cmd[Len]=0;
         // Serial.println(GPS_Cmd);
-        Format_String(GPS_UART_Write, GPS_Cmd, Len);
+        Format_String(GPS_UART_Write, GPS_Cmd, Len, 0);
         GPS_UART_Write('\r'); GPS_UART_Write('\n');
 #endif
 #ifdef WITH_GPS_SRF
@@ -206,7 +206,7 @@ static void GPS_BurstStart(void)                                           // wh
         Len += NMEA_AppendCheck(GPS_Cmd, Len);
         GPS_Cmd[Len]=0;
         // Serial.println(GPS_Cmd);
-        Format_String(GPS_UART_Write, GPS_Cmd, Len);
+        Format_String(GPS_UART_Write, GPS_Cmd, Len, 0);
         GPS_UART_Write('\r'); GPS_UART_Write('\n');
 #endif
       }
@@ -383,17 +383,21 @@ static void GPS_NMEA(void)                                                 // wh
   xSemaphoreGive(CONS_Mutex);
 #endif
   if( NMEA.isP() || NMEA.isGxRMC() || NMEA.isGxGGA() || NMEA.isGxGSA() || NMEA.isGPTXT() )
-  { static char CRNL[3] = "\r\n";
+  { // static char CRNL[3] = "\r\n";
     // if(CONS_UART_Free()>=128)
     { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-      Format_Bytes(CONS_UART_Write, NMEA.Data, NMEA.Len);
-      Format_Bytes(CONS_UART_Write, (const uint8_t *)CRNL, 2);
+      Format_String(CONS_UART_Write, (const char *)NMEA.Data, 0, NMEA.Len);
+      CONS_UART_Write('\n');
+      // Format_Bytes(CONS_UART_Write, NMEA.Data, NMEA.Len);
+      // Format_Bytes(CONS_UART_Write, (const uint8_t *)CRNL, 2);
       xSemaphoreGive(CONS_Mutex); }
 #ifdef WITH_SDLOG
     if(Log_Free()>=128)
     { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
-      Format_Bytes(Log_Write, NMEA.Data, NMEA.Len);
-      Format_Bytes(Log_Write, (const uint8_t *)CRNL, 2);
+      Format_String(Log_Write, (const char *)NMEA.Data, 0, NMEA.Len);
+      Log_Write('\n');
+      // Format_Bytes(Log_Write, NMEA.Data, NMEA.Len);
+      // Format_Bytes(Log_Write, (const uint8_t *)CRNL, 2);
       xSemaphoreGive(Log_Mutex); }
 #endif
   }
@@ -481,8 +485,8 @@ static void GPS_UBX(void)                                                       
 #endif // WITH_GPS_UBX
 
 #ifdef WITH_MAVLINK
-static void GPS_MAV(void)                                                   // when GPS gets an MAV packet
-{ static int64_t MAV_TimeOfs_ms=0;
+static void GPS_MAV(void)                                                  // when GPS gets an MAV packet
+{ static int64_t MAV_TimeOfs_ms=0;                                         // [ms] diff. between UTC time and boot time reported in MAV messages
   TickType_t TickCount=xTaskGetTickCount();
   GPS_Status.MAV=1;
   LED_PCB_Flash(2);
@@ -531,7 +535,8 @@ static void GPS_MAV(void)                                                   // w
 #endif
   } else if(MsgID==MAV_ID_GPS_RAW_INT)
   { MAV_GPS_RAW_INT *RawGPS = (MAV_GPS_RAW_INT *)MAV.getPayload();
-    uint64_t UnixTime_ms = RawGPS->time_usec/1000 + MAV_TimeOfs_ms;
+    uint64_t UnixTime_ms = RawGPS->time_usec/1000;
+    if(UnixTime_ms<(uint64)1000000000000) UnixTime_ms += MAV_TimeOfs_ms;
     // RawGPS->time_usec += (int64_t)MAV_TimeOfs_ms*1000;
     Position[PosIdx].Read(RawGPS, UnixTime_ms);
 #ifdef DEBUG_PRINT

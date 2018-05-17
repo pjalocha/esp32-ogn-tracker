@@ -14,7 +14,9 @@ void Format_Bytes( void (*Output)(char), const uint8_t *Bytes, uint8_t Len)
 void Format_String( void (*Output)(char), const char *String)
 { for( ; ; )
   { uint8_t ch = (*String++); if(ch==0) break;
+#ifdef WITH_AUTOCR
     if(ch=='\n') (*Output)('\r');
+#endif
     (*Output)(ch); }
 }
 
@@ -22,7 +24,9 @@ uint8_t Format_String(char *Out, const char *String)
 { uint8_t OutLen=0;
   for( ; ; )
   { char ch = (*String++); if(ch==0) break;
+#ifdef WITH_AUTOCR
     if(ch=='\n') Out[OutLen++]='\r';
+#endif
     Out[OutLen++]=ch; }
   // Out[OutLen]=0;
   return OutLen; }
@@ -32,7 +36,9 @@ void Format_String( void (*Output)(char), const char *String, uint8_t MinLen, ui
   uint8_t Idx;
   for(Idx=0; Idx<MaxLen; Idx++)
   { char ch = String[Idx]; if(ch==0) break;
+#ifdef WITH_AUTOCR
     if(ch=='\n') (*Output)('\r');
+#endif
     (*Output)(ch); }
   for(    ; Idx<MinLen; Idx++)
     (*Output)(' ');
@@ -44,7 +50,9 @@ uint8_t Format_String(char *Out, const char *String, uint8_t MinLen, uint8_t Max
   uint8_t Idx;
   for(Idx=0; Idx<MaxLen; Idx++)
   { char ch = String[Idx]; if(ch==0) break;
+#ifdef WITH_AUTOCR
     if(ch=='\n') Out[OutLen++]='\r';
+#endif
     Out[OutLen++]=ch; }
   for(    ; Idx<MinLen; Idx++)
     Out[OutLen++]=' ';
@@ -163,6 +171,30 @@ uint8_t Format_Hex( char *Output, uint32_t Word, uint8_t Digits)
   { Output[--Idx]=HexDigit(Word&0x0F);
     Word>>=4; }
   return Digits; }
+
+// ------------------------------------------------------------------------------------------
+
+uint8_t Format_Latitude(char *Out, int32_t Lat)
+{ uint8_t Len=0;
+  char Sign='N';
+  if(Lat<0) { Sign='S'; Lat=(-Lat); }
+  uint32_t Deg=Lat/600000;
+  Lat -= 600000*Deg;
+  Len+=Format_UnsDec(Out+Len, Deg, 2, 0);
+  Len+=Format_UnsDec(Out+Len, Lat, 6, 4);
+  Out[Len++]=Sign;
+  return Len; }
+
+uint8_t Format_Longitude(char *Out, int32_t Lon)
+{ uint8_t Len=0;
+  char Sign='E';
+  if(Lon<0) { Sign='W'; Lon=(-Lon); }
+  uint32_t Deg=Lon/600000;
+  Lon -= 600000*Deg;
+  Len+=Format_UnsDec(Out+Len, Deg, 3, 0);
+  Len+=Format_UnsDec(Out+Len, Lon, 6, 4);
+  Out[Len++]=Sign;
+  return Len; }
 
 // ------------------------------------------------------------------------------------------
 

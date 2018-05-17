@@ -37,8 +37,10 @@ uint8_t Format_Hex( char *Output, uint32_t Word, uint8_t Digits);
 
 uint8_t Format_HHMMSS(char *Out, uint32_t Time);
 
+uint8_t Format_Latitude (char *Out, int32_t Lat); // [1/600000deg] =>  DDMM.MMMMs
+uint8_t Format_Longitude(char *Out, int32_t Lon); // [1/600000deg] => DDDMM.MMMMs
+
 int8_t  Read_Hex1(char Digit);
-int16_t Read_Hex2(const char *Inp);
 
 int8_t  Read_Dec1(char Digit);                  // convert single digit into an integer
 inline int8_t Read_Dec1(const char *Inp) { return Read_Dec1(Inp[0]); }

@@ -95,7 +95,7 @@ class MAV_SYS_STATUS
 
 class MAV_GPS_RAW_INT
 { public:
-   uint64_t          time_usec;  // [usec]       Time
+   uint64_t          time_usec;  // [usec]       Time (appears to be boot time, not UTC)
     int32_t                lat;  // [1e-7deg]    Latitude
     int32_t                lon;  // [1e-7deg]    Longitude
     int32_t                alt;  // [mm]         Altitude AMSL
@@ -112,8 +112,8 @@ class MAV_GPS_RAW_INT
    uint8_t  satellites_visible;  // []           Number of satellites
   public:
    void Print(void) const
-   { printf("GPS_RAW_INT: [%+9.5f, %+10.5f]deg %+5.1fm %3.1fm/s %05.1fdeg %d/%dsat\n",
-           1e-7*lat, 1e-7*lon, 1e-3*alt, 0.01*vel, 0.01*cog, fix_type, satellites_visible); }
+   { printf("GPS_RAW_INT: %14.3fsec [%+9.5f, %+10.5f]deg %+5.1fm %3.1fm/s %05.1fdeg %d/%dsat\n",
+           1e-6*time_usec, 1e-7*lat, 1e-7*lon, 1e-3*alt, 0.01*vel, 0.01*cog, fix_type, satellites_visible); }
 } ;
 
 class MAV_GLOBAL_POSITION_INT
@@ -121,17 +121,17 @@ class MAV_GLOBAL_POSITION_INT
    uint32_t  time_boot_ms;  // [ms]
     int32_t           lat;  // [1e-7deg]
     int32_t           lon;  // [1e-7deg]
-    int32_t           alt;  // [mm]
-    int32_t  relative_alt;  // [mm]
-    int16_t            vx;  // [cm]
-    int16_t            vy;  // [cm]
-    int16_t            vz;  // [cm]
-    int16_t           hdg;  // [0.01deg]
+    int32_t           alt;  // [mm]         AMSL
+    int32_t  relative_alt;  // [mm]         Above-takeoff ?
+    int16_t            vx;  // [cm/s]       along latitude: positive => north
+    int16_t            vy;  // [cm/s]       along longitude: positive => east
+    int16_t            vz;  // [cm/s]       sink rate: positive => down
+    int16_t           hdg;  // [0.01deg]    yaw angle
   public:
    void Print(void) const
    { uint16_t Track = IntAtan2(vy, vx);
-     printf("GLOBAL_POSITION_INT: [%+9.5f, %+10.5f]deg %5.1f(%+4.1f)m %3.1fm/s %05.1f/%05.1fdeg %+4.1fm/s\n",
-           1e-7*lat, 1e-7*lon, 1e-3*alt, 1e-3*relative_alt,
+     printf("GLOBAL_POSITION_INT: %10.3fsec [%+9.5f, %+10.5f]deg %5.1f(%+4.1f)m %3.1fm/s %05.1f/%05.1fdeg %+4.1fm/s\n",
+           1e-3*time_boot_ms, 1e-7*lat, 1e-7*lon, 1e-3*alt, 1e-3*relative_alt,
            0.01*IntSqrt((int32_t)vx*vx+(int32_t)vy*vy), 360.0/0x10000*Track, 0.01*hdg,
            0.01*vz); }
 } ;
@@ -144,7 +144,8 @@ class MAV_SCALED_PRESSURE
    int16_t   temperature; // [0.01degC]
   public:
    void Print(void) const
-   { printf("SCALED_PRESSURE: %8.3f [sec] %7.2f %+4.2f [hPa] %+5.2f [degC]\n", 1e-3*time_boot_ms, 2*press_abs, 2*press_diff, 0.01*temperature); }   
+   { printf("SCALED_PRESSURE: %8.3f [sec] %7.2f %+4.2f [hPa] %+5.2f [degC]\n",
+            1e-3*time_boot_ms, 2*press_abs, 2*press_diff, 0.01*temperature); } // with ms5607 there is a bug/feature: pressure is twice as low
 } ;
 
 class MAV_ADSB_VEHICLE    // this message is sent by ADS-B or other traffic receiver
