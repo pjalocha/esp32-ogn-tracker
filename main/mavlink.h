@@ -22,6 +22,7 @@ const uint8_t MAV_COMP_ID_GPS             = 220;
 const uint8_t MAV_ID_HEARTBEAT             =  0; // + 
 const uint8_t MAV_ID_SYS_STATUS            =  1; // + power data
 const uint8_t MAV_ID_SYSTEM_TIME           =  2; // + boot and UTC time
+const uint8_t MAV_ID_PARAM_VALUE           = 22; // + value of an parameter
 const uint8_t MAV_ID_GPS_RAW_INT           = 24; // + position after the GPS
 const uint8_t MAV_ID_RAW_IMU               = 27; // +
 const uint8_t MAV_ID_SCALED_PRESSURE       = 29; // + pressure+temperature
@@ -34,6 +35,10 @@ const uint8_t MAV_ID_NAV_CONTROLLER_OUTPUT = 62; //
 const uint8_t MAV_ID_VFR_HUD               = 74; //
 const uint8_t MAV_ID_TIMESYNC             = 111;
 const uint8_t MAV_ID_HIL_GPS              = 113;
+const uint8_t MAV_ID_SCALED_IMU2          = 116; //
+const uint8_t MAV_ID_POWER_STATUS         = 125; //   5V and servo power and status
+const uint8_t MAV_ID_TERRAIN_REPORT       = 136; //
+const uint8_t MAV_ID_BATTERY_STATUS       = 147; // 
 const uint8_t MAV_ID_ADSB_VEHICLE         = 246; // + traffic information sent by an ADS-B receiver
 const uint8_t MAV_ID_COLLISION            = 247; // + collision threat detected by auto-pilot
 const uint8_t MAV_ID_STATUSTEXT           = 253; // +
@@ -41,10 +46,10 @@ const uint8_t MAV_ID_DEBUG                = 254;
 
 // --------------------------------------------------------------------------------
 
-class MAV_HEARTBEAT
+class MAV_HEARTBEAT // 0
 { public:
    uint32_t     custom_mode;
-   uint8_t             type; // MAV-aircraft-type: 1=fixed wing, 2=quadrotor, 7=airship, 8=balloon, 13=hexarotor
+   uint8_t             type; // MAV-aircraft-type: 1=fixed wing, 2=quadrotor, 7=airship, 8=balloon, D=hexarotor
    uint8_t        autopilot; // 3=ArduPilotMega, 4=OpenPilot, 13=PX4
    union
    { uint8_t      base_mode;
@@ -66,16 +71,7 @@ class MAV_HEARTBEAT
    { printf("HEARTBEAT: t%X v%d\n", type, mavlink_version); }
 } ;
 
-class MAV_SYSTEM_TIME
-{ public:
-   uint64_t time_unix_usec;  // [usec]
-   uint32_t   time_boot_ms;  // [ms]
-  public:
-   void Print(void) const
-   { printf("SYSTEM_TIME: %14.3f-%8.3f [sec]\n", 1e-6*time_unix_usec, 1e-3*time_boot_ms); }
-} ;
-
-class MAV_SYS_STATUS
+class MAV_SYS_STATUS // 1
 { public:
    uint32_t onboard_control_sensors_present;
    uint32_t onboard_control_sensors_enabled;
@@ -93,7 +89,28 @@ class MAV_SYS_STATUS
    { printf("SYS_STATUS: %3.1f%% %5.3fV %+5.2fA\n", 0.1*load, 1e-3*battery_voltage, 0.01*battery_current); }
 } ;
 
-class MAV_GPS_RAW_INT
+class MAV_SYSTEM_TIME // 2
+{ public:
+   uint64_t time_unix_usec;  // [usec]
+   uint32_t   time_boot_ms;  // [ms]
+  public:
+   void Print(void) const
+   { printf("SYSTEM_TIME: %14.3f-%8.3f [sec]\n", 1e-6*time_unix_usec, 1e-3*time_boot_ms); }
+} ;
+
+class MAV_PARAM_VALUE
+{ public:
+   float param_value;
+   uint16_t param_count;
+   uint16_t param_index;
+   char param_id[16];
+   uint8_t param_type; // (1)2=(u)int8, (3)/4=(u)int16_t, (5)/6=(u)int32_t, (7)/8=(u)int64_t, 9=float, 10=double
+  public:
+   void Print(void) const
+   { printf("PARAM_VALUE: %.16s t%X %d/%d\n", param_id, param_type, param_index, param_count); }
+} ;
+
+class MAV_GPS_RAW_INT // 24
 { public:
    uint64_t          time_usec;  // [usec]       Time-since-boot time or UTC
     int32_t                lat;  // [1e-7deg]    Latitude
@@ -159,7 +176,7 @@ class MAV_SCALED_PRESSURE
   public:
    void Print(void) const
    { printf("SCALED_PRESSURE: %8.3f [sec] %7.2f %+4.2f [hPa] %+5.2f [degC]\n",
-            1e-3*time_boot_ms, 2*press_abs, 2*press_diff, 0.01*temperature); } // with ms5607 there is a bug/feature: pressure is twice as low
+            1e-3*time_boot_ms, press_abs, press_diff, 0.01*temperature); } // with ms5607 there is a bug/feature: pressure is twice as low
 } ;
 
 class MAV_ADSB_VEHICLE    // this message is sent by ADS-B or other traffic receiver
@@ -185,13 +202,15 @@ class MAV_ADSB_VEHICLE    // this message is sent by ADS-B or other traffic rece
    } ;
    uint16_t       squawk;
    uint8_t altitude_type; // 0 = pressure/QNH, 1 = GPS
-   uint8_t   callsign[9]; // 8+null
+   char      callsign[9]; // 8+null
    uint8_t   emiter_type; // 0=no-info, 1=light, 2=small. 3=large, 4=high-vortex, 5=heavy, 6=manuv, 7=rotor, 9=glider, 10=balloon/airship, 11=parachute, 12=ULM, 14=UAV, 15=space, 19=obstacle
    uint8_t          tslc; // [sec] time since last communication
   public:
    void Print(void) const
-   { printf("ADSB_VEHICLE: %02X:%08lX [%+9.5f, %+10.5f]deg %5.1fm %3.1fm/s %05.1fdeg %+4.1fm/s\n",
-            (int)emiter_type, (long int)ICAO_address, 1e-7*lat, 1e-7*lon, 1e-3*altitude, 0.01*hor_velocity, 360.0/0x10000*heading, 0.01*ver_velocity); }
+   { printf("ADSB_VEHICLE: %.9s %02X:%08lX [%+9.5f, %+10.5f]deg %5.1fm %3.1fm/s %05.1fdeg %+4.1fm/s %dsec\n",
+            callsign, (int)emiter_type, (long int)ICAO_address,
+            1e-7*lat, 1e-7*lon, 1e-3*altitude, 0.01*hor_velocity, 360.0/0x10000*heading, 0.01*ver_velocity,
+            tslc); }
 } ;
 
 class COLLISION                    // this message is sent by the autopilot when it detects a collision threat
@@ -245,6 +264,7 @@ class MAV_RxMsg // receiver for the MAV messages
          else if(getMsgID()==MAV_ID_GPS_RAW_INT            ) { ((const MAV_GPS_RAW_INT             *)getPayload())->Print(); }
          else if(getMsgID()==MAV_ID_GLOBAL_POSITION_INT    ) { ((const MAV_GLOBAL_POSITION_INT     *)getPayload())->Print(); }
          else if(getMsgID()==MAV_ID_ADSB_VEHICLE           ) { ((const MAV_ADSB_VEHICLE            *)getPayload())->Print(); }
+         else if(getMsgID()==MAV_ID_PARAM_VALUE            ) { ((const MAV_PARAM_VALUE             *)getPayload())->Print(); }
        }
      }
    }
