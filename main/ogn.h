@@ -242,18 +242,24 @@ class OGN_Packet           // Packet structure for the OGN tracker
    }
 
    void Encode(MAV_ADSB_VEHICLE *MAV)
-   { MAV->ICAO_address = HeaderWord&0x03FFFFFF;
-     MAV->lat      = ((int64_t)50*DecodeLatitude()+1)/3;
-     MAV->lon      = ((int64_t)50*DecodeLongitude()+1)/3;
-     MAV->altitude = 1000*DecodeAltitude();
-     MAV->heading  = 10*DecodeHeading();
-     MAV->hor_velocity = 10*DecodeSpeed();
-     MAV->ver_velocity = 10*DecodeClimbRate();
-     MAV->flags         = 0x17;
-     MAV->altitude_type =    1;
-     MAV->callsign[0]   =    0;
-     MAV->tslc          =    0;
-     MAV->emiter_type   =    0; }
+   { MAV->ICAO_address = Header.Address;
+     MAV->lat           = ((int64_t)50*DecodeLatitude()+1)/3;          // convert coordinates to [1e-7deg]
+     MAV->lon           = ((int64_t)50*DecodeLongitude()+1)/3;
+     MAV->altitude      = 1000*DecodeAltitude();                       // convert to [mm[
+     MAV->heading       = 10*DecodeHeading();                          // [cdeg/s]
+     MAV->hor_velocity  = 10*DecodeSpeed();                            // [cm/s]
+     MAV->ver_velocity  = 10*DecodeClimbRate();                        // [cm/s]
+     MAV->flags         = 0x1F;                                        // all valid except for Squawk, not simulated
+     MAV->altitude_type =    1;                                        // GPS altitude
+     static char Prefix[4] = { 'R', 'I', 'F', 'O' };                   // prefix for Random, ICAO, Flarm and OGN address-types
+     MAV->callsign[0]   =    Prefix[Header.AddrType];                  // create a call-sign from address-type and address
+     Format_Hex((char *)MAV->callsign+1, ( uint8_t)(Header.Address>>16));      // highest byte
+     Format_Hex((char *)MAV->callsign+3, (uint16_t)(Header.Address&0xFFFF));   // two lower bytes
+     MAV->callsign[7]   =    0;                                        // end-of-string for call-sign
+     MAV->squawk        =    0;                                        // what shall we put there for OGN ?
+     MAV->tslc          =    1;                                        // 1sec for now but should be more precise
+     MAV->emiter_type   =    0;                                        // could be more precise
+   }
 
    int8_t ReadAPRS(const char *Msg)                                                 // read an APRS position message
    { Clear();
@@ -1297,7 +1303,7 @@ class GPS_Position
       bool hasBaro  :1;         // barometric information has beed supplied
       bool isReady  :1;         // is ready for the following treaement
       bool Sent     :1;         // has been transmitted
-      bool hasTime  :1;         // Time has been supplied
+      bool hasTime  :1;         // full Unix Date/Time has been supplied
       bool hasRMC   :1;         // GxRMC has been supplied
       bool hasGGA   :1;         // GxGGA has been supplied
       bool hasGSA   :1;         // GxGSA has been supplied
@@ -1432,7 +1438,7 @@ class GPS_Position
 
    int PrintLine(char *Out) const
    { int Len=0; // PrintDateTime(Out);
-     Out[Len++]=hasTime?'T':'_';
+     Out[Len++]=hasTime?'U':'_';
      Out[Len++]=hasGPS ?'G':'_';
      Out[Len++]=hasBaro?'B':'_';
      Out[Len++]=hasRMC ?'R':'_';

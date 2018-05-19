@@ -160,13 +160,13 @@ class MAV_ADSB_VEHICLE    // this message is sent by ADS-B or other traffic rece
    union
    { uint16_t        flags; // validity: 1=coord. 2=alt. 4=heading 8=velocity 16=callsign 32=squawk 64=simulated
      struct
-     { bool    CoordValid:1;
-       bool      AltValid:1;
-       bool  HeadingValid:1;
-       bool CallsignValid:1;
-       bool VelocityValid:1;
-       bool   SquawkValid:1;
-       bool   isSimulated:1;
+     { bool    CoordValid:1; // #0
+       bool      AltValid:1; // #1
+       bool  HeadingValid:1; // #2
+       bool CallsignValid:1; // #3
+       bool VelocityValid:1; // #4
+       bool   SquawkValid:1; // #5
+       bool   isSimulated:1; // #6
      } ;
    } ;
    uint16_t       squawk;

@@ -7,7 +7,7 @@
 
 #include "lowpass2.h"
 
-const  uint8_t GPS_PosPipeSize         = 4; // number of GPS positions held in a pipe
+const  uint8_t GPS_PosPipeSize         = 4; // number of GPS positions held in a pipe, shall we do more for MAVlink which sends data more often ?
 
 extern          uint32_t GPS_FatTime;       // [2 sec] UTC time in FAT format (for FatFS)
 extern           int32_t GPS_Altitude;      // [0.1m] altitude (height above Geoid)
