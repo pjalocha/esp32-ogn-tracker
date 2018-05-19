@@ -19,24 +19,24 @@ const uint8_t MAV_COMP_ID_ADSB            = 156; // ADS-B receiver
 const uint8_t MAV_COMP_ID_GPS             = 220;
 
 // Message-ID
-const uint8_t MAV_ID_HEARTBEAT             =  0; //
-const uint8_t MAV_ID_SYS_STATUS            =  1;
-const uint8_t MAV_ID_SYSTEM_TIME           =  2;
-const uint8_t MAV_ID_GPS_RAW_INT           = 24; // GPS position estimate
-const uint8_t MAV_ID_RAW_IMU               = 27;
-const uint8_t MAV_ID_SCALED_PRESSURE       = 29; //
-const uint8_t MAV_ID_ATTITUDE              = 30;
-const uint8_t MAV_ID_GLOBAL_POSITION_INT   = 33; // combined position estimate
-const uint8_t MAV_ID_RC_CHANNELS_RAW       = 35;
-const uint8_t MAV_ID_SERVO_OUTPUT_RAW      = 36;
-const uint8_t MAV_ID_MISSION_CURRENT       = 42;
-const uint8_t MAV_ID_NAV_CONTROLLER_OUTPUT = 62;
-const uint8_t MAV_ID_VFR_HUD               = 74;
+const uint8_t MAV_ID_HEARTBEAT             =  0; // + 
+const uint8_t MAV_ID_SYS_STATUS            =  1; // + power data
+const uint8_t MAV_ID_SYSTEM_TIME           =  2; // + boot and UTC time
+const uint8_t MAV_ID_GPS_RAW_INT           = 24; // + position after the GPS
+const uint8_t MAV_ID_RAW_IMU               = 27; // +
+const uint8_t MAV_ID_SCALED_PRESSURE       = 29; // + pressure+temperature
+const uint8_t MAV_ID_ATTITUDE              = 30; //
+const uint8_t MAV_ID_GLOBAL_POSITION_INT   = 33; // + combined position estimate
+const uint8_t MAV_ID_RC_CHANNELS_RAW       = 35; //
+const uint8_t MAV_ID_SERVO_OUTPUT_RAW      = 36; //
+const uint8_t MAV_ID_MISSION_CURRENT       = 42; //
+const uint8_t MAV_ID_NAV_CONTROLLER_OUTPUT = 62; //
+const uint8_t MAV_ID_VFR_HUD               = 74; //
 const uint8_t MAV_ID_TIMESYNC             = 111;
 const uint8_t MAV_ID_HIL_GPS              = 113;
-const uint8_t MAV_ID_ADSB_VEHICLE         = 246; // traffic information sent by an ADS-B receiver
-const uint8_t MAV_ID_COLLISION            = 247; // collision threat detected by auto-pilot
-const uint8_t MAV_ID_STATUSTEXT           = 253;
+const uint8_t MAV_ID_ADSB_VEHICLE         = 246; // + traffic information sent by an ADS-B receiver
+const uint8_t MAV_ID_COLLISION            = 247; // + collision threat detected by auto-pilot
+const uint8_t MAV_ID_STATUSTEXT           = 253; // +
 const uint8_t MAV_ID_DEBUG                = 254;
 
 // --------------------------------------------------------------------------------
@@ -95,7 +95,7 @@ class MAV_SYS_STATUS
 
 class MAV_GPS_RAW_INT
 { public:
-   uint64_t          time_usec;  // [usec]       Time (appears to be boot time, not UTC)
+   uint64_t          time_usec;  // [usec]       Time-since-boot time or UTC
     int32_t                lat;  // [1e-7deg]    Latitude
     int32_t                lon;  // [1e-7deg]    Longitude
     int32_t                alt;  // [mm]         Altitude AMSL
@@ -114,6 +114,20 @@ class MAV_GPS_RAW_INT
    void Print(void) const
    { printf("GPS_RAW_INT: %14.3fsec [%+9.5f, %+10.5f]deg %+5.1fm %3.1fm/s %05.1fdeg %d/%dsat\n",
            1e-6*time_usec, 1e-7*lat, 1e-7*lon, 1e-3*alt, 0.01*vel, 0.01*cog, fix_type, satellites_visible); }
+} ;
+
+class MAV_RAW_IMU
+{ public:
+  uint64_t      time_usec;  // [usec]       Time-since-boot time or UTC
+   int16_t           xacc;  // [] Accelerometer
+   int16_t           yacc;
+   int16_t           zacc;
+   int16_t          xgyro;  // [] Gyroskop
+   int16_t          ygyro;
+   int16_t          zgyro;
+   int16_t           xmag;  // [] Magnetometer
+   int16_t           ymag;
+   int16_t           zmag;
 } ;
 
 class MAV_GLOBAL_POSITION_INT

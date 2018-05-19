@@ -67,7 +67,7 @@ static union
   } ;
 } GPS_Burst;
                                                                                                    // for the autobaud on the GPS port
-const int GPS_BurstTimeout = 220; // [ms]
+const int GPS_BurstTimeout = 250; // [ms]
 
 static const uint8_t  BaudRates=7;                                                                 // number of possible baudrates choices
 static       uint8_t  BaudRateIdx=0;                                                               // actual choice
@@ -487,14 +487,44 @@ static void GPS_UBX(void)                                                       
 #endif // WITH_GPS_UBX
 
 #ifdef WITH_MAVLINK
+static int64_t MAV_TimeOfs_ms=0;                                           // [ms] diff. between UTC time and boot time reported in MAV messages
+
+static uint64_t MAV_getUnixTime(void)                                      // [ms] extract time from the MAVlink message
+{ int32_t TimeCorr_ms = (int32_t)Parameters.TimeCorr*1000;                 // [ms] apparently ArduPilot needs some time correction, as it "manually" converts from GPS to UTC time
+  uint8_t MsgID = MAV.getMsgID();
+  if(MsgID==MAV_ID_SYSTEM_TIME)         return ((const MAV_SYSTEM_TIME         *)MAV.getPayload())->time_unix_usec/1000 + TimeCorr_ms;
+  if(MsgID==MAV_ID_GLOBAL_POSITION_INT) return ((const MAV_GLOBAL_POSITION_INT *)MAV.getPayload())->time_boot_ms + MAV_TimeOfs_ms;
+  if(MsgID==MAV_ID_SCALED_PRESSURE)     return ((const MAV_SCALED_PRESSURE     *)MAV.getPayload())->time_boot_ms + MAV_TimeOfs_ms;
+  uint64_t UnixTime_ms = 0;
+  // if(MsgID==MAV_ID_RAW_IMU)     UnixTime_ms = ((const MAV_RAW_IMU     *)MAV.getPayload())->time_usec/1000;
+  if(MsgID==MAV_ID_GPS_RAW_INT) UnixTime_ms = ((const MAV_GPS_RAW_INT *)MAV.getPayload())->time_usec/1000;
+  if(UnixTime_ms==0) return UnixTime_ms;
+  if(UnixTime_ms<1000000000000) UnixTime_ms += MAV_TimeOfs_ms;
+                           else UnixTime_ms += TimeCorr_ms;
+  return UnixTime_ms; }
+
 static void GPS_MAV(void)                                                  // when GPS gets an MAV packet
-{ static int64_t MAV_TimeOfs_ms=0;                                         // [ms] diff. between UTC time and boot time reported in MAV messages
-  TickType_t TickCount=xTaskGetTickCount();
+{ TickType_t TickCount=xTaskGetTickCount();
   GPS_Status.MAV=1;
   LED_PCB_Flash(2);
   GPS_Status.BaudConfig = (GPS_getBaudRate() == GPS_TargetBaudRate);
-  int32_t TimeCorr_ms = (int32_t)Parameters.TimeCorr*1000;                 // [ms] apparently ArduPilot needs some time correction, as it "manually" converts from GPS to UTC time
   uint8_t MsgID = MAV.getMsgID();
+  uint64_t UnixTime_ms = MAV_getUnixTime();                                   // get the time from the MAVlink message
+  if( (MsgID!=MAV_ID_SYSTEM_TIME) && UnixTime_ms)
+  { if(Position[PosIdx].hasTime)
+    { uint64_t PrevUnixTime_ms = Position[PosIdx].getUnixTime_ms();
+      int32_t TimeDiff_ms = UnixTime_ms-PrevUnixTime_ms;
+#ifdef DEBUG_PRINT
+    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    Format_String(CONS_UART_Write, "MAV_TimeDiff: ");
+    Format_UnsDec(CONS_UART_Write, (uint16_t)MsgID, 3); CONS_UART_Write(' ');
+    Format_SignDec(CONS_UART_Write, TimeDiff_ms, 3);
+    Format_String(CONS_UART_Write, "\n");
+    xSemaphoreGive(CONS_Mutex);
+#endif
+      if(TimeDiff_ms>GPS_BurstTimeout) GPS_BurstComplete();
+    }
+  }
   if(MsgID==MAV_ID_HEARTBEAT)
   { const MAV_HEARTBEAT *Heartbeat = (const MAV_HEARTBEAT *)MAV.getPayload();
 #ifdef DEBUG_PRINT
@@ -506,7 +536,6 @@ static void GPS_MAV(void)                                                  // wh
 #endif
   } else if(MsgID==MAV_ID_SYSTEM_TIME)
   { const MAV_SYSTEM_TIME *SysTime = (const MAV_SYSTEM_TIME *)MAV.getPayload();
-    uint64_t UnixTime_ms = SysTime->time_unix_usec/1000 + TimeCorr_ms;     // [ms] Unix Time
     uint32_t UnixTime = UnixTime_ms/1000;                                  // [ s] Unix Time
     uint32_t UnixFrac = UnixTime_ms-(uint64_t)UnixTime*1000;               // [ms] Second fraction of the Unix time
     MAV_TimeOfs_ms=UnixTime_ms-SysTime->time_boot_ms;                      // [ms] difference between the Unix Time and the Ardupilot time-since-boot
@@ -524,7 +553,6 @@ static void GPS_MAV(void)                                                  // wh
 #endif
   } else if(MsgID==MAV_ID_GLOBAL_POSITION_INT)                            // position based on GPS and inertial sensors
   { const MAV_GLOBAL_POSITION_INT *Pos = (const MAV_GLOBAL_POSITION_INT *)MAV.getPayload();
-    uint64_t UnixTime_ms = Pos->time_boot_ms + MAV_TimeOfs_ms;            // [ms] convert time-since-boot to UTC
     Position[PosIdx].Read(Pos, UnixTime_ms);                              // read position/altitude/speed/etc. into GPS_Position structure
 #ifdef DEBUG_PRINT
     Position[PosIdx].PrintLine(Line);
@@ -536,10 +564,7 @@ static void GPS_MAV(void)                                                  // wh
     xSemaphoreGive(CONS_Mutex);
 #endif
   } else if(MsgID==MAV_ID_GPS_RAW_INT)                                    // position form the GPS
-  { MAV_GPS_RAW_INT *RawGPS = (MAV_GPS_RAW_INT *)MAV.getPayload();
-    uint64_t UnixTime_ms = RawGPS->time_usec/1000;                        // [ms] UTC time, but for APM this is time-since-boot
-    if(UnixTime_ms<1000000000000) UnixTime_ms += MAV_TimeOfs_ms;          // heuristic check and convert to true UTC
-    // RawGPS->time_usec += (int64_t)MAV_TimeOfs_ms*1000;
+  { const MAV_GPS_RAW_INT *RawGPS = (const MAV_GPS_RAW_INT *)MAV.getPayload();
     Position[PosIdx].Read(RawGPS, UnixTime_ms);                           // read position/altitude/speed/etc. into GPS_Position structure
 #ifdef DEBUG_PRINT
     Position[PosIdx].PrintLine(Line);
@@ -557,7 +582,7 @@ static void GPS_MAV(void)                                                  // wh
 #endif
   } else if(MsgID==MAV_ID_SCALED_PRESSURE)
   { const MAV_SCALED_PRESSURE *Press = (const MAV_SCALED_PRESSURE *)MAV.getPayload();
-    uint64_t UnixTime_ms = Press->time_boot_ms + MAV_TimeOfs_ms;
+    // uint64_t UnixTime_ms = Press->time_boot_ms + MAV_TimeOfs_ms;
     Position[PosIdx].Read(Press, UnixTime_ms);
 #ifdef DEBUG_PRINT
     Position[PosIdx].PrintLine(Line);
