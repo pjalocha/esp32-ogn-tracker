@@ -373,7 +373,8 @@ void IO_Configuration(void)
     sclk_io_num: PIN_RFM_SCK,
     quadwp_io_num: -1,
     quadhd_io_num: -1,
-    max_transfer_sz: 64
+    max_transfer_sz: 64,
+    flags: SPICOMMON_BUSFLAG_MASTER | SPICOMMON_BUSFLAG_SCLK | SPICOMMON_BUSFLAG_MISO | SPICOMMON_BUSFLAG_MOSI,
   };
   spi_device_interface_config_t DevCfg =
   { command_bits: 0,
@@ -384,6 +385,7 @@ void IO_Configuration(void)
     cs_ena_pretrans: 0,
     cs_ena_posttrans: 0,
     clock_speed_hz: RFM_SPI_SPEED,
+    input_delay_ns: 0,
     spics_io_num: PIN_RFM_SS,
     flags: 0,
     queue_size: 3,
