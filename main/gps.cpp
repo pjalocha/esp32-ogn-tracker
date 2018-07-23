@@ -67,7 +67,7 @@ static union
   } ;
 } GPS_Burst;
                                                                                                    // for the autobaud on the GPS port
-const int GPS_BurstTimeout = 250; // [ms]
+const int GPS_BurstTimeout = 200; // [ms]
 
 static const uint8_t  BaudRates=7;                                                                 // number of possible baudrates choices
 static       uint8_t  BaudRateIdx=0;                                                               // actual choice
@@ -156,8 +156,6 @@ static void GPS_LockEnd(void)                       // called when GPS looses a 
 }
 
 // ----------------------------------------------------------------------------
-
-const uint8_t GPS_BurstDelay=70;                                           // [ms] time after the PPS when the data burst starts on the UART
 
 static void GPS_BurstStart(void)                                           // when GPS starts sending the data on the serial port
 { Burst_TickCount=xTaskGetTickCount();
@@ -249,7 +247,7 @@ static void GPS_BurstComplete(void)                                        // wh
       { uint32_t UnixTime=Position[PosIdx].getUnixTime();
         GPS_FatTime=Position[PosIdx].getFatTime();
 #ifndef WITH_MAVLINK                                                       // with MAVlink we sync. with the SYSTEM_TIME message
-        TimeSync_SoftPPS(Burst_TickCount, UnixTime, GPS_BurstDelay);
+        TimeSync_SoftPPS(Burst_TickCount, UnixTime, Parameters.PPSdelay);
 #endif
       }
     }
@@ -381,7 +379,7 @@ static void GPS_NMEA(void)                                                 // wh
   Format_String(CONS_UART_Write, " -> ");
   Format_Bytes(CONS_UART_Write, NMEA.Data, 6);
   CONS_UART_Write(' '); Format_Hex(CONS_UART_Write, GPS_Burst.Flags);
-  CONS_UART_Write('\n');
+  Format_String(CONS_UART_Write, "\n");
   xSemaphoreGive(CONS_Mutex);
 #endif
   if( NMEA.isP() || NMEA.isGxRMC() || NMEA.isGxGGA() || NMEA.isGxGSA() || NMEA.isGPTXT() )
@@ -389,7 +387,7 @@ static void GPS_NMEA(void)                                                 // wh
     // if(CONS_UART_Free()>=128)
     { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_String(CONS_UART_Write, (const char *)NMEA.Data, 0, NMEA.Len);
-      CONS_UART_Write('\n');
+      Format_String(CONS_UART_Write, "\n");
       // Format_Bytes(CONS_UART_Write, NMEA.Data, NMEA.Len);
       // Format_Bytes(CONS_UART_Write, (const uint8_t *)CRNL, 2);
       xSemaphoreGive(CONS_Mutex); }

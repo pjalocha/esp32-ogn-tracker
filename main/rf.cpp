@@ -166,7 +166,7 @@ extern "C"
   TRX.DIO0_isOn    = RFM_IRQ_isOn;
   TRX.RESET        = RFM_RESET;
 
-  RF_FreqPlan.setPlan(0);                  // 1 = Europe/Africa, 2 = USA/CA, 3 = Australia and South America
+  RF_FreqPlan.setPlan(Parameters.FreqPlan);  // 1 = Europe/Africa, 2 = USA/CA, 3 = Australia and South America
 
   vTaskDelay(5);
 

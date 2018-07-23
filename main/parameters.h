@@ -29,8 +29,8 @@ class FlashParameters
      { uint32_t Address:24;  // address (ID)
        uint8_t  AddrType:2;
        uint8_t  AcftType:4;
-       bool      NoTrack:1;
-       bool      Stealth:1;
+       bool      NoTrack:1;  // unused
+       bool      Stealth:1;  // unused
      } ;
    } ;
 
@@ -52,7 +52,8 @@ class FlashParameters
     int8_t  TimeCorr;        // [sec] it appears for ArduPilot you need to correct time by 3 seconds
 
    int16_t  GeoidSepar;      // [0.1m] Geoid-Separation, apparently ArduPilot MAVlink does not give this value (although present in the format)
-  uint16_t  SoftPPSdelay;    // [ms]
+  uint8_t  PPSdelay;         // [ms] delay between the PPS and the data burst starts on the GPS UART (used when PPS failed or is not there)
+  uint8_t  FreqPlan;         // force given frequency hopping plan
 
    static const uint8_t InfoParmLen = 16; // [char] max. size of an infp-parameter
    static const uint8_t InfoParmNum = 11; // [int]  number of info-parameters
@@ -78,6 +79,22 @@ class FlashParameters
    // char Copilot[16]
    // char Category[16]
 
+#ifdef WITH_WIFI
+   static const uint8_t WIFInameLen = 32;
+   static const uint8_t WIFIpassLen = 64;
+   static const uint8_t WIFIsets    = 10;
+   char *getWIFIname(uint8_t Idx) { return Idx<WIFIsets ? WIFIname[Idx]:0; }
+   char *getWIFIpass(uint8_t Idx) { return Idx<WIFIsets ? WIFIpass[Idx]:0; }
+
+   char WIFIname[WIFIsets][32];
+   char WIFIpass[WIFIsets][64];
+
+   const char *getWIFIpass(const char *NetName) const
+   { for(uint8_t Idx=0; Idx<WIFIsets; Idx++)
+     { if(strcmp(NetName, WIFIname[Idx])==0) return WIFIpass[Idx]; }
+     return 0; }
+#endif
+
    // static const uint32_t Words=sizeof(FlashParameters)/sizeof(uint32_t);
 
   public:
@@ -86,9 +103,16 @@ class FlashParameters
 
    void   setTxTypeHW(void)       {        RFchipTxPower|=0x80; }
    void   clrTxTypeHW(void)       {        RFchipTxPower&=0x7F; }
-   uint8_t isTxTypeHW(void) const { return RFchipTxPower& 0x80; } // if this RFM69HW (Tx power up to +20dBm) ?
+   bool    isTxTypeHW(void) const { return RFchipTxPower& 0x80; } // if this RFM69HW (Tx power up to +20dBm) ?
 
    static const uint32_t CheckInit = 0x89ABCDEF;
+
+   uint8_t getAprsCall(char *Call)
+   { const char *AddrTypeName[4] = { "RND", "ICA", "FLR", "OGN" };
+     memcpy(Call, AddrTypeName[AddrType], 3);
+     Format_Hex(Call+3, (uint8_t)(Address>>16));
+     Format_Hex(Call+5, (uint16_t)Address);
+     Call[9]=0; return 9; }
 
  public:
   // void setDefault(void) { setDefaults(UniqueID[0] ^ UniqueID[1] ^ UniqueID[2]); }
@@ -110,9 +134,16 @@ class FlashParameters
     TimeCorr       =         0; // [sec]
     GeoidSepar     =       470; // [0.1m]
 
+    FreqPlan       =         0; // [0..5]
+    PPSdelay       =       100; // [ms]
+
     for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
       InfoParmValue(Idx)[0] = 0;
-
+#ifdef WITH_WIFI
+    for(uint8_t Idx=0; Idx<WIFIsets; Idx++)
+    { WIFIname[Idx][0] = 0;
+      WIFIpass[Idx][0] = 0; }
+#endif
   }
 
 // void WriteHeader(OGN_Packet &Packet)
@@ -226,40 +257,7 @@ class FlashParameters
     { char *Parm = (char *)NMEA.ParmPtr(Idx); if(Parm==0) break;
       if(ReadLine(Parm)) Count++; }
     return Count; }
-/*
-  int ReadPOGNS(NMEA_RxMsg &NMEA)
-  { const char *Parm; int8_t Val;
-    Parm = (const char *)NMEA.ParmPtr(0);                                  // [0..15] aircraft-type: 1=glider, 2=tow plane, 3=helicopter, ...
-    if(Parm)
-    { Val=Read_Hex1(Parm[0]);
-      if( (Val>=0) && (Val<16) ) AcftType=Val; }
-    Parm = (const char *)NMEA.ParmPtr(1);                                  // [0..3] addr-type: 1=ICAO, 2=FLARM, 3=OGN
-    if(Parm)
-    { Val=Read_Hex1(Parm[0]);
-      if( (Val>=0) && (Val<4) ) AddrType=Val; }
-    Parm = (const char *)NMEA.ParmPtr(2);                                  // [HHHHHH] Address (ID): 6 hex digits, 24-bit
-    uint32_t Addr;
-    int8_t Len=Read_Hex(Addr, Parm);
-    if( (Len==6) && (Addr<0x01000000) ) Address=Addr;
-    Parm = (const char *)NMEA.ParmPtr(3);                                  // [0..1] RFM69HW (up to +20dBm) or W (up to +13dBm)
-    if(Parm)
-    { Val=Read_Dec1(Parm[0]);
-           if(Val==0) clrTxTypeHW();
-      else if(Val==1) setTxTypeHW(); }
-    Parm = (const char *)NMEA.ParmPtr(4);                                  // [dBm] Tx power
-    int32_t TxPwr;
-    Len=Read_SignDec(TxPwr, Parm);
-    if( (Len>0) && (TxPwr>=(-10)) && (TxPwr<=20) ) setTxPower(TxPwr);
-    Parm = (const char *)NMEA.ParmPtr(5);                                  // [kHz] Tx/Rx frequency correction
-    int32_t FreqCorr;
-    Len=Read_Float1(FreqCorr, Parm);
-    if( (Len>0) && (FreqCorr>=(-1000)) && (FreqCorr<=1000) ) RFchipFreqCorr = 10*FreqCorr;
-    Parm = (const char *)NMEA.ParmPtr(6);                                  // [bps] Console baud rate
-    uint32_t BaudRate;
-    Len=Read_UnsDec(BaudRate, Parm);
-    if( (Len>0) && (BaudRate<=230400) ) CONbaud = BaudRate;
-    return 0; }
-*/
+
   static bool isStringChar (char ch)        // characters accepted as part of the string values
   { if( (ch>='0') && (ch<='9') ) return 1;  // numbers
     if( (ch>='A') && (ch<='Z') ) return 1;  // uppercase letters
@@ -299,9 +297,18 @@ class FlashParameters
     if(strcmp(Name, "Console")==0)
     { uint32_t Baud=0; if(Read_Int(Baud, Value)<=0) return 0;
       CONbaud=Baud; return 1; }
+    if(strcmp(Name, "TxHW")==0)
+    { int32_t HW=1; if(Read_Int(HW, Value)<=0) return 0;
+      if(HW) setTxTypeHW(); else clrTxTypeHW(); }
     if(strcmp(Name, "TxPower")==0)
     { int32_t TxPower=0; if(Read_Int(TxPower, Value)<=0) return 0;
       setTxPower(TxPower); return 1; }
+    if(strcmp(Name, "PPSdelay")==0)
+    { uint32_t Delay=0; if(Read_Int(Delay, Value)<=0) return 0;
+      if(Delay>0xFF) Delay=0xFF; PPSdelay=Delay; return 1; }
+    if(strcmp(Name, "FreqPlan")==0)
+    { uint32_t Plan=0; if(Read_Int(Plan, Value)<=0) return 0;
+      if(Plan>5) Plan=5; FreqPlan=Plan; return 1; }
     if(strcmp(Name, "FreqCorr")==0)
     { int32_t Corr=0; if(Read_Float1(Corr, Value)<=0) return 0;
       RFchipFreqCorr=10*Corr; return 1; }
@@ -316,6 +323,14 @@ class FlashParameters
     for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
     { if(strcmp(Name, InfoParmName(Idx))==0)
         return Read_String(InfoParmValue(Idx), Value, 16)<=0; }
+#ifdef WITH_WIFI
+    if(strcmp(Name, "WIFIname")==0) return Read_String(WIFIname[0], Value, WIFInameLen)<=0;
+    if(strcmp(Name, "WIFIpass")==0) return Read_String(WIFIpass[0], Value, WIFIpassLen)<=0;
+    if( (memcmp(Name, "WIFIname", 8)==0) && (strlen(Name)==9) )
+    { int Idx=Name[8]-'0'; if( (Idx>=0) && (Idx<WIFIsets) ) return Read_String(WIFIname[Idx], Value, WIFInameLen)<=0; }
+    if( (memcmp(Name, "WIFIpass", 8)==0) && (strlen(Name)==9) )
+    { int Idx=Name[8]-'0'; if( (Idx>=0) && (Idx<WIFIsets) ) return Read_String(WIFIpass[Idx], Value, WIFIpassLen)<=0; }
+#endif
     return 0; }
 
   bool ReadLine(char *Line)                                                     // read a parameter line
@@ -387,13 +402,24 @@ class FlashParameters
     Write_Hex    (Line, "AcftType"  ,          AcftType,       1); strcat(Line, " #  [4-bit]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_UnsDec (Line, "Console"   ,          CONbaud          ); strcat(Line, " #  [  bps]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_SignDec(Line, "TxPower"   ,          getTxPower()     ); strcat(Line, " #  [  dBm]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_UnsDec (Line, "TxHW"      ,(uint32_t)isTxTypeHW()     ); strcat(Line, " #  [ bool]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_UnsDec (Line, "FreqPlan"  ,(uint32_t)FreqPlan         ); strcat(Line, " #  [ 0..5]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Float1 (Line, "FreqCorr"  , (int32_t)RFchipFreqCorr/10); strcat(Line, " #  [  kHz]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_SignDec(Line, "TempCorr"  , (int32_t)RFchipTempCorr   ); strcat(Line, " #  [ degC]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Float1 (Line, "PressCorr" , (int32_t)PressCorr*10/4   ); strcat(Line, " #  [   Pa]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_SignDec(Line, "TimeCorr"  , (int32_t)TimeCorr         ); strcat(Line, " #  [    s]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Float1 (Line, "GeoidSepar",          GeoidSepar       ); strcat(Line, " #  [    m]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_UnsDec (Line, "PPSdelay"  ,(uint32_t)PPSdelay         ); strcat(Line, " #  [   ms]\n"); if(fputs(Line, File)==EOF) return EOF;
     for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
     { Write_String (Line, InfoParmName(Idx), InfoParmValue(Idx)); strcat(Line, " #  [char]\n"); if(fputs(Line, File)==EOF) return EOF; }
+#ifdef WITH_WIFI
+    for(uint8_t Idx=0; Idx<WIFIsets; Idx++)
+    { if(WIFIname[Idx][0]==0) continue;
+      strcpy(Line, "WIFIname"); Line[8]='0'+Idx; Line[9]='='; strcpy(Line+10, WIFIname[Idx]); strcat(Line, " #  [char]\n"); if(fputs(Line, File)==EOF) return EOF;
+      strcpy(Line, "WIFIpass"); Line[8]='0'+Idx; Line[9]='='; strcpy(Line+10, WIFIpass[Idx]); strcat(Line, " #  [char]\n"); if(fputs(Line, File)==EOF) return EOF; }
+    // Write_String (Line, "WIFIname", WIFIname[0]); strcat(Line, " #  [char]\n"); if(fputs(Line, File)==EOF) return EOF;
+    // Write_String (Line, "WIFIpass", WIFIpass[0]); strcat(Line, " #  [char]\n"); if(fputs(Line, File)==EOF) return EOF;
+#endif
     return 10+InfoParmNum; }
 
   int WriteFile(const char *Name = "/spiffs/TRACKER.CFG")
@@ -408,13 +434,24 @@ class FlashParameters
     Write_Hex    (Line, "AcftType"  ,          AcftType,       1); strcat(Line, " #  [4-bit]\n"); Format_String(Output, Line);
     Write_UnsDec (Line, "Console"   ,          CONbaud          ); strcat(Line, " #  [  bps]\n"); Format_String(Output, Line);
     Write_SignDec(Line, "TxPower"   ,          getTxPower()     ); strcat(Line, " #  [  dBm]\n"); Format_String(Output, Line);
+    Write_UnsDec (Line, "TxHW"      ,(uint32_t)isTxTypeHW()     ); strcat(Line, " #  [ bool]\n"); Format_String(Output, Line);
+    Write_UnsDec (Line, "FreqPlan"  ,(uint32_t)FreqPlan         ); strcat(Line, " #  [ 0..5]\n"); Format_String(Output, Line);
     Write_Float1 (Line, "FreqCorr"  , (int32_t)RFchipFreqCorr/10); strcat(Line, " #  [  kHz]\n"); Format_String(Output, Line);
     Write_SignDec(Line, "TempCorr"  , (int32_t)RFchipTempCorr   ); strcat(Line, " #  [ degC]\n"); Format_String(Output, Line);
     Write_Float1 (Line, "PressCorr" , (int32_t)PressCorr*10/4   ); strcat(Line, " #  [   Pa]\n"); Format_String(Output, Line);
     Write_SignDec(Line, "TimeCorr"  , (int32_t)TimeCorr         ); strcat(Line, " #  [    s]\n"); Format_String(Output, Line);
     Write_Float1 (Line, "GeoidSepar",          GeoidSepar       ); strcat(Line, " #  [    m]\n"); Format_String(Output, Line);
+    Write_UnsDec (Line, "PPSdelay"  ,(uint32_t)PPSdelay         ); strcat(Line, " #  [   ms]\n"); Format_String(Output, Line);
     for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
     { Write_String (Line, InfoParmName(Idx), InfoParmValue(Idx)); strcat(Line, " #  [char]\n"); Format_String(Output, Line); }
+#ifdef WITH_WIFI
+    for(uint8_t Idx=0; Idx<WIFIsets; Idx++)
+    { if(WIFIname[Idx][0]==0) continue;
+      strcpy(Line, "WIFIname"); Line[8]='0'+Idx; Line[9]='='; strcpy(Line+10, WIFIname[Idx]); strcat(Line, " #  [char]\n"); Format_String(Output, Line);
+      strcpy(Line, "WIFIpass"); Line[8]='0'+Idx; Line[9]='='; strcpy(Line+10, WIFIpass[Idx]); strcat(Line, " #  [char]\n"); Format_String(Output, Line);; }
+    // Write_String (Line, "WIFIname", WIFIname[0]); strcat(Line, " #  [char]\n"); Format_String(Output, Line);
+    // Write_String (Line, "WIFIpass", WIFIpass[0]); strcat(Line, " #  [char]\n"); Format_String(Output, Line);
+#endif
   }
 
 } ;

@@ -270,7 +270,9 @@ void vTaskPROC(void* pvParameters)
     if( Position && Position->isReady && (!Position->Sent) && Position->isReady && Position->isValid() )
     { AverSpeed=GPS_AverageSpeed();                                     // [0.1m/s] average speed, including the vertical speed
       isMoving = AverSpeed>10;
-      RF_FreqPlan.setPlan(Position->Latitude, Position->Longitude);     // set the frequency plan according to the GPS position
+      if(Parameters.FreqPlan==0)
+        RF_FreqPlan.setPlan(Position->Latitude, Position->Longitude);     // set the frequency plan according to the GPS position
+      else RF_FreqPlan.setPlan(Parameters.FreqPlan);
 /*
 #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
