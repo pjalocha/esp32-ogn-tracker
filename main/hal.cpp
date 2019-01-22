@@ -1,19 +1,16 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
-// #include <sys/select.h>
 
 #include "hal.h"
-
-// #include "freertos/FreeRTOS.h"
-// #include "freertos/task.h"
-// #include "freertos/semphr.h"
-// #include "freertos/queue.h"
 
 #include "driver/gpio.h"
 #include "driver/uart.h"
 #include "driver/spi_master.h"
 #include "driver/i2c.h"
+
+#include "driver/adc.h"
+#include "esp_adc_cal.h"
 
 #include "esp_system.h"
 #include "esp_freertos_hooks.h"
@@ -21,7 +18,16 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
+#ifdef WITH_SPIFFS
 #include "esp_spiffs.h"
+#endif
+
+#ifdef WITH_SD
+#include "esp_vfs_fat.h"
+#include "driver/sdmmc_host.h"
+#include "driver/sdspi_host.h"
+#include "sdmmc_cmd.h"
+#endif
 
 #ifdef WITH_BT_SPP
 #include "esp_bt.h"
@@ -29,6 +35,12 @@
 #include "esp_gap_bt_api.h"
 #include "esp_bt_device.h"
 #include "esp_spp_api.h"
+#include "fifo.h"
+#endif
+
+#ifdef WITH_BEEPER
+#include "driver/ledc.h"
+#include "fifo.h"
 #endif
 
 #ifdef WITH_OLED
@@ -81,50 +93,182 @@ GPS pins:
 22 = GPIO22 = PPS
 23 = GPIO23 = ENA
 
-
 UART2 pins:
 16 = GPIO16 = RxD -> taken by OLED ?
 17 = GPIO17 = TxD
 
+T-Beam board pinout:
+
+HPD13A = RF chip ?
+23 = RST (?)
+ 5 = SCK
+18 = NSS = CS
+19 = MISO
+27 = MOSI
+26 = IO0 = IRQ
+
+24AA32A = 32K I2C EEPROM => GPS I2C
+
+GPS
+12 = GPIO12 = RXD1
+15 = GPIO15 = TXD1
+
+PSRM32 = SDIO ?
+16 = CS
+
+21 = GPIO21 = green LED
+
+*/
+/*
+
+GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
+
+ 0                                      .
+ 1    CONS/TxD    CONS/TxD   CONS/TxD   CONS/TxD                Console/Program
+ 2                           SD/MISO    .            IO02       Bootstrap: LOW to enter UART download mode
+ 3    CONS/RxD    CONS/RxD   CONS/RxD   CONS/RxD                Console/Program
+ 4    OLED/SDA    OLED/SDA   ADC/CS     Beeper       GPS/RST
+ 5    RF/SCK      RF/SCK     RF/SCK     RF/SCK       RF/CS
+ 6                                                              SD/CLK
+ 7                                                              SD/DATA0
+ 8                                                              SD/DATA1
+ 9                                                              SD/DATA2
+10                                                              SD/DATA3
+11                                                              SD/CMD
+12    GPS/RxD     GPS/RxD    SD/CS      GPS/RxD      IO12       JTAG/TDI Bootstrap: select output voltage to power the flash chip
+13    GPS/Ena     GPS/Ena    SD/SCK                  IO13       JTAG/TCK
+14    RF/RST      RF/RST     Beeper     LED          IO14       JTAG/TMS
+15    OLED/SCL    OLED/SCL   SD/MOSI    GPS/TxD      IO15       JTAG/TDO
+16    OLED/RST    OLED/RST   RF/IRQ                  GPS/Tx
+17    Beeper      Beeper     RF/RST                  GPS/Rx
+18    RF/CS       RF/CS      RF/MISO    RF/CS        RF/SCK
+19    RF/MISO     RF/MISO    RF/MOSI    RF/MISO      RF/MISO
+20
+21                LED        RF/CS      I2C/SDA      I2C/SDA
+22                           PWR/ON     I2C/SCL      I2C/CLK
+23                           PWR/LDO    RF/RST       RF/MOSI
+24
+25    LED         DAC2       .          .
+26    RF/IRQ      RF/IRQ     SCL        RF/IRQ
+27    RF/MOSI     RF/MOSI    SDA
+28
+29
+30
+31
+32                           GPS/TxD    .            RF/RST
+33                           OLED/RST   .            GPS/EN
+34    GPS/PPS     GPS/PPS    GPS/RxD                 GPS/PPS
+35    GPS/TxD     GPS/TxD    GPS/PPS    BAT/Sense    RF/IRQ
+36                           BAT/Sense               LED/DBG
+37
+38
+39                                                   LED/TX
+
 */
 
+
 #ifdef WITH_TTGO
-#define PIN_LED_PCB  GPIO_NUM_2   // status LED on the PCB: 25 or 2. GPIO25 id DAC2
+#define PIN_LED_PCB  GPIO_NUM_2   // status LED on the PCB:  2, GPIO25 is DAC2
 #endif
 #ifdef WITH_HELTEC
-#define PIN_LED_PCB  GPIO_NUM_25  // status LED on the PCB: 25 or 2. GPIO25 id DAC2
+#define PIN_LED_PCB  GPIO_NUM_25  // status LED on the PCB: 25, GPIO25 is DAC2
 #endif
-// #define PIN_LED_TX   GPIO_NUM_??
+#ifdef WITH_TBEAM
+#define PIN_LED_PCB  GPIO_NUM_14  // status LED on the PCB: 14, posisbly inverted
+#define PIN_LED_PCB_INV
+#endif
+#ifdef WITH_FollowMe
+#define PIN_LED_PCB  GPIO_NUM_2   // debug LED
+#define PIN_LED_TX   GPIO_NUM_15
+#endif
+
 // #define PIN_LED_RX   GPIO_NUM_??
 
+#if defined(WITH_HELTEC) || defined(WITH_TTGO)
 #define PIN_RFM_RST  GPIO_NUM_14  // Reset
 #define PIN_RFM_IRQ  GPIO_NUM_26  // packet done on receive or transmit
 #define PIN_RFM_SS   GPIO_NUM_18  // SPI chip-select
 #define PIN_RFM_SCK  GPIO_NUM_5   // SPI clock
 #define PIN_RFM_MISO GPIO_NUM_19  // SPI MISO
 #define PIN_RFM_MOSI GPIO_NUM_27  // SPI MOSI
+#endif // HELTEC TTGO
+
+#ifdef WITH_TBEAM
+#define PIN_RFM_RST  GPIO_NUM_23  // Reset - not clear if T-Beam is using it, or maybe only the older version
+#define PIN_RFM_IRQ  GPIO_NUM_26  // packet done on receive or transmit
+#define PIN_RFM_SS   GPIO_NUM_18  // SPI chip-select
+#define PIN_RFM_SCK  GPIO_NUM_5   // SPI clock
+#define PIN_RFM_MISO GPIO_NUM_19  // SPI MISO
+#define PIN_RFM_MOSI GPIO_NUM_27  // SPI MOSI
+#endif // TBEAM
+
+#ifdef WITH_FollowMe
+#define PIN_RFM_RST  GPIO_NUM_32  // Reset
+#define PIN_RFM_IRQ  GPIO_NUM_39  // packet done on receive or transmit
+#define PIN_RFM_SS   GPIO_NUM_5   // SPI chip-select
+#define PIN_RFM_SCK  GPIO_NUM_18  // SPI clock
+#define PIN_RFM_MISO GPIO_NUM_19  // SPI MISO
+#define PIN_RFM_MOSI GPIO_NUM_23  // SPI MOSI
+#endif // FollowMe
+
 #define RFM_SPI_SPEED 4000000     // [Hz] 4MHz SPI clock rate for RF chip
 
+#if defined(WITH_HELTEC) || defined(WITH_TTGO)
                                   // VK2828U   GN-801   MAVlink
 #define PIN_GPS_TXD  GPIO_NUM_12  // green     green    green
 #define PIN_GPS_RXD  GPIO_NUM_35  // blue      yellow   yellow
 #define PIN_GPS_PPS  GPIO_NUM_34  // white     blue
 #define PIN_GPS_ENA  GPIO_NUM_13  // yellow    white
+#endif // HELTEC || TTGO
 
-// Note: I had a problem GPS ENABLE on GPIO13, thus I tied the enable wire to 3.3V for the time being.
+// Note: I had a problem with GPS ENABLE on GPIO13, thus I tied the enable wire to 3.3V for the time being.
+
+#ifdef WITH_TBEAM
+#define PIN_GPS_TXD  GPIO_NUM_15  // UBX GPS with only UART
+#define PIN_GPS_RXD  GPIO_NUM_12
+#endif
+
+#ifdef WITH_FollowMe              // L80 GPS with PPS, Enable and Reset
+#define PIN_GPS_TXD  GPIO_NUM_17
+#define PIN_GPS_RXD  GPIO_NUM_16
+#define PIN_GPS_PPS  GPIO_NUM_34  // high active
+#define PIN_GPS_ENA  GPIO_NUM_33  // Enable: high-active
+#define PIN_GPS_RST  GPIO_NUM_4   // Reset: high-active (inverter to L80 RES input)
+#endif
 
 #define CONS_UART UART_NUM_0      // UART0 for the console (the system does this for us)
 #define GPS_UART  UART_NUM_1      // UART1 for GPS data read and dialog
 
 #define I2C_BUS     I2C_NUM_1     // use bus #1 to talk to OLED and Baro sensor
-// #define I2C_SPEED   1000000       // [Hz] 1MHz clock on I2C - defined inb hal.h
+
+#if defined(WITH_HELTEC) || defined(WITH_TTGO)
 #define PIN_I2C_SCL GPIO_NUM_15   // SCL pin
 #define PIN_I2C_SDA GPIO_NUM_4    // SDA pin
+#define OLED_I2C_ADDR 0x3C        // I2C address of the OLED display
+#define PIN_OLED_RST GPIO_NUM_16  // OLED RESET: low-active
+#endif
+
+#ifdef WITH_TBEAM                 // T-Beam
+#define PIN_I2C_SCL GPIO_NUM_22   // SCL pin => this way the pin pattern fits the BMP280 module
+#define PIN_I2C_SDA GPIO_NUM_21   // SDA pin
+#endif
+
+#ifdef WITH_FollowMe              //
+#define PIN_I2C_SCL GPIO_NUM_22   // SCL pin
+#define PIN_I2C_SDA GPIO_NUM_21   // SDA pin
+#define OLED_I2C_ADDR 0x3C        // I2C address of the OLED display
+#define PIN_OLED_RST GPIO_NUM_15  // OLED RESET: low-active
+#endif
 
 uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 
-#define OLED_I2C_ADDR 0x3C        // I2C address of the OLED display
-#define PIN_OLED_RST GPIO_NUM_16  // OLED RESET: low-active
+#ifdef WITH_TBEAM
+#define PIN_BEEPER    GPIO_NUM_4
+#endif
+
+#if defined(WITH_HELTEC) || defined(WITH_TTGO)
+#define PIN_BEEPER    GPIO_NUM_17
+#endif
 
 // ======================================================================================================
 // 48-bit unique ID of the chip
@@ -156,13 +300,228 @@ uint8_t  MAV_Seq=0;                   // sequence number for MAVlink message sen
 FlashParameters Parameters;
 
 //--------------------------------------------------------------------------------------------------------
-// STatus LED
-
-void LED_PCB_Dir  (void) { gpio_set_direction(PIN_LED_PCB, GPIO_MODE_OUTPUT); }
-void LED_PCB_On   (void) { gpio_set_level(PIN_LED_PCB, 1); }  // LED is on GPIO25
-void LED_PCB_Off  (void) { gpio_set_level(PIN_LED_PCB, 0); }
 
 //--------------------------------------------------------------------------------------------------------
+// Status LED on the PCB
+
+#ifdef PIN_LED_PCB
+void LED_PCB_Dir  (void) { gpio_set_direction(PIN_LED_PCB, GPIO_MODE_OUTPUT); }
+#ifdef PIN_LED_PCB_INV
+void LED_PCB_On   (void) { gpio_set_level(PIN_LED_PCB, 0); }
+void LED_PCB_Off  (void) { gpio_set_level(PIN_LED_PCB, 1); }
+#else
+void LED_PCB_On   (void) { gpio_set_level(PIN_LED_PCB, 1); }
+void LED_PCB_Off  (void) { gpio_set_level(PIN_LED_PCB, 0); }
+#endif
+#else
+void LED_PCB_Dir  (void) { }
+void LED_PCB_On   (void) { }
+void LED_PCB_Off  (void) { }
+#endif
+
+// ========================================================================================================
+
+// ~/esp-idf/components/bt/bluedroid/api/include/esp_spp_api.h
+// esp_err_t esp_spp_write(uint32_t handle, int len, uint8_t *p_data);
+
+#ifdef WITH_BT_SPP
+
+static const esp_spp_mode_t esp_spp_mode = ESP_SPP_MODE_CB;
+static const esp_spp_sec_t  sec_mask     = ESP_SPP_SEC_AUTHENTICATE;
+static const esp_spp_role_t role_slave   = ESP_SPP_ROLE_SLAVE;
+
+static FIFO<char, 512> BT_SPP_TxFIFO;         //
+static uint32_t        BT_SPP_Conn = 0;       // BT incoming connection handle
+static uint32_t        BT_SPP_TxCong = 0;     // congestion control
+// static TickType_t      BT_SPP_LastTxPush=0;   // [ms]
+
+// static esp_bd_addr_t BT_SPP_MAC;  // BT incoming connection MAC - could be used for pilot id in the flight log
+// static uint32_t BT_SPP_Wait = 0;  // bytes waiting to be written into BT_SPP
+
+// static const char *BT_SPP_Welcome = "ESP32 OGN-Tracker\n";
+
+static void setPilotID(esp_bd_addr_t MAC, size_t Len=6)           // set PilotID in the parameters from the BT SPP client MAC (thus Pilot's smartphone)
+{ char *ID = Parameters.PilotID;
+  ID[0]='B'; ID[1]='T'; ID[2]='_'; ID+=3;
+  for(int Idx=0; Idx<Len; Idx++)
+  { Format_Hex(ID, MAC[Idx]); ID+=2; }
+  ID[0]=0; }
+
+static void clrPilotID(void)                                      // clear the Pilot_ID when BT SPP gets disconnected
+{ Parameters.PilotID[0]=0; }
+
+static size_t BT_SPP_TxPush(size_t MaxLen=128)                    // transmit part of the TxFIFO to the BT link
+{ // BT_SPP_LastTxPush = xTaskGetTickCount();                        // [ms] remember last time the TxPush was done
+  char *Data; size_t Len=BT_SPP_TxFIFO.getReadBlock(Data);        // see how much data is there in the queue for transmission
+  if(Len==0) return 0;                                            // if block is empty then give up
+  if(Len>MaxLen) Len=MaxLen;                                      // limit the block size
+  esp_err_t Ret=esp_spp_write(BT_SPP_Conn, Len, (uint8_t *)Data); // write the block to the BT
+  if(Ret!=ESP_OK) return 0;                                       // if an error then give up
+  BT_SPP_TxFIFO.flushReadBlock(Len);                              // remove the transmitted block from the FIFO
+  return Len; }                                                   // return number of transmitted bytes
+
+static void esp_spp_cb(esp_spp_cb_event_t Event, esp_spp_cb_param_t *Param)
+{ switch (Event)
+  { case ESP_SPP_INIT_EVT:                                        // [0]
+      esp_bt_dev_set_device_name(Parameters.BTname);
+      esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
+      esp_spp_start_srv(sec_mask, role_slave, 0, "SPP_SERVER");
+      break;
+    case ESP_SPP_DISCOVERY_COMP_EVT:                              // [8]
+      break;
+    case ESP_SPP_START_EVT:                                       // [28] SPP server started succesfully
+      break;
+    case ESP_SPP_SRV_OPEN_EVT:                                    // [34] server connection opens: new handle comes
+      BT_SPP_TxFIFO.Clear();                                      // clear the TxFIFO
+      BT_SPP_Conn = Param->srv_open.handle;                       // store handle for esp_spp_write()
+      BT_SPP_TxCong = 0;                                          // assume no congestion
+      setPilotID(Param->srv_open.rem_bda, sizeof(esp_bd_addr_t)); // PilotID is not taken from the connected BT client
+      // memcpy(BT_SPP_MAC, Param->srv_open.rem_bda, sizeof(esp_bd_addr_t));
+      // esp_spp_write(Param->srv_open.handle, BT_SPP_Wait, (uint8_t *)BT_SPP_Welcome); // write Welcome message to the BT_SPP
+#ifdef DEBUG_PRINT
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, "BT_SPP: ");
+      Format_MAC(CONS_UART_Write, Param->srv_open.rem_bda, sizeof(esp_bd_addr_t));
+      Format_String(CONS_UART_Write, " connected\n");
+      xSemaphoreGive(CONS_Mutex);
+#endif
+      break;
+    case ESP_SPP_OPEN_EVT:                                        // [26] connection opens: what's the difference to ESP_SPP_SRV_OPEN_EVT ?
+      // Param->open.handle, Param->open.rem_bda
+      break;
+    case ESP_SPP_CLOSE_EVT:                                       // [27] connection closes for given handle
+      BT_SPP_Conn=0;                                              // clear the handle: signal the BT connection is off
+      clrPilotID();
+#ifdef DEBUG_PRINT
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, "BT_SPP: \n");
+      // Format_MAC(CONS_UART_Write, BT_SPP_MAC);
+      Format_String(CONS_UART_Write, " disconnected\n");
+      xSemaphoreGive(CONS_Mutex);
+#endif
+      break;
+    case ESP_SPP_DATA_IND_EVT:                                    // [30] data is sent by the client
+#ifdef DEBUG_PRINT
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Param->data_ind.handle, Param->data_ind.data, Param->data_ind.len
+      Format_String(CONS_UART_Write, "BT_SPP: [");
+      Format_UnsDec(CONS_UART_Write, Param->data_ind.len);
+      ormat_String(CONS_UART_Write, "]\n");
+      xSemaphoreGive(CONS_Mutex);
+#endif
+      break;
+    case ESP_SPP_CONG_EVT:                                        // [31] congestion on the outgoing data
+      BT_SPP_TxCong = Param->cong.cong;
+      break;
+    case ESP_SPP_WRITE_EVT:                                       // [33] (queued) data has been sent to the client
+      BT_SPP_TxCong = Param->write.cong;
+      break;
+    default:
+#ifdef DEBUG_PRINT
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, "BT_SPP: Event ");
+      Format_UnsDec(CONS_UART_Write, (uint32_t)Event);
+      Format_String(CONS_UART_Write, "\n");
+      xSemaphoreGive(CONS_Mutex);
+#endif
+      break;
+  }
+}
+
+static void esp_bt_gap_cb(esp_bt_gap_cb_event_t Event, esp_bt_gap_cb_param_t *Param)
+{
+  switch (Event)     // event numbers are in esp-idf/components/bt/bluedroid/api/include/api/esp_gap_bt_api.h
+  {
+    case ESP_BT_GAP_AUTH_CMPL_EVT:
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      if (Param->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS)
+      { Format_String(CONS_UART_Write, "BT_GAP: ");
+        Format_String(CONS_UART_Write, (const char *)Param->auth_cmpl.device_name);
+        Format_String(CONS_UART_Write, " authenticated\n"); }
+      else
+      { Format_String(CONS_UART_Write, "BT_GAP: Authentication failure (");
+        Format_SignDec(CONS_UART_Write, Param->auth_cmpl.stat);
+        Format_String(CONS_UART_Write, ")\n"); }
+      // ESP_LOGI(SPP_TAG, "authentication success: %s", param->auth_cmpl.device_name);
+      // esp_log_buffer_hex(SPP_TAG, param->auth_cmpl.bda, ESP_BD_ADDR_LEN);
+      // ESP_LOGE(SPP_TAG, "authentication failed, status:%d", param->auth_cmpl.stat);
+      xSemaphoreGive(CONS_Mutex);
+      break;
+    case ESP_BT_GAP_PIN_REQ_EVT:
+     /*
+        ESP_LOGI(SPP_TAG, "ESP_BT_GAP_PIN_REQ_EVT min_16_digit:%d", param->pin_req.min_16_digit);
+        if (param->pin_req.min_16_digit) {
+            ESP_LOGI(SPP_TAG, "Input pin code: 0000 0000 0000 0000");
+            esp_bt_pin_code_t pin_code = {0};
+            esp_bt_gap_pin_reply(param->pin_req.bda, true, 16, pin_code);
+        } else {
+            ESP_LOGI(SPP_TAG, "Input pin code: 1234");
+            esp_bt_pin_code_t pin_code;
+            pin_code[0] = '1';
+            pin_code[1] = '2';
+            pin_code[2] = '3';
+            pin_code[3] = '4';
+            esp_bt_gap_pin_reply(param->pin_req.bda, true, 4, pin_code);
+      */
+      break;
+    default:
+      break;
+    }
+
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "BT_GAP: Event ");
+  Format_UnsDec(CONS_UART_Write, (uint32_t)Event);
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+}
+
+void static BT_SPP_Write (char Byte)  // send a character to the BT serial port
+{ if(BT_SPP_Conn)                                                                           // if BT connection is active
+  { BT_SPP_TxFIFO.Write(Byte);                                                              // write the byte into the TxFIFO
+    // TickType_t Behind = xTaskGetTickCount() - BT_SPP_LastTxPush;                         // [ms]
+    // if(Behind>=20) BT_SPP_TxPush();
+    if( (BT_SPP_TxCong==0) && ( (Byte=='\n') || (BT_SPP_TxFIFO.Full()>=64) ) )              // if no congestion and EOL or 64B waiting already
+    { BT_SPP_TxPush(); }                                                                    // read a block from TxFIFO ad push it into the BT_SPP
+  }
+}
+
+int BT_SPP_Init(void)
+{ esp_err_t Err=ESP_OK;
+  if(Parameters.BTname[0]==0) return Err;
+
+  esp_bt_controller_config_t BTconf = BT_CONTROLLER_INIT_CONFIG_DEFAULT();                  // the default mode is defined by the menuconfig settings
+  Err = esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
+  Err = esp_bt_controller_init(&BTconf); if(Err!=ESP_OK) return Err;
+  Err = esp_bt_controller_enable((esp_bt_mode_t)BTconf.mode); if(Err!=ESP_OK) return Err;   // mode must be same as in BTconf
+  Err = esp_bluedroid_init(); if(Err!=ESP_OK) return Err;                                   // init the BT stack
+  Err = esp_bluedroid_enable(); if(Err!=ESP_OK) return Err;                                 // enable the BT stack
+  Err = esp_bt_gap_register_callback(esp_bt_gap_cb); if(Err!=ESP_OK) return Err;
+  Err = esp_spp_register_callback(esp_spp_cb); if(Err!=ESP_OK) return Err;
+  Err = esp_spp_init(esp_spp_mode); if(Err!=ESP_OK) return Err;
+
+  // Set default parameters for Secure Simple Pairing */
+  esp_bt_sp_param_t param_type = ESP_BT_SP_IOCAP_MODE;
+  esp_bt_io_cap_t iocap = ESP_BT_IO_CAP_NONE; // _IO;
+  esp_bt_gap_set_security_param(param_type, &iocap, sizeof(uint8_t));
+
+  // Set default parameters for Legacy Pairing: fixed PIN
+  esp_bt_pin_type_t pin_type = ESP_BT_PIN_TYPE_FIXED;
+  esp_bt_pin_code_t pin_code = { '0', '1', '2', '3' };
+  esp_bt_gap_set_pin(pin_type, 4, pin_code);
+
+  // set the UUID so this BT device is recognized as a serial port: thanks to Linar for this code
+  esp_bt_cod_t cod;
+  cod.minor   =      0b000101;
+  cod.major   =       0b00001;
+  cod.service = 0b00000001101; // 0b00000001101 = serial port, 0b00000010000 = generic
+  esp_bt_gap_set_cod(cod, ESP_BT_INIT_COD);
+
+  return Err; }
+
+#endif // WITH_BT_SPP
+
+// ========================================================================================================
+
 // Console UART
 
 SemaphoreHandle_t CONS_Mutex;
@@ -178,7 +537,12 @@ bool CONS_InpReady(void)
 */
 // int  CONS_UART_Read       (uint8_t &Byte) { return uart_read_bytes  (CONS_UART, &Byte, 1, 0); }  // non-blocking
 // void CONS_UART_Write      (char     Byte) {        uart_write_bytes (CONS_UART, &Byte, 1);    }  // blocking ?
-void CONS_UART_Write (char     Byte)  { putchar(Byte); }
+void CONS_UART_Write (char     Byte)
+{ putchar(Byte);
+#ifdef WITH_BT_SPP
+  BT_SPP_Write(Byte);
+#endif
+}                                            // it appears the NL is translated into CR+NL
 int  CONS_UART_Read  (uint8_t &Byte)  { int Ret=getchar(); if(Ret>=0) { Byte=Ret; return 1; } else return Ret; }
 // int  CONS_UART_Free  (void)           { return UART2_Free(); }
 // int  CONS_UART_Full  (void)           { return UART2_Full(); }
@@ -195,27 +559,29 @@ void  GPS_UART_SetBaudrate(int BaudRate)  {        uart_set_baudrate(GPS_UART, B
 void GPS_DISABLE(void) { gpio_set_level(PIN_GPS_ENA, 0); }
 void GPS_ENABLE (void) { gpio_set_level(PIN_GPS_ENA, 1); }
 #endif
+#ifdef PIN_GPS_PPS
 bool GPS_PPS_isOn(void) { return gpio_get_level(PIN_GPS_PPS); }
+#endif
 
 //--------------------------------------------------------------------------------------------------------
 // RF chip
 
+#ifdef PIN_RFM_RST      // if reset pin declared for the RF chip
 inline void RFM_RESET_Dir (void)      { gpio_set_direction(PIN_RFM_RST, GPIO_MODE_OUTPUT); }
 inline void RFM_RESET_Set (bool High) { gpio_set_level(PIN_RFM_RST, High); }
-// inline void RFM_RESET_High(void) { gpio_set_level(PIN_RFM_RST, 1); }
-// inline void RFM_RESET_Low (void) { gpio_set_level(PIN_RFM_RST, 0); }
 
-#ifdef WITH_RFM95
+#ifdef WITH_RFM95       // for RFM95 reset is low-active
 void RFM_RESET(uint8_t On) { RFM_RESET_Set(~On); }
-// { if(On) RFM_RESET_Low();
-//     else RFM_RESET_High(); }
 #endif
 
-#ifdef WITH_RFM69
+#ifdef WITH_RFM69       // for RFM69 reset is high-active
 void RFM_RESET(uint8_t On) { RFM_RESET_Set(On); }
-// { if(On) RFM_RESET_High();
-//     else RFM_RESET_Low(); }
 #endif
+
+#else                   // if no reset pin declared for the RF chip, then make an empty call
+inline void RFM_RESET_Dir (void) { }
+void RFM_RESET(uint8_t On) { }
+#endif // PIN_RFM_RST
 
 inline void RFM_IRQ_Dir (void) { gpio_set_direction(PIN_RFM_IRQ, GPIO_MODE_INPUT); }
        bool RFM_IRQ_isOn(void) { return gpio_get_level(PIN_RFM_IRQ); }
@@ -231,15 +597,110 @@ void RFM_TransferBlock(uint8_t *Data, uint8_t Len)
   esp_err_t ret = spi_device_transmit(RFM_SPI, &Trans); }
 
 //--------------------------------------------------------------------------------------------------------
+// BEEPER
+
+#ifdef WITH_BEEPER
+
+static ledc_timer_config_t LEDC_Timer =
+  {
+    speed_mode      : LEDC_HIGH_SPEED_MODE,   // timer mode
+    { duty_resolution : LEDC_TIMER_8_BIT },   // resolution of PWM duty: 0..255
+    timer_num       : LEDC_TIMER_0,           // timer index
+    freq_hz         : 880                     // frequency of PWM signal
+  } ;
+
+static ledc_channel_config_t LEDC_Channel =
+  {
+    gpio_num   : PIN_BEEPER,
+    speed_mode : LEDC_HIGH_SPEED_MODE,
+    channel    : LEDC_CHANNEL_0,
+    intr_type  : LEDC_INTR_DISABLE,
+    timer_sel  : LEDC_TIMER_0,
+    duty       : 0,
+    hpoint     : 0
+  } ;
+
+esp_err_t Beep_Init(void)
+{ ledc_timer_config(&LEDC_Timer);            // Set configuration of timer0 for high speed channels
+  ledc_channel_config(&LEDC_Channel);
+  return ESP_OK; }
+
+void Beep(uint16_t Freq, uint8_t Duty, uint8_t DoubleAmpl) // [Hz, 1/256] play sound with given frequency and duty (=volume)
+{ ledc_set_freq(LEDC_Timer.speed_mode, LEDC_Timer.timer_num, Freq);
+  ledc_set_duty(LEDC_Channel.speed_mode, LEDC_Channel.channel, Duty);
+  ledc_update_duty(LEDC_Channel.speed_mode, LEDC_Channel.channel); }
+
+// Frequencies for notes of the highest octave: C,     C#,    D,     D#,    E,     F,     F#,    G,     G#,    A,     A#,    B
+// Freq[i] = 32*523.25*2**(i/12)            i = 0,     1,     2,     3,     4,     5,     6,     7,     8,     9,     A,     B
+static const uint16_t NoteFreq[12] =      { 16744, 17740, 18795, 19912, 21096, 22351, 23680, 25088, 26579, 28160, 29834, 31608 } ;
+
+void Beep_Note(uint8_t Note) // Note = VVOONNNN: VV = Volume, OO=Octave, NNNN=Note
+{ uint8_t Volume =  Note>>6;                             // [0..3]
+  uint8_t Octave = (Note>>4)&0x03;                       // [0..3]
+  Note &= 0x0F; if(Note>=12) { Note-=12; Octave+=1; }    // [0..11] [0..4]
+  uint8_t Duty = 0; uint8_t DoubleAmpl=0;
+  if(Volume) { Duty=0x10; Duty<<=Volume; }               // Duty = 0x00, 0x20, 0x40, 0x80
+  if(Volume>2) { DoubleAmpl=1; }                         // DoubleAmpl = 0, 0, 1, 1
+  uint16_t Freq = NoteFreq[Note];
+  if(Octave) { Freq += 1<<(Octave-1); Freq >>= (4-Octave); }
+  Beep(Freq, Duty, DoubleAmpl); }
+
+uint8_t  Vario_Note=0x00; // 0x40;
+uint16_t Vario_Period=800;
+uint16_t Vario_Fill=50;
+
+static volatile uint16_t Vario_Time=0;
+
+static volatile uint8_t Play_Note=0;             // Note being played
+static volatile uint8_t Play_Counter=0;          // [ms] time counter
+
+static FIFO<uint16_t, 8> Play_FIFO;              // queue of notes to play
+
+void Play(uint8_t Note, uint8_t Len)             // [Note] [ms] put a new not to play in the queue
+{ uint16_t Word = Note; Word<<=8; Word|=Len; Play_FIFO.Write(Word); }
+
+uint8_t Play_Busy(void) { return Play_Counter; } // is a note being played right now ?
+
+void Play_TimerCheck(void)                       // every ms serve the note playing
+{ uint8_t Counter=Play_Counter;
+  if(Counter)                                    // if counter non-zero
+  { Counter--;                                   // decrement it
+    if(!Counter) Beep_Note(Play_Note=0x00);      // if reached zero, stop playing the note
+  }
+  if(!Counter)                                   // if counter reached zero
+  { if(!Play_FIFO.isEmpty())                     // check for notes in the queue
+    { uint16_t Word=0; Play_FIFO.Read(Word);     // get the next note
+      Beep_Note(Play_Note=Word>>8); Counter=Word&0xFF; }   // start playing it, load counter with the note duration
+  }
+  Play_Counter=Counter;
+
+  uint16_t Time=Vario_Time;
+  Time++; if(Time>=Vario_Period) Time=0;
+  Vario_Time = Time;
+
+  if(Counter==0)                            // when no notes are being played, make the vario sound
+  { if(Time<=Vario_Fill)
+    { if(Play_Note!=Vario_Note) Beep_Note(Play_Note=Vario_Note); }
+    else
+    { if(Play_Note!=0) Beep_Note(Play_Note=0x00); }
+  }
+}
+
+#endif
+
+//--------------------------------------------------------------------------------------------------------
 // OLED display
 
 #ifdef WITH_OLED
-void OLED_RESET(bool Level) { gpio_set_level(PIN_OLED_RST, Level); }
 
-esp_err_t OLED_Init(void)
+#ifdef PIN_OLED_RST
+void OLED_RESET(bool Level) { gpio_set_level(PIN_OLED_RST, Level); }
+#endif
+
+esp_err_t OLED_Init(uint8_t DispIdx)
 { i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
-  i2c_master_write_byte(cmd, (OLED_I2C_ADDR << 1) | I2C_MASTER_WRITE, true);
+  i2c_master_write_byte(cmd, ((OLED_I2C_ADDR+DispIdx)<<1) | I2C_MASTER_WRITE, true);
   i2c_master_write_byte(cmd, OLED_CONTROL_BYTE_CMD_STREAM, true);
   i2c_master_write_byte(cmd, OLED_CMD_SET_CHARGE_PUMP, true);
   i2c_master_write_byte(cmd, 0x14, true);
@@ -251,10 +712,10 @@ esp_err_t OLED_Init(void)
   i2c_cmd_link_delete(cmd);
   return espRc; }
 
-esp_err_t OLED_SetContrast(uint8_t Contrast)
+esp_err_t OLED_SetContrast(uint8_t Contrast, uint8_t DispIdx)
 { i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
-  i2c_master_write_byte(cmd, (OLED_I2C_ADDR << 1) | I2C_MASTER_WRITE, true);
+  i2c_master_write_byte(cmd, ((OLED_I2C_ADDR+DispIdx)<<1) | I2C_MASTER_WRITE, true);
   i2c_master_write_byte(cmd, OLED_CONTROL_BYTE_CMD_STREAM, true);
   i2c_master_write_byte(cmd, OLED_CMD_SET_CONTRAST, true);
   i2c_master_write_byte(cmd, Contrast, true);
@@ -263,11 +724,11 @@ esp_err_t OLED_SetContrast(uint8_t Contrast)
   i2c_cmd_link_delete(cmd);
   return espRc; }
 
-esp_err_t OLED_PutLine(uint8_t Line, const char *Text)
+esp_err_t OLED_PutLine(uint8_t Line, const char *Text, uint8_t DispIdx)
 { if(Line>=8) return ESP_OK;
   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
-  i2c_master_write_byte(cmd, (OLED_I2C_ADDR << 1) | I2C_MASTER_WRITE, true);
+  i2c_master_write_byte(cmd, ((OLED_I2C_ADDR+DispIdx)<<1) | I2C_MASTER_WRITE, true);
   i2c_master_write_byte(cmd, OLED_CONTROL_BYTE_CMD_STREAM, true);
   i2c_master_write_byte(cmd, 0x00, true);
   i2c_master_write_byte(cmd, 0x10, true);
@@ -285,7 +746,7 @@ esp_err_t OLED_PutLine(uint8_t Line, const char *Text)
              else Char&=0x7F; }
     cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (OLED_I2C_ADDR << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_write_byte(cmd, ((OLED_I2C_ADDR+DispIdx)<<1) | I2C_MASTER_WRITE, true);
     i2c_master_write_byte(cmd, OLED_CONTROL_BYTE_DATA_STREAM, true);
     i2c_master_write(cmd, font8x8_basic_tr[(uint8_t)Char], 8, true);
     i2c_master_stop(cmd);
@@ -294,12 +755,50 @@ esp_err_t OLED_PutLine(uint8_t Line, const char *Text)
     if(espRc!=ESP_OK) break; }
   return espRc; }
 
-esp_err_t OLED_Clear(void)
+esp_err_t OLED_Clear(uint8_t DispIdx)
 { esp_err_t espRc;
   for(uint8_t Line=0; Line<8; Line++)
-  { espRc=OLED_PutLine(Line, 0); if(espRc!=ESP_OK) break; }
+  { espRc=OLED_PutLine(Line, 0, DispIdx); if(espRc!=ESP_OK) break; }
   return espRc; }
 #endif
+
+//--------------------------------------------------------------------------------------------------------
+// SD card in SPI mode
+
+#ifdef WITH_SD
+
+static sdmmc_host_t Host;
+static sdspi_slot_config_t SlotConfig;
+static esp_vfs_fat_sdmmc_mount_config_t MountConfig =
+  { .format_if_mount_failed = false,
+    .max_files = 5,
+    .allocation_unit_size = 16 * 1024 };
+
+sdmmc_card_t *SD_Card = 0;
+
+bool      SD_isMounted(void) { return SD_Card; }
+int       SD_getSectors(void) { return SD_Card->csd.capacity; }
+int       SD_getSectorSize(void) { return SD_Card->csd.sector_size; }
+
+void SD_Unmount(void)
+{ esp_vfs_fat_sdmmc_unmount(); SD_Card=0; }
+
+esp_err_t SD_Mount(void)
+{ esp_err_t Ret = esp_vfs_fat_sdmmc_mount("/sdcard", &Host, &SlotConfig, &MountConfig, &SD_Card); // ESP_OK => good, ESP_FAIL => failed to mound the file system, other => HW not working
+  if(Ret!=ESP_OK) SD_Unmount();
+  return Ret; }
+
+static esp_err_t SD_Init(void)
+{
+  Host = SDSPI_HOST_DEFAULT();
+  SlotConfig = SDSPI_SLOT_CONFIG_DEFAULT();
+  SlotConfig.gpio_miso = PIN_SD_MISO;
+  SlotConfig.gpio_mosi = PIN_SD_MOSI;
+  SlotConfig.gpio_sck  = PIN_SD_SCK;
+  SlotConfig.gpio_cs   = PIN_SD_CS;
+  return SD_Mount(); }
+
+#endif // WITH_SD
 
 //--------------------------------------------------------------------------------------------------------
 
@@ -357,56 +856,95 @@ void vApplicationTickHook(void) // RTOS timer tick hook
 */
 
 //--------------------------------------------------------------------------------------------------------
+// ADC
+
+
+static esp_adc_cal_characteristics_t *ADC_characs =
+        (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
+#ifdef WITH_TBEAM
+static adc1_channel_t ADC_channel = ADC1_GPIO35_CHANNEL;
+#else
+static adc1_channel_t ADC_channel = ADC1_GPIO36_CHANNEL;
+#endif
+static const adc_atten_t ADC_atten = ADC_ATTEN_DB_11;
+static const adc_unit_t ADC_unit = ADC_UNIT_1;
+#define ADC_Vref 1100
+
+static int ADC_Init(void)
+{ // if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP) == ESP_OK) // Check TP is burned into eFuse
+  // if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_VREF) == ESP_OK) // Check Vref is burned into eFuse
+  adc1_config_width(ADC_WIDTH_BIT_12);
+  adc1_config_channel_atten(ADC_channel, ADC_atten);
+  esp_adc_cal_value_t val_type = esp_adc_cal_characterize(ADC_unit, ADC_atten, ADC_WIDTH_BIT_12, ADC_Vref, ADC_characs); // calibrate ADC1
+  return 0; }
+
+uint16_t BatterySense(int Samples)
+{ uint32_t RawVoltage=0;
+  for( int Idx=0; Idx<Samples; Idx++)
+  { RawVoltage += adc1_get_raw(ADC_channel); }
+  RawVoltage = (RawVoltage+Samples/2)/Samples;
+  return (uint16_t)esp_adc_cal_raw_to_voltage(RawVoltage, ADC_characs)*2; } // [mV]
+
+
+//--------------------------------------------------------------------------------------------------------
 
 void IO_Configuration(void)
 {
+#ifdef PIN_LED_PCB
   LED_PCB_Dir();
   LED_PCB_Off();
+#endif
 
-  RFM_RESET_Dir();
   RFM_IRQ_Dir();
+  RFM_RESET_Dir();
   RFM_RESET(0);
 
   spi_bus_config_t BusCfg =                               // RF chip SPI
-  { mosi_io_num: PIN_RFM_MOSI,
-    miso_io_num: PIN_RFM_MISO,
-    sclk_io_num: PIN_RFM_SCK,
-    quadwp_io_num: -1,
-    quadhd_io_num: -1,
-    max_transfer_sz: 64,
-    flags: SPICOMMON_BUSFLAG_MASTER | SPICOMMON_BUSFLAG_SCLK | SPICOMMON_BUSFLAG_MISO | SPICOMMON_BUSFLAG_MOSI,
+  { mosi_io_num     : PIN_RFM_MOSI,
+    miso_io_num     : PIN_RFM_MISO,
+    sclk_io_num     : PIN_RFM_SCK,
+    quadwp_io_num   : -1,
+    quadhd_io_num   : -1,
+    max_transfer_sz : 64,
+    flags           : SPICOMMON_BUSFLAG_MASTER | SPICOMMON_BUSFLAG_SCLK | SPICOMMON_BUSFLAG_MISO | SPICOMMON_BUSFLAG_MOSI
   };
   spi_device_interface_config_t DevCfg =
-  { command_bits: 0,
-    address_bits: 0,
-    dummy_bits: 0,
-    mode: 0,
-    duty_cycle_pos: 0,
-    cs_ena_pretrans: 0,
-    cs_ena_posttrans: 0,
-    clock_speed_hz: RFM_SPI_SPEED,
-    input_delay_ns: 0,
-    spics_io_num: PIN_RFM_SS,
-    flags: 0,
-    queue_size: 3,
-    pre_cb: 0,
-    post_cb: 0
+  { command_bits     : 0,
+    address_bits     : 0,
+    dummy_bits       : 0,
+    mode             : 0,
+    duty_cycle_pos   : 0,
+    cs_ena_pretrans  : 0,
+    cs_ena_posttrans : 0,
+    clock_speed_hz   : RFM_SPI_SPEED,
+    input_delay_ns   : 0,
+    spics_io_num     : PIN_RFM_SS,
+    flags            : 0,
+    queue_size       : 3,
+    pre_cb           : 0,
+    post_cb          : 0
   };
   esp_err_t ret=spi_bus_initialize(HSPI_HOST, &BusCfg, 1);
   ret=spi_bus_add_device(HSPI_HOST, &DevCfg, &RFM_SPI);
 
+#ifdef PIN_GPS_PPS
   gpio_set_direction(PIN_GPS_PPS, GPIO_MODE_INPUT);
-#ifdef WITH_GPS_ENABLE
-  gpio_set_direction(PIN_GPS_ENA, GPIO_MODE_OUTPUT);    // GPS GPIO
-  GPS_ENABLE();
+#endif
+#ifdef PIN_GPS_RST
+  gpio_set_direction(PIN_GPS_RST, GPIO_MODE_OUTPUT);
+  gpio_set_level(PIN_GPS_RST, 0);
+#endif
+#ifdef PIN_GPS_ENA
+  gpio_set_direction(PIN_GPS_ENA, GPIO_MODE_OUTPUT);
+  gpio_set_level(PIN_GPS_ENA, 1);
 #endif
 
   uart_config_t GPS_UART_Config =                       // GPS UART
-  { baud_rate: 9600,
-    data_bits: UART_DATA_8_BITS,
-    parity:    UART_PARITY_DISABLE,
-    stop_bits: UART_STOP_BITS_1,
-    flow_ctrl: UART_HW_FLOWCTRL_DISABLE,
+  { baud_rate : 9600,
+    data_bits : UART_DATA_8_BITS,
+    parity    : UART_PARITY_DISABLE,
+    stop_bits : UART_STOP_BITS_1,
+    flow_ctrl : UART_HW_FLOWCTRL_DISABLE,
     rx_flow_ctrl_thresh: 0,
     use_ref_tick: 0
   };
@@ -414,97 +952,54 @@ void IO_Configuration(void)
   uart_set_pin       (GPS_UART, PIN_GPS_TXD, PIN_GPS_RXD, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
   uart_driver_install(GPS_UART, 256, 256, 0, 0, 0);
 
-#ifdef WITH_OLED
+#if defined(WITH_OLED) && defined(PIN_OLED_RST)
   gpio_set_direction(PIN_OLED_RST, GPIO_MODE_OUTPUT);
 #endif
 
+#if defined(PIN_I2C_SCL) && defined(PIN_I2C_SDA)
   i2c_config_t I2C_Config =                            // I2C for OLED and pressue sensor
-  { mode:          I2C_MODE_MASTER,
-    sda_io_num:    PIN_I2C_SDA,
-    sda_pullup_en: GPIO_PULLUP_ENABLE,
-    scl_io_num:    PIN_I2C_SCL,
-    scl_pullup_en: GPIO_PULLUP_ENABLE
+  { mode          : I2C_MODE_MASTER,
+    sda_io_num    : PIN_I2C_SDA,
+    sda_pullup_en : GPIO_PULLUP_ENABLE,
+    scl_io_num    : PIN_I2C_SCL,
+    scl_pullup_en : GPIO_PULLUP_ENABLE
   } ;
   I2C_Config.master.clk_speed =  I2C_SPEED;
   i2c_param_config  (I2C_BUS, &I2C_Config);
   i2c_driver_install(I2C_BUS, I2C_Config.mode, 0, 0, 0);
+#endif
 
 #ifdef WITH_OLED
+#ifdef PIN_OLED_RST
   OLED_RESET(0);
   vTaskDelay(10);
   OLED_RESET(1);
-  vTaskDelay(10);
-
-  OLED_Init();
-  OLED_Clear();
-  OLED_SetContrast(128);
 #endif
+  vTaskDelay(10);
+  OLED_Init(0);
+  OLED_Clear(0);
+  OLED_SetContrast(128, 0);
+#ifdef WITH_OLED2
+  OLED_Init(1);
+  OLED_Clear(1);
+  OLED_SetContrast(128, 1);
+#endif
+#endif
+
+#ifdef WITH_SD
+  SD_Init();
+#endif
+
+#ifdef WITH_BEEPER
+  Beep_Init();
+#endif
+
+  ADC_Init();
 
   // esp_register_freertos_tick_hook(&vApplicationTickHook);
 }
 
 // ======================================================================================================
-
-// ~/esp-idf/components/bt/bluedroid/api/include/esp_spp_api.h
-// esp_err_t esp_spp_write(uint32_t handle, int len, uint8_t *p_data);
-
-#ifdef WITH_BT_SPP
-
-static const esp_spp_mode_t esp_spp_mode = ESP_SPP_MODE_CB;
-static const esp_spp_sec_t  sec_mask     = ESP_SPP_SEC_NONE;
-static const esp_spp_role_t role_slave   = ESP_SPP_ROLE_SLAVE;
-
-// static uint32_t ConnHandle=0;
-
-// extern "C"
-void esp_spp_cb(esp_spp_cb_event_t Event, esp_spp_cb_param_t *Param)
-{ switch (Event)
-  { case ESP_SPP_INIT_EVT:
-      esp_bt_dev_set_device_name("TRACKER");
-      esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
-      esp_spp_start_srv(sec_mask, role_slave, 0, "SPP_SERVER");
-      break;
-    case ESP_SPP_DISCOVERY_COMP_EVT:
-      break;
-    case ESP_SPP_START_EVT:                                       // SPP server started succesfully
-      break;
-    case ESP_SPP_SRV_OPEN_EVT:                                    // server connection opens: new handle comes
-      // Param->open.handle, Param->open.rem_bda
-      break;
-    case ESP_SPP_OPEN_EVT:                                        // connection opens
-      // Param->close.handle, Param->close.rem_bda
-      break;
-    case ESP_SPP_CLOSE_EVT:                                       // connection closes for given handle
-      // Param->close.handle, Param->close.rem_bda
-      break;
-    case ESP_SPP_DATA_IND_EVT:                                    // data is sent by the client
-      // Param->data_ind.handle, Param->data_ind.data, Param->data_ind.len
-      break;
-    case ESP_SPP_WRITE_EVT:                                       // (queued) data has been sent to the client
-      break;
-    default:
-      break;
-  }
-  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-  Format_String(CONS_UART_Write, "BT_SPP: ");
-  Format_Hex(CONS_UART_Write, (uint32_t)Event);
-  CONS_UART_Write(' ');
-  Format_String(CONS_UART_Write, "\n");
-  xSemaphoreGive(CONS_Mutex);
-}
-
-int BT_SPP_Init(void)
-{ esp_bt_controller_config_t BTconf = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-  esp_err_t Err;
-  Err = esp_bt_controller_init(&BTconf); if(Err!=ESP_OK) return Err;
-  Err = esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT); if(Err!=ESP_OK) return Err;
-  Err = esp_bluedroid_init(); if(Err!=ESP_OK) return Err;                                   // init the BT stack
-  Err = esp_bluedroid_enable(); if(Err!=ESP_OK) return Err;                                 // enable the BT stack
-  Err = esp_spp_register_callback(esp_spp_cb); if(Err!=ESP_OK) return Err;
-  Err = esp_spp_init(esp_spp_mode); if(Err!=ESP_OK) return Err;
-  return Err; }
-
-#endif // WITH_BT_SPP
 
 // ======================================================================================================
 
@@ -522,6 +1017,7 @@ int NVS_Init(void)
 
 // ======================================================================================================
 
+#ifdef WITH_SPIFFS
 int SPIFFS_Register(const char *Path, const char *Label, size_t MaxOpenFiles)
 { esp_vfs_spiffs_conf_t FSconf =
   { base_path: Path,
@@ -532,6 +1028,7 @@ int SPIFFS_Register(const char *Path, const char *Label, size_t MaxOpenFiles)
 
 int SPIFFS_Info(size_t &Total, size_t &Used, const char *Label)
 { return esp_spiffs_info(Label, &Total, &Used); }
+#endif
 
 // ======================================================================================================
 

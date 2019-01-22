@@ -10,7 +10,7 @@
 #include "freqplan.h"
 
   extern FIFO<RFM_RxPktData, 16> RF_RxFIFO;   // buffer for received packets
-  extern FIFO<OGN_TxPacket,   4> RF_TxFIFO;   // buffer for transmitted packets
+  extern FIFO<OGN_TxPacket<OGN_Packet>, 4> RF_TxFIFO;   // buffer for transmitted packets
 
   extern uint8_t RX_OGN_Packets;              // [packets] counts received packets
   extern uint8_t   RX_AverRSSI;               // [-0.5dBm] average RSSI

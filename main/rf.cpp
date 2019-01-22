@@ -6,8 +6,18 @@
 
 // ===============================================================================================
 
-// OGN SYNC:       0x0AF3656C encoded in Manchester
-static const uint8_t OGN_SYNC[8] = { 0xAA, 0x66, 0x55, 0xA5, 0x96, 0x99, 0x96, 0x5A };
+// OGNv1 SYNC:       0x0AF3656C encoded in Manchester
+static const uint8_t OGN1_SYNC[8] = { 0xAA, 0x66, 0x55, 0xA5, 0x96, 0x99, 0x96, 0x5A };
+// OGNv2 SYNC:       0xF56D3738 encoded in Machester
+static const uint8_t OGN2_SYNC[8] = { 0x55, 0x99, 0x96, 0x59, 0xA5, 0x95, 0xA5, 0x6A };
+
+#ifdef WITH_OGN1
+static const uint8_t *OGN_SYNC = OGN1_SYNC;
+#endif
+
+#ifdef WITH_OGN2
+static const uint8_t *OGN_SYNC = OGN2_SYNC;
+#endif
 
 static RFM_TRX           TRX;               // radio transceiver
 
@@ -18,7 +28,7 @@ static uint32_t  RF_SlotTime;               // [sec] UTC time which belongs to t
        FreqPlan  RF_FreqPlan;               // frequency hopping pattern calculator
 
        FIFO<RFM_RxPktData, 16> RF_RxFIFO;   // buffer for received packets
-       FIFO<OGN_TxPacket,   4> RF_TxFIFO;   // buffer for transmitted packets
+       FIFO<OGN_TxPacket<OGN_Packet>, 4> RF_TxFIFO;   // buffer for transmitted packets
 
        uint16_t TX_Credit  =0;              // counts transmitted packets vs. time to avoid using more than 1% of the time
 
@@ -30,10 +40,10 @@ static Delay<uint8_t, 64> RX_OGN_CountDelay;
 
       uint32_t RX_Random=0x12345678;        // Random number from LSB of RSSI readouts
 
-      void XorShift32(uint32_t &Seed)      // simple random number generator
-{ Seed ^= Seed << 13;
-  Seed ^= Seed >> 17;
-  Seed ^= Seed << 5; }
+//       void XorShift32(uint32_t &Seed)      // simple random number generator
+// { Seed ^= Seed << 13;
+//   Seed ^= Seed >> 17;
+//   Seed ^= Seed << 5; }
 
 static uint8_t RX_Channel=0;                // (hopping) channel currently being received
 
@@ -137,7 +147,7 @@ static void TimeSlot(uint8_t TxChan, uint32_t SlotLen, const uint8_t *PacketByte
 static void SetFreqPlan(void)
 { TRX.setBaseFrequency(RF_FreqPlan.BaseFreq);                // set the base frequency (recalculate to RFM69 internal synth. units)
   TRX.setChannelSpacing(RF_FreqPlan.ChanSepar);              // set the channel separation
-  TRX.setFrequencyCorrection(10*Parameters.RFchipFreqCorr);  // set the fine correction (to counter the Xtal error)
+  TRX.setFrequencyCorrection(Parameters.RFchipFreqCorr);     // set the fine correction (to counter the Xtal error)
 }
 
 static uint8_t StartRFchip(void)
@@ -261,14 +271,14 @@ extern "C"
 
     const uint8_t *TxPktData0=0;
     const uint8_t *TxPktData1=0;
-    const OGN_TxPacket *TxPkt0 = RF_TxFIFO.getRead(0);                         // get 1st packet from TxFIFO
-    const OGN_TxPacket *TxPkt1 = RF_TxFIFO.getRead(1);                         // get 2nd packet from TxFIFO
+    const OGN_TxPacket<OGN_Packet> *TxPkt0 = RF_TxFIFO.getRead(0);                         // get 1st packet from TxFIFO
+    const OGN_TxPacket<OGN_Packet> *TxPkt1 = RF_TxFIFO.getRead(1);                         // get 2nd packet from TxFIFO
     if(TxPkt0) TxPktData0=TxPkt0->Byte();                                      // if 1st is not NULL then get its data
     if(TxPkt1) TxPktData1=TxPkt1->Byte();                                      // if 2nd if not NULL then get its data
           else TxPktData1=TxPktData0;                                          // but if NULL then take copy of the 1st packet
 
     if(TxPkt0)                                                                 // if 1st packet is not NULL
-    { if( (RX_Channel!=TxChan) && (TxPkt0->Packet.Header.RelayCount==0) )
+    { if( (RX_Channel!=TxChan) && (TxPkt0->Packet.Header.Relay==0) )
       { const uint8_t *Tmp=TxPktData0; TxPktData0=TxPktData1; TxPktData1=Tmp; } // swap 1st and 2nd packet data
     }
     TimeSlot(TxChan, 800-TimeSync_msTime(), TxPktData0,   RX_AverRSSI, 0, TxTime); // run a Time-Slot till 0.800sec

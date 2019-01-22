@@ -1,5 +1,6 @@
 // -----------------------------------------------------------------------------------------------------------------------
 
+#include "config.h"
 #include "ogn.h"
 
 class RFM_RxPktData                  // packet received by the RF chip
@@ -22,7 +23,7 @@ class RFM_RxPktData                  // packet received by the RF chip
      Format_UnsDec(CONS_UART_Write, msTime, 4, 3);
      CONS_UART_Write(' '); Format_Hex(CONS_UART_Write, Channel);
      CONS_UART_Write('/');
-     Format_SignDec(CONS_UART_Write, (int32_t)(-5*RSSI), 4, 1);
+     Format_SignDec(CONS_UART_Write, (int16_t)(-5*(int16_t)RSSI), 4, 1);
      Format_String(CONS_UART_Write, "dBm\n");
      if(WithData==0) return;
      for(uint8_t Idx=0; Idx<Bytes; Idx++)
@@ -50,7 +51,8 @@ class RFM_RxPktData                  // packet received by the RF chip
        Count+=Count1s((uint8_t)((Data[Idx]^Corr[Idx])&(~Err[Idx])));
      return Count; }
 
-  uint8_t Decode(OGN_RxPacket &Packet, LDPC_Decoder &Decoder, uint8_t Iter=32) const
+ template <class OGNx_Packet>
+  uint8_t Decode(OGN_RxPacket<OGNx_Packet> &Packet, LDPC_Decoder &Decoder, uint8_t Iter=32) const
   { uint8_t Check=0;
     uint8_t RxErr = ErrCount();                                // conunt Manchester decoding errors
     Decoder.Input(Data, Err);                                  // put data into the FEC decoder
@@ -63,7 +65,7 @@ class RFM_RxPktData                  // packet received by the RF chip
     Packet.RxErr  = RxErr;
     Packet.RxChan = Channel;
     Packet.RxRSSI = RSSI;
-    Packet.Corr   = Check==0;
+    Packet.Correct= Check==0;
     return Check; }
 
 } ;
@@ -114,9 +116,6 @@ class RFM_RxPktData                  // packet received by the RF chip
 
 #endif // of WITH_RFM95
 
-#if defined(WITH_SX1272)
-#include "sx1272.h"	// Registers are almost the same for the sx1272 and the sx1276
-#endif
                                      // bits in IrqFlags1 and IrfFlags2
 #define RF_IRQ_ModeReady      0x8000 // mode change done (between some modes)
 #define RF_IRQ_RxReady        0x4000
@@ -168,21 +167,27 @@ class RFM_TRX
 
                                       // the following are in units of the synthesizer with 8 extra bits of precision
    uint32_t BaseFrequency;            // [32MHz/2^19/2^8] base frequency = channel #0
-    int32_t FrequencyCorrection;      // [32MHz/2^19/2^8] frequency correction (due to Xtal offset)
+//    int32_t FrequencyCorrection;      // [32MHz/2^19/2^8] frequency correction (due to Xtal offset)
    uint32_t ChannelSpacing;           // [32MHz/2^19/2^8] spacing between channels
+    int16_t FreqCorr;                 // [0.1ppm]
     int16_t Channel;                  // [       integer] channel being used
 
   // private:
    static uint32_t calcSynthFrequency(uint32_t Frequency) { return (((uint64_t)Frequency<<16)+7812)/15625; }
 
   public:
-   void setBaseFrequency(uint32_t Frequency=868200000) { BaseFrequency=calcSynthFrequency(Frequency); }
-   void setChannelSpacing(uint32_t  Spacing=   200000) { ChannelSpacing=calcSynthFrequency(Spacing); }
-   void setFrequencyCorrection(int32_t Correction=0)
-   { if(Correction<0) FrequencyCorrection = -calcSynthFrequency(-Correction);
-                else  FrequencyCorrection =  calcSynthFrequency( Correction); }
+   void setBaseFrequency(uint32_t Frequency=868200000) { BaseFrequency=calcSynthFrequency(Frequency); } // [Hz]
+   void setChannelSpacing(uint32_t  Spacing=   200000) { ChannelSpacing=calcSynthFrequency(Spacing); }  // [Hz]
+   void setFrequencyCorrection(int16_t ppmFreqCorr=0)  { FreqCorr = ppmFreqCorr; }                      // [0.1ppm]
+//    void setFrequencyCorrection(int32_t Correction=0)
+//    { if(Correction<0) FrequencyCorrection = -calcSynthFrequency(-Correction);
+//                 else  FrequencyCorrection =  calcSynthFrequency( Correction); }
    void setChannel(int16_t newChannel)
-   { Channel=newChannel; WriteFreq((BaseFrequency+ChannelSpacing*Channel+FrequencyCorrection+128)>>8); }
+   { Channel=newChannel;
+     uint32_t Freq = BaseFrequency+ChannelSpacing*Channel;
+      int32_t Corr = ((int64_t)Freq*FreqCorr+5000000)/10000000;
+              Freq += Corr;
+     WriteFreq((Freq+128)>>8); }
    uint8_t getChannel(void) const { return Channel; }
 
 #ifdef USE_BLOCK_SPI
@@ -335,6 +340,7 @@ class RFM_TRX
 //              ^ 8 or 9 ?
 #endif
 
+// #ifdef WITH_RFM95
 #if defined(WITH_RFM95) || defined(WITH_SX1272)
    void WriteSYNC(uint8_t WriteSize, uint8_t SyncTol, const uint8_t *SyncData)
    { if(SyncTol>7) SyncTol=7;
@@ -379,7 +385,7 @@ class RFM_TRX
      }
    }
 
-   void WriteTxPower(int8_t TxPower, uint8_t isHW)
+   void WriteTxPower(int8_t TxPower, bool isHW)
    { WriteByte(  0x09, REG_PARAMP); // Tx ramp up/down time 0x06=100us, 0x09=40us, 0x0C=20us, 0x0F=10us (page 66)
      if(isHW) WriteTxPower_HW(TxPower);
          else WriteTxPower_W (TxPower);  }
@@ -415,6 +421,7 @@ class RFM_TRX
      return 0; }
 #endif
 
+// #ifdef WITH_RFM95
 #if defined(WITH_RFM95) || defined(WITH_SX1272)
 
    void WriteTxPower(int8_t TxPower=0)
@@ -470,6 +477,7 @@ class RFM_TRX
      uint8_t RunningTemp(void) { return ReadByte(REG_TEMP1) & 0x04; }      // still running ?
      uint8_t ReadTemp(void)    { return ReadByte(REG_TEMP2); }             // read value: -1 deg/LSB
 #endif
+// #ifdef WITH_RFM95
 #if defined(WITH_RFM95) || defined(WITH_SX1272)
      uint8_t ReadTemp(void)    { return ReadByte(REG_TEMP); }              // read value: -1 deg/LSB
 #endif

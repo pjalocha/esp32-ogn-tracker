@@ -39,7 +39,7 @@
 // static const uint8_t  VarioVolume     =    2; // [0..3]
 static const uint16_t VarioBasePeriod = 800;  // [ms]
 
-#ifdef WITH_BEEPER
+#if defined(WITH_BEEPER) && defined(WITH_VARIO)
 void VarioSound(int32_t ClimbRate)
 {
   uint8_t VarioVolume = KNOB_Tick>>1; if(VarioVolume>3) VarioVolume=3;  // take vario volume from the user knob
@@ -86,7 +86,7 @@ static LowPass2<int64_t,10,9,12> PressAver, // low pass (average) filter for pre
 
 static Delay<int32_t, 8>        PressDelay; // 4-second delay for long-term climb rate
 
-static char Line[64];                       // line to prepare the barometer NMEA sentence
+static char Line[96];                       // line to prepare the barometer NMEA sentence
 
 static uint8_t InitBaro()
 { // xSemaphoreTake(I2C_Mutex, portMAX_DELAY);
@@ -205,6 +205,10 @@ static void ProcBaro(void)
       { PosPtr->Pressure    = Pressure;                              // [0.25Pa]
         PosPtr->StdAltitude = StdAltitude;                           // store standard pressure altitude
         PosPtr->Temperature = Baro.Temperature;                      // and temperature in the GPS record
+#ifdef WITH_BME280
+        if(Baro.hasHumidity())
+          PosPtr->Humidity    = Baro.Humidity;
+#endif
         PosPtr->hasBaro=1; }                                         // tick "hasBaro" flag
     }
 
@@ -225,8 +229,9 @@ static void ProcBaro(void)
     Len+=Format_SignDec(Line+Len, ClimbRate,   3, 2);                // [m/s] climb rate
     Line[Len++]=',';
 #ifdef WITH_BME280
-    Len+=Format_SignDec(Line+Len, Baro.Humidity,3, 1);                // [%] relative humidity
-    Line[Len++]=',';
+    if(Baro.hasHumidity())
+    { Len+=Format_SignDec(Line+Len, Baro.Humidity, 3, 1);            // [%] relative humidity
+      Line[Len++]=','; }
 #endif
     Len+=NMEA_AppendCheckCRNL(Line, Len);
     // if(CONS_UART_Free()>=128)

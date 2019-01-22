@@ -11,43 +11,68 @@
 // ============================================================================================================
 
 #define WITH_ESP32
+// #define WITH_AUTOCR                        // we do the auto-CR after LF thus take care to disable CRLF in ESP-IDF
+
+#define WITH_OGN1                          // OGN protocol version 1/2
+#define OGN_Packet OGN1_Packet
 
 #define HARDWARE_ID 0x02
 #define SOFTWARE_ID 0x01
 
+// #define DEFAULT_AcftType        1          // [0..15] default aircraft-type: glider
+// #define DEFAULT_GeoidSepar     40          // [m]
+// #define DEFAULT_CONbaud    115200
+// #define DEFAULT_PPSdelay       80
+
 #define USE_BLOCK_SPI                      // use block SPI interface for RF chip
+#define I2C_SPEED 1000000                  // [Hz] bit rate on the I2C (nominally up to 400000)
 
-#define WITH_HELTEC                        // HELTEC module: PCB LED on GPI025
+// #define WITH_HELTEC                        // HELTEC module: PCB LED on GPI025
 // #define WITH_TTGO                          // TTGO module: PCB LED on GPIO2, GPIO25 free to use as DAC2 output
-#define WITH_OLED                          // OLED display on the I2C: some TTGO modules are without OLED display
+// #define WITH_TBEAM                          // T-Beam module
+// #define WITH_JACEK                         // JACEK ESP32 OGN-Tracker
 
-#define WITH_RFM95                         // RF chip selection:  both HELTEC and TTGO use sx1276 which is same af RFM95
-// #define WITH_RFM69
+// #define WITH_OLED                          // OLED display on the I2C: some TTGO modules are without OLED display
+// #define WITH_OLED2                         // 2nd OLED display, I2C address next higher
+
+// #define WITH_RFM95                         // RF chip selection:  both HELTEC and TTGO use sx1276 which is same af RFM95
+// #define WITH_RFM69                         // Jacek design uses RFM69
 
 // #define WITH_LED_RX
 // #define WITH_LED_TX
 
-#define WITH_GPS_ENABLE                    // use GPS_ENABLE control line to turn the GPS ON/OFF
-#define WITH_GPS_PPS                       // use the PPS signal from GPS for precise time-sync.
-#define WITH_GPS_CONFIG                    // attempt to configure higher GPS baud rate and airborne mode
-#define WITH_GPS_UBX                       // GPS understands UBX
+// #define WITH_GPS_ENABLE                    // use GPS_ENABLE control line to turn the GPS ON/OFF
+// #define WITH_GPS_PPS                       // use the PPS signal from GPS for precise time-sync.
+// #define WITH_GPS_CONFIG                    // attempt to configure higher GPS baud rate and airborne mode
+// #define WITH_GPS_UBX                       // GPS understands UBX
 // #define WITH_GPS_MTK                       // GPS understands MTK
 // #define WITH_GPS_SRF
+// #define WITH_MAVLINK
 
-// #define WITH_MAVLINK                       // use MAVlink as source for the position/pressure data
+// #define WITH_GPS_UBX_PASS                  // to pass directly UBX packets to/from GPS
+// #define WITH_GPS_NMEA_PASS                  // to pass directly NMEA to/from GPS
 
 // #define WITH_BMP180                        // BMP180 pressure sensor
 // #define WITH_BMP280                        // BMP280 pressure sensor
 // #define WITH_BME280                        // with humidity
 // #define WITH_MS5607                        // MS5607 pressure sensor
 
-#define I2C_SPEED 1000000                  // [Hz] bit rate on the I2C (nominally up to 400000)
+// #define WITH_FLARM                         // Receive FLARM
+// #define WITH_PFLAA                         // PFLAU and PFLAA for compatibility with XCsoar and LK8000
 
-#define WITH_PFLAA                         // PFLAU and PFLAA for compatibility with XCsoar and LK8000
+// #define WITH_CONFIG                        // interpret the console input: $POGNS to change parameters
 
-#define WITH_CONFIG                        // interpret the console input: $POGNS to change parameters
+// #define WITH_BEEPER
 
-// #define WITH_BT_SPP                        // Bluetooth serial port fo smartphone/tablet link
+// #define WITH_SD                            // use the SD card in SPI mode and FAT file system
+// #define WITH_SPIFFS                        // use SPIFFS file system in Flash
+// #define WITH_LOG                           // log own positions and other received to SPIFFS and possibly to uSD
+
+// #define WITH_BT_SPP                        // Bluetooth serial port for smartphone/tablet link
+// #define WITH_WIFI                          // attempt to connect to the wifi router for uploading the log files
+// #define WITH_SPIFFS_LOG                    // log transmitted and received packets to SPIFFS
+
+#include "config.h"                        // user options
 
 // ============================================================================================================
 
@@ -86,9 +111,39 @@ void RFM_RESET(uint8_t On);              // RF module reset
 bool RFM_IRQ_isOn(void);                 // query the IRQ state
 
 #ifdef WITH_OLED
-int OLED_SetContrast(uint8_t Contrast);
-int OLED_PutLine(uint8_t Line, const char *Text);
+int OLED_SetContrast(uint8_t Contrast, uint8_t DispIdx=0);
+int OLED_PutLine(uint8_t Line, const char *Text, uint8_t DispIdx=0);
 #endif
+
+#ifdef WITH_SD
+esp_err_t SD_Mount(void);
+void      SD_Unmount();
+bool      SD_isMounted();
+int       SD_getSectors(void);
+int       SD_getSectorSize(void);
+#endif
+
+#ifdef WITH_BEEPER
+const uint8_t KNOB_Tick=15;              // for now, when there is no knob
+
+const uint8_t Play_Vol_0 = 0x00;
+const uint8_t Play_Vol_1 = 0x40;
+const uint8_t Play_Vol_2 = 0x80;
+const uint8_t Play_Vol_3 = 0xC0;
+
+const uint8_t Play_Oct_0 = 0x00;
+const uint8_t Play_Oct_1 = 0x10;
+const uint8_t Play_Oct_2 = 0x20;
+const uint8_t Play_Oct_3 = 0x30;
+
+void Play(uint8_t Note, uint8_t Len);    // put anote to play in the queue
+uint8_t Play_Busy(void);                 // check is the queue is empty or still busy playing ?
+
+void Play_TimerCheck(void);              // every ms serve the note playing
+
+void Beep(uint16_t Freq, uint8_t Duty, uint8_t DoubleAmpl);
+void Beep_Note(uint8_t Note);
+#endif // WITH_BEEPER
 
 void LED_PCB_On   (void);                // LED on the PCB for vizual indications
 void LED_PCB_Off  (void);
@@ -116,8 +171,10 @@ int  NVS_Init(void);                     // initialize non-volatile-storage in t
 int  BT_SPP_Init(void);
 #endif
 
+#ifdef WITH_SPIFFS
 int  SPIFFS_Register(const char *Path="/spiffs", const char *Label=0, size_t MaxOpenFiles=5);
 int  SPIFFS_Info(size_t &Total, size_t &Used, const char *Label=0);
+#endif
 
 uint8_t I2C_Read (uint8_t Bus, uint8_t Addr, uint8_t Reg, uint8_t *Data, uint8_t Len, uint8_t Wait=10);
 uint8_t I2C_Write(uint8_t Bus, uint8_t Addr, uint8_t Reg, uint8_t *Data, uint8_t Len, uint8_t Wait=10);
@@ -131,5 +188,7 @@ template <class Type>
 { return I2C_Read (Bus, Addr, Reg, (uint8_t *)&Object, sizeof(Type), Wait); }
 
 uint8_t I2C_Restart(uint8_t Bus);
+
+uint16_t BatterySense(int Samples=4); // [mV]
 
 #endif // __HAL_H__

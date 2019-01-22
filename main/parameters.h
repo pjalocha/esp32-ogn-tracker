@@ -4,7 +4,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#if defined(WITH_STM32) || defined(WITH_ESP32)
 #include "hal.h"
+#endif
 
 #include "ogn.h"
 
@@ -34,7 +36,7 @@ class FlashParameters
      } ;
    } ;
 
-    int16_t  RFchipFreqCorr; // [10Hz] frequency correction for crystal frequency offset
+    int16_t  RFchipFreqCorr; // [0.1ppm] frequency correction for crystal frequency offset
     int8_t   RFchipTxPower;  // [dBm] highest bit set => HW module (up to +20dBm Tx power)
     int8_t   RFchipTempCorr; // [degC] correction to the temperature measured in the RF chip
 
@@ -47,21 +49,24 @@ class FlashParameters
      { bool SaveToFlash:1;   // Save parameters from the config file to Flash
        bool       hasBT:1;   // has BT interface on the console
        bool       BT_ON:1;   // BT on after power up
+       bool manGeoidSepar:1; // GeoidSepar is manually configured as the GPS or MAVlink are not able to deliver it
      } ;
    } ;                       //
     int8_t  TimeCorr;        // [sec] it appears for ArduPilot you need to correct time by 3 seconds
 
    int16_t  GeoidSepar;      // [0.1m] Geoid-Separation, apparently ArduPilot MAVlink does not give this value (although present in the format)
+                             //  or it could be a problem of some GPSes
   uint8_t  PPSdelay;         // [ms] delay between the PPS and the data burst starts on the GPS UART (used when PPS failed or is not there)
   uint8_t  FreqPlan;         // force given frequency hopping plan
 
    static const uint8_t InfoParmLen = 16; // [char] max. size of an infp-parameter
-   static const uint8_t InfoParmNum = 11; // [int]  number of info-parameters
+   static const uint8_t InfoParmNum = 12; // [int]  number of info-parameters
          char *InfoParmValue(uint8_t Idx)      { return Idx<InfoParmNum ? Pilot + Idx*InfoParmLen:0; }
       uint8_t  InfoParmValueLen(uint8_t Idx)   { return strlen(InfoParmValue(Idx)); }
-   const char *InfoParmName(uint8_t Idx) const { static const char *Name[InfoParmNum] =
-                                               { "Pilot", "Manuf", "Model", "Type", "SN", "Reg", "ID", "Class", "Task", "Base", "ICE" } ;
-                                                  return Idx<InfoParmNum ? Name[Idx]:0; }
+//    const char *InfoParmName(uint8_t Idx) const { static const char *Name[InfoParmNum] =
+//                                                { "Pilot", "Manuf", "Model", "Type", "SN", "Reg", "ID", "Class",
+//                                                  "Task" , "Base" , "ICE"  , "PilotID" } ;
+//                                                   return Idx<InfoParmNum ? Name[Idx]:0; }
      char   Pilot[InfoParmLen];                // Pilot name
      char   Manuf[InfoParmLen];                // Manufacturer
      char   Model[InfoParmLen];                // Model
@@ -73,11 +78,15 @@ class FlashParameters
      char    Task[InfoParmLen];                // Competition task
      char    Base[InfoParmLen];                // Base airfield
      char     ICE[InfoParmLen];                // In Case of Emergency
+     char PilotID[InfoParmLen];                // Pilot ID based on his BT or WiFi MAC
 
-   // char BTname[8];
-   // char  BTpin[4];
    // char Copilot[16]
    // char Category[16]
+
+#ifdef WITH_BT_SPP
+   char BTname[16];
+   // char  BTpin[16];
+#endif
 
 #ifdef WITH_WIFI
    static const uint8_t WIFInameLen = 32;
@@ -115,30 +124,38 @@ class FlashParameters
      Call[9]=0; return 9; }
 
  public:
-  // void setDefault(void) { setDefaults(UniqueID[0] ^ UniqueID[1] ^ UniqueID[2]); }
 
   void setDefault(void)
   { setDefault(getUniqueAddress()); }
 
   void setDefault(uint32_t UniqueAddr)
-  { AcftID = 0x07000000 | (UniqueAddr&0x00FFFFFF);
-    RFchipFreqCorr =         0; // [10Hz]
+  { AcftID = ((uint32_t)DEFAULT_AcftType<<26) | 0x03000000 | (UniqueAddr&0x00FFFFFF);
+    RFchipFreqCorr =         0; // [0.1ppm]
 #ifdef WITH_RFM69W
     RFchipTxPower  =        13; // [dBm] for RFM69W
 #else
     RFchipTxPower  = 0x80 | 14; // [dBm] for RFM69HW
 #endif
     RFchipTempCorr =         0; // [degC]
-    CONbaud        =    115200; // [bps]
+    CONbaud        =    DEFAULT_CONbaud; // [bps]
     PressCorr      =         0; // [0.25Pa]
     TimeCorr       =         0; // [sec]
-    GeoidSepar     =       470; // [0.1m]
+    GeoidSepar     =    10*DEFAULT_GeoidSepar; // [0.1m]
 
-    FreqPlan       =         0; // [0..5]
-    PPSdelay       =       100; // [ms]
+    FreqPlan       =    DEFAULT_FreqPlan; // [0..5]
+    PPSdelay       =    DEFAULT_PPSdelay; // [ms]
 
     for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
       InfoParmValue(Idx)[0] = 0;
+#ifdef WITH_BT_SPP
+   getAprsCall(BTname);
+// #ifdef WITH_TBEAM
+//    strcpy(BTname, "TBEAM-OGN");
+// #else
+//    strcpy(BTname, "ESP32-OGN");
+// #endif
+   // strcpy(BTpin, "1234");
+#endif
 #ifdef WITH_WIFI
     for(uint8_t Idx=0; Idx<WIFIsets; Idx++)
     { WIFIname[Idx][0] = 0;
@@ -244,7 +261,7 @@ class FlashParameters
     Line[Len++]='/';
     Len+=Format_SignDec(Line+Len, (int16_t)getTxPower());
     Len+=Format_String(Line+Len, "dBm");
-    Line[Len++]=' '; Len+=Format_SignDec(Line+Len, (int32_t)RFchipFreqCorr/10, 2, 1); Len+=Format_String(Line+Len, "kHz");
+    Line[Len++]=' '; Len+=Format_SignDec(Line+Len, (int32_t)RFchipFreqCorr, 2, 1); Len+=Format_String(Line+Len, "ppm");
     Len+=Format_String(Line+Len, " CON:");
     Len+=Format_UnsDec(Line+Len, CONbaud);
     Len+=Format_String(Line+Len, "bps\n");
@@ -311,7 +328,7 @@ class FlashParameters
       if(Plan>5) Plan=5; FreqPlan=Plan; return 1; }
     if(strcmp(Name, "FreqCorr")==0)
     { int32_t Corr=0; if(Read_Float1(Corr, Value)<=0) return 0;
-      RFchipFreqCorr=10*Corr; return 1; }
+      RFchipFreqCorr=Corr; return 1; }
     if(strcmp(Name, "PressCorr")==0)
     { int32_t Corr=0; if(Read_Float1(Corr, Value)<=0) return 0;
       PressCorr=4*Corr/10; return 1; }
@@ -320,9 +337,23 @@ class FlashParameters
       TimeCorr=Corr; return 1; }
     if(strcmp(Name, "GeoidSepar")==0)
     { return Read_Float1(GeoidSepar, Value)<=0; }
+    if(strcmp(Name, "manGeoidSepar")==0)
+    { int32_t Man=0; if(Read_Int(Man, Value)<=0) return 0; 
+      manGeoidSepar=Man; }
+#ifdef WITH_BT_PWR
+    if(strcmp(Name, "Bluetooth")==0)
+    { int32_t bton=0; if(Read_Int(bton, Value)<=0) return 0;
+      // if (bton==2) //WAR: disable usart1 in order to be able to configure BT over 2nd USB
+      // { USART1_Disable();
+      //   bton=1; }
+      BT_ON=bton; return 1; }
+#endif
     for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
-    { if(strcmp(Name, InfoParmName(Idx))==0)
+    { if(strcmp(Name, OGN_Packet::InfoParmName(Idx))==0)
         return Read_String(InfoParmValue(Idx), Value, 16)<=0; }
+#ifdef WITH_BT_SPP
+    if(strcmp(Name, "BTname")==0) return Read_String(BTname, Value, 16)<=0;
+#endif
 #ifdef WITH_WIFI
     if(strcmp(Name, "WIFIname")==0) return Read_String(WIFIname[0], Value, WIFInameLen)<=0;
     if(strcmp(Name, "WIFIpass")==0) return Read_String(WIFIpass[0], Value, WIFIpassLen)<=0;
@@ -347,7 +378,7 @@ class FlashParameters
     *NameEnd=0;                                                                 // put NULL character just after the parameter name
     return ReadParam(Name, Value); }
 
-  int ReadFile(FILE *File)
+  int ReadFromFile(FILE *File)
   { char Line[80];                                                              // line buffer
     size_t Lines=0;                                                             // count interpreted lines
     for( ; ; )                                                                  // loop over lines
@@ -356,46 +387,46 @@ class FlashParameters
       if(ReadLine(Line)) Lines++; }                                             // interprete the line, count if positive
     return Lines; }                                                             // return number of interpreted lines
 
-  int ReadFile(const char *Name = "/spiffs/TRACKER.CFG")
+  int ReadFromFile(const char *Name = "/spiffs/TRACKER.CFG")
   { FILE *File=fopen(Name, "rt"); if(File==0) return 0;
-    int Lines=ReadFile(File);
+    int Lines=ReadFromFile(File);
     fclose(File); return Lines; }
 
   int Write_Hex(char *Line, const char *Name, uint32_t Value, uint8_t Digits)
-  { uint8_t Len=Format_String(Line, Name, 12, 0);
+  { uint8_t Len=Format_String(Line, Name, 14, 0);
     Len+=Format_String(Line+Len, " = 0x");
     Len+=Format_Hex(Line+Len, Value, Digits);
     Len+=Format_String(Line+Len, ";");
     Line[Len]=0; return Len; }
 
   int Write_UnsDec(char *Line, const char *Name, uint32_t Value)
-  { uint8_t Len=Format_String(Line, Name, 12, 0);
+  { uint8_t Len=Format_String(Line, Name, 14, 0);
     Len+=Format_String(Line+Len, " = ");
     Len+=Format_UnsDec(Line+Len, Value);
     Len+=Format_String(Line+Len, ";");
     Line[Len]=0; return Len; }
 
   int Write_SignDec(char *Line, const char *Name, int32_t Value)
-  { uint8_t Len=Format_String(Line, Name, 12, 0);
+  { uint8_t Len=Format_String(Line, Name, 14, 0);
     Len+=Format_String(Line+Len, " = ");
     Len+=Format_SignDec(Line+Len, Value);
     Len+=Format_String(Line+Len, ";");
     Line[Len]=0; return Len; }
 
   int Write_Float1(char *Line, const char *Name, int32_t Value)
-  { uint8_t Len=Format_String(Line, Name, 12, 0);
+  { uint8_t Len=Format_String(Line, Name, 14, 0);
     Len+=Format_String(Line+Len, " = ");
     Len+=Format_SignDec(Line+Len, Value, 2, 1);
     Len+=Format_String(Line+Len, ";");
     Line[Len]=0; return Len; }
 
   int Write_String(char *Line, const char *Name, char *Value, uint8_t MaxLen=16)
-  { uint8_t Len=Format_String(Line, Name, 12, 0);
+  { uint8_t Len=Format_String(Line, Name, 14, 0);
     Len+=Format_String(Line+Len, " = ");
     Len+=Format_String(Line+Len, Value, 0, MaxLen);
     Line[Len]=0; return Len; }
 
-  int WriteFile(FILE *File)
+  int WriteToFile(FILE *File)
   { char Line[80];
     Write_Hex    (Line, "Address"   ,          Address ,       6); strcat(Line, " # [24-bit]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Hex    (Line, "AddrType"  ,          AddrType,       1); strcat(Line, " #  [2-bit]\n"); if(fputs(Line, File)==EOF) return EOF;
@@ -404,14 +435,21 @@ class FlashParameters
     Write_SignDec(Line, "TxPower"   ,          getTxPower()     ); strcat(Line, " #  [  dBm]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_UnsDec (Line, "TxHW"      ,(uint32_t)isTxTypeHW()     ); strcat(Line, " #  [ bool]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_UnsDec (Line, "FreqPlan"  ,(uint32_t)FreqPlan         ); strcat(Line, " #  [ 0..5]\n"); if(fputs(Line, File)==EOF) return EOF;
-    Write_Float1 (Line, "FreqCorr"  , (int32_t)RFchipFreqCorr/10); strcat(Line, " #  [  kHz]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_Float1 (Line, "FreqCorr"  , (int32_t)RFchipFreqCorr   ); strcat(Line, " #  [  ppm]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_SignDec(Line, "TempCorr"  , (int32_t)RFchipTempCorr   ); strcat(Line, " #  [ degC]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Float1 (Line, "PressCorr" , (int32_t)PressCorr*10/4   ); strcat(Line, " #  [   Pa]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_SignDec(Line, "TimeCorr"  , (int32_t)TimeCorr         ); strcat(Line, " #  [    s]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Float1 (Line, "GeoidSepar",          GeoidSepar       ); strcat(Line, " #  [    m]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_UnsDec (Line, "manGeoidSepar" ,   manGeoidSepar       ); strcat(Line, " #  [  1|0]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_UnsDec (Line, "PPSdelay"  ,(uint32_t)PPSdelay         ); strcat(Line, " #  [   ms]\n"); if(fputs(Line, File)==EOF) return EOF;
+#ifdef WITH_BT_PWR
+    Write_UnsDec (Line, "Bluetooth" ,          BT_ON            ); strcat(Line, " #  [  1|0]\n"); if(fputs(Line, File)==EOF) return EOF;
+#endif
     for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
-    { Write_String (Line, InfoParmName(Idx), InfoParmValue(Idx)); strcat(Line, " #  [char]\n"); if(fputs(Line, File)==EOF) return EOF; }
+    { Write_String (Line, OGN_Packet::InfoParmName(Idx), InfoParmValue(Idx)); strcat(Line, " #  [char]\n"); if(fputs(Line, File)==EOF) return EOF; }
+#ifdef WITH_BT_SPP
+    strcpy(Line, "BTname         = "); strcat(Line, BTname); strcat(Line, " #  [char]\n"); if(fputs(Line, File)==EOF) return EOF;
+#endif
 #ifdef WITH_WIFI
     for(uint8_t Idx=0; Idx<WIFIsets; Idx++)
     { if(WIFIname[Idx][0]==0) continue;
@@ -422,9 +460,9 @@ class FlashParameters
 #endif
     return 10+InfoParmNum; }
 
-  int WriteFile(const char *Name = "/spiffs/TRACKER.CFG")
+  int WriteToFile(const char *Name = "/spiffs/TRACKER.CFG")
   { FILE *File=fopen(Name, "wt"); if(File==0) return 0;
-    int Lines=WriteFile(File);
+    int Lines=WriteToFile(File);
     fclose(File); return Lines; }
 
   void Write(void (*Output)(char))
@@ -436,14 +474,21 @@ class FlashParameters
     Write_SignDec(Line, "TxPower"   ,          getTxPower()     ); strcat(Line, " #  [  dBm]\n"); Format_String(Output, Line);
     Write_UnsDec (Line, "TxHW"      ,(uint32_t)isTxTypeHW()     ); strcat(Line, " #  [ bool]\n"); Format_String(Output, Line);
     Write_UnsDec (Line, "FreqPlan"  ,(uint32_t)FreqPlan         ); strcat(Line, " #  [ 0..5]\n"); Format_String(Output, Line);
-    Write_Float1 (Line, "FreqCorr"  , (int32_t)RFchipFreqCorr/10); strcat(Line, " #  [  kHz]\n"); Format_String(Output, Line);
+    Write_Float1 (Line, "FreqCorr"  , (int32_t)RFchipFreqCorr   ); strcat(Line, " #  [  ppm]\n"); Format_String(Output, Line);
     Write_SignDec(Line, "TempCorr"  , (int32_t)RFchipTempCorr   ); strcat(Line, " #  [ degC]\n"); Format_String(Output, Line);
     Write_Float1 (Line, "PressCorr" , (int32_t)PressCorr*10/4   ); strcat(Line, " #  [   Pa]\n"); Format_String(Output, Line);
     Write_SignDec(Line, "TimeCorr"  , (int32_t)TimeCorr         ); strcat(Line, " #  [    s]\n"); Format_String(Output, Line);
     Write_Float1 (Line, "GeoidSepar",          GeoidSepar       ); strcat(Line, " #  [    m]\n"); Format_String(Output, Line);
+    Write_UnsDec (Line, "manGeoidSepar" ,      manGeoidSepar    ); strcat(Line, " #  [  1|0]\n"); Format_String(Output, Line);
     Write_UnsDec (Line, "PPSdelay"  ,(uint32_t)PPSdelay         ); strcat(Line, " #  [   ms]\n"); Format_String(Output, Line);
+#ifdef WITH_BT_PWR
+    Write_UnsDec (Line, "Bluetooth" ,          BT_ON            ); strcat(Line, " #  [  1|0]\n"); Format_String(Output, Line);
+#endif
+#ifdef WITH_BT_SPP
+    strcpy(Line, "BTname         = "); strcat(Line, BTname); strcat(Line, " #  [char]\n"); Format_String(Output, Line);
+#endif
     for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
-    { Write_String (Line, InfoParmName(Idx), InfoParmValue(Idx)); strcat(Line, " #  [char]\n"); Format_String(Output, Line); }
+    { Write_String (Line, OGN_Packet::InfoParmName(Idx), InfoParmValue(Idx)); strcat(Line, " #  [char]\n"); Format_String(Output, Line); }
 #ifdef WITH_WIFI
     for(uint8_t Idx=0; Idx<WIFIsets; Idx++)
     { if(WIFIname[Idx][0]==0) continue;
@@ -457,4 +502,3 @@ class FlashParameters
 } ;
 
 #endif // __PARAMETERS_H__
-

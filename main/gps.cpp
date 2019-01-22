@@ -3,7 +3,7 @@
 
 #include "hal.h"
 #include "gps.h"
-#include "ctrl.h"
+// #include "ctrl.h"
 
 #include "nmea.h"
 #include "ubx.h"
@@ -77,7 +77,7 @@ uint32_t GPS_getBaudRate (void) { return BaudRate[BaudRateIdx]; }
 uint32_t GPS_nextBaudRate(void) { BaudRateIdx++; if(BaudRateIdx>=BaudRates) BaudRateIdx=0; return GPS_getBaudRate(); }
 
 const uint32_t GPS_TargetBaudRate = 57600; // BaudRate[4]; // [bps] must be one of the baud rates known by the autbaud
-const uint8_t  GPS_dynModel       =     7; // for UBX GPS's: 6 = airborne with >1g, 7 = with >2g
+const uint8_t  GPS_TargetDynModel =     7; // for UBX GPS's: 6 = airborne with >1g, 7 = with >2g
 
 // ----------------------------------------------------------------------------
 
@@ -164,51 +164,79 @@ static void GPS_BurstStart(void)                                           // wh
   Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60);
   CONS_UART_Write('.');
   Format_UnsDec(CONS_UART_Write, TimeSync_msTime(),3);
-  Format_String(CONS_UART_Write, " -> GPS_BurstStart()\n");
+  Format_String(CONS_UART_Write, " -> GPS_BurstStart() GPS:");
+  Format_Hex(CONS_UART_Write, GPS_Status.Flags);
+  Format_String(CONS_UART_Write, "\n");
   xSemaphoreGive(CONS_Mutex);
 #endif
 #ifdef WITH_GPS_CONFIG
   static uint16_t QueryWait=0;
-  if(GPS_Status.NMEA)                                                      // if there is communication with the GPS already
+  if(GPS_Status.NMEA || GPS_Status.UBX)                                  // if there is communication with the GPS already
   { if(QueryWait)
     { QueryWait--; }
     else
     { if(!GPS_Status.ModeConfig)                                             // if GPS navigation mode is not done yet
       { // Format_String(CONS_UART_Write, "CFG_NAV5 query...\n");
 #ifdef WITH_GPS_UBX
-        UBX_RxMsg::SendPoll(0x06, 0x24, GPS_UART_Write);                     // send the query for the navigation mode setting
+        UBX_RxMsg::Send(0x06, 0x24, GPS_UART_Write);                     // send the query for the navigation mode setting
+        if(!GPS_Status.NMEA)                                             // if NMEA sentences are not there
+        { UBX_CFG_MSG CFG_MSG;                                           // send CFG_MSG to enable the NMEA sentences
+          CFG_MSG.msgClass = 0xF0;                                       // NMEA class
+          CFG_MSG.rate     =    1;                                       // send every measurement event
+          // CFG_MSG.rate[0]  =    1;
+          // CFG_MSG.rate[1]  =    1;
+          // CFG_MSG.rate[2]  =    1;
+          // CFG_MSG.rate[3]  =    1;
+          // CFG_MSG.rate[4]  =    1;
+          // CFG_MSG.rate[5]  =    1;
+          CFG_MSG.msgID    = 0x00;                                        // ID for GGA
+          UBX_RxMsg::Send(0x06, 0x01, GPS_UART_Write, (uint8_t *)(&CFG_MSG), sizeof(CFG_MSG));
+          CFG_MSG.msgID    = 0x02;                                        // ID for RMC
+          UBX_RxMsg::Send(0x06, 0x01, GPS_UART_Write, (uint8_t *)(&CFG_MSG), sizeof(CFG_MSG));
+          CFG_MSG.msgID    = 0x04;                                        // ID for GSA
+          UBX_RxMsg::Send(0x06, 0x01, GPS_UART_Write, (uint8_t *)(&CFG_MSG), sizeof(CFG_MSG));
+        }
 #endif
       }
       if(!GPS_Status.BaudConfig)                                             // if GPS baud config is not done yet
       { // Format_String(CONS_UART_Write, "CFG_PRT query...\n");
 #ifdef WITH_GPS_UBX
-        UBX_RxMsg::SendPoll(0x06, 0x00, GPS_UART_Write);                     // send the query for the port config to have a template configuration packet
+        // uint8_t UART1_Port=1;
+        // UBX_RxMsg::Send(0x06, 0x00, GPS_UART_Write, &UART1_Port, 1);     // send the query for the port config to have a template configuration packet
+        UBX_RxMsg::Send(0x06, 0x00, GPS_UART_Write);                     // send the query for the port config to have a template configuration packet
 #endif
 #ifdef WITH_GPS_MTK
-        static char GPS_Cmd[32];
+        char GPS_Cmd[36];
         strcpy(GPS_Cmd, "$PMTK251,");                                        // MTK command to change the baud rate
         uint8_t Len = strlen(GPS_Cmd);
         Len += Format_UnsDec(GPS_Cmd+Len, GPS_TargetBaudRate);
         Len += NMEA_AppendCheck(GPS_Cmd, Len);
+        GPS_Cmd[Len++]='\r';                                                 // this is apparently needed but it should not, as ESP32 does auto-CR ??
+        GPS_Cmd[Len++]='\n';
         GPS_Cmd[Len]=0;
-        // Serial.println(GPS_Cmd);
         Format_String(GPS_UART_Write, GPS_Cmd, Len, 0);
-        GPS_UART_Write('\r'); GPS_UART_Write('\n');
+#ifdef DEBUG_PRINT
+        xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+        Format_String(CONS_UART_Write, "GPS <- ");
+        Format_String(CONS_UART_Write, GPS_Cmd, Len, 0);
+        xSemaphoreGive(CONS_Mutex);
+#endif
 #endif
 #ifdef WITH_GPS_SRF
+        char GPS_Cmd[36];
         strcpy(GPS_Cmd, "$PSRF100,1,");                                        // SiRF command to change the baud rate
         Len = strlen(GPS_Cmd);
         Len += Format_UnsDec(GPS_Cmd+Len, GPS_TargetBaudRate);
         strcpy(GPS_Cmd+Len, ",8,1,0");
         Len = strlen(GPS_Cmd);
         Len += NMEA_AppendCheck(GPS_Cmd, Len);
+        GPS_Cmd[Len++]='\r';                                                 // this is apparently needed but it should not, as ESP32 does auto-CR ??
+        GPS_Cmd[Len++]='\n';
         GPS_Cmd[Len]=0;
-        // Serial.println(GPS_Cmd);
         Format_String(GPS_UART_Write, GPS_Cmd, Len, 0);
-        GPS_UART_Write('\r'); GPS_UART_Write('\n');
 #endif
       }
-      QueryWait=300;
+      QueryWait=60;
     }
   }
   else { QueryWait=0; }
@@ -230,12 +258,14 @@ static void GPS_BurstComplete(void)                                        // wh
   }
 #endif
 #ifdef DEBUG_PRINT
-  Position[PosIdx].PrintLine(Line);
+  Position[PosIdx].PrintLine(Line);                                   // print out the GPS position in a single-line format
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60, 2);
   CONS_UART_Write('.');
   Format_UnsDec(CONS_UART_Write, TimeSync_msTime(),3);
-  Format_String(CONS_UART_Write, " -> GPS_BurstComplete()\nGPS");
+  Format_String(CONS_UART_Write, " -> GPS_BurstComplete() GPS:");
+  Format_Hex(CONS_UART_Write, GPS_Status.Flags);
+  Format_String(CONS_UART_Write, "\nGPS");
   CONS_UART_Write('0'+PosIdx); CONS_UART_Write(':'); CONS_UART_Write(' ');
   Format_String(CONS_UART_Write, Line);
   xSemaphoreGive(CONS_Mutex);
@@ -252,7 +282,10 @@ static void GPS_BurstComplete(void)                                        // wh
       }
     }
     if(Position[PosIdx].isValid())                                         // position is complete and locked
-    { Position[PosIdx].calcLatitudeCosine();
+    { if(Parameters.manGeoidSepar)                                         // if GeoidSepar is "manual" - this implies the GPS does not correct for it
+      { Position[PosIdx].GeoidSeparation = Parameters.GeoidSepar;          // copy the manually set GeoidSepar
+        Position[PosIdx].Altitude -= Parameters.GeoidSepar; }              // correct the Altitude - we likely need a separate flag for this
+      Position[PosIdx].calcLatitudeCosine();
       GPS_TimeSinceLock++;
       GPS_Altitude=Position[PosIdx].Altitude;
       GPS_Latitude=Position[PosIdx].Latitude;
@@ -382,22 +415,21 @@ static void GPS_NMEA(void)                                                 // wh
   Format_String(CONS_UART_Write, "\n");
   xSemaphoreGive(CONS_Mutex);
 #endif
+#ifndef WITH_GPS_NMEA_PASS
+  // these NMEA from GPS we want to pass to the console
   if( NMEA.isP() || NMEA.isGxRMC() || NMEA.isGxGGA() || NMEA.isGxGSA() || NMEA.isGPTXT() )
-  { // static char CRNL[3] = "\r\n";
-    // if(CONS_UART_Free()>=128)
+  // we would need to patch the GGA here for the GPS which does not calc. nor correct for GeoidSepar
+#endif
+  { // if(CONS_UART_Free()>=128)
     { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_String(CONS_UART_Write, (const char *)NMEA.Data, 0, NMEA.Len);
       Format_String(CONS_UART_Write, "\n");
-      // Format_Bytes(CONS_UART_Write, NMEA.Data, NMEA.Len);
-      // Format_Bytes(CONS_UART_Write, (const uint8_t *)CRNL, 2);
       xSemaphoreGive(CONS_Mutex); }
 #ifdef WITH_SDLOG
     if(Log_Free()>=128)
     { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
       Format_String(Log_Write, (const char *)NMEA.Data, 0, NMEA.Len);
       Log_Write('\n');
-      // Format_Bytes(Log_Write, NMEA.Data, NMEA.Len);
-      // Format_Bytes(Log_Write, (const uint8_t *)CRNL, 2);
       xSemaphoreGive(Log_Mutex); }
 #endif
   }
@@ -406,8 +438,12 @@ static void GPS_NMEA(void)                                                 // wh
 #ifdef WITH_GPS_UBX
 #ifdef DEBUG_PRINT
 static void DumpUBX(void)
-{ Format_String(CONS_UART_Write, "UBX:");
-  for(uint8_t Idx=0; Idx<20; Idx++)
+{ Format_String(CONS_UART_Write, "UBX: ");
+  Format_UnsDec(CONS_UART_Write, xTaskGetTickCount(), 6, 3);
+  CONS_UART_Write(' '); Format_Hex(CONS_UART_Write, UBX.Class);
+  CONS_UART_Write(':'); Format_Hex(CONS_UART_Write, UBX.ID);
+  CONS_UART_Write('_'); Format_UnsDec(CONS_UART_Write, (uint16_t)UBX.Bytes);
+  for(uint8_t Idx=0; Idx<UBX.Bytes; Idx++)
   { CONS_UART_Write(' '); Format_Hex(CONS_UART_Write, UBX.Byte[Idx]); }
   Format_String(CONS_UART_Write, "\n"); }
 #endif // DEBUG_PRINT
@@ -416,9 +452,12 @@ static void GPS_UBX(void)                                                       
 { GPS_Status.UBX=1;
   GPS_Status.BaudConfig = (GPS_getBaudRate() == GPS_TargetBaudRate);
   LED_PCB_Flash(2);
+  // DumpUBX();
+  // Position[PosIdx].ReadUBX(UBX);
 #ifdef WITH_GPS_UBX_PASS
   { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);                                    // send ther UBX packet to the console
     UBX.Send(CONS_UART_Write);
+    // DumpUBX();
     // Format_String(CONS_UART_Write, "UBX");
     // Format_Hex(CONS_UART_Write, UBX.Class);
     // Format_Hex(CONS_UART_Write, UBX.ID);
@@ -440,6 +479,7 @@ static void GPS_UBX(void)                                                       
     if(CFG->baudRate==GPS_TargetBaudRate) GPS_Status.BaudConfig=1;                // if baudrate same as our target then declare the baud config is done
     else                                                                          // otherwise use the received packet as the template
     { CFG->baudRate=GPS_TargetBaudRate;                                           // set the baudrate to our target
+      CFG->outProtoMask|=0x02;                                                    // enable NMEA protocol
       UBX.RecalcCheck();                                                          // reclaculate the check sum
 #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -460,9 +500,9 @@ static void GPS_UBX(void)                                                       
     Format_String(CONS_UART_Write, "\n");
     xSemaphoreGive(CONS_Mutex);
 #endif
-    if(CFG->dynModel==GPS_dynModel) GPS_Status.ModeConfig=1;                      // dynamic model = 6 => Airborne with >1g acceleration
+    if(CFG->dynModel==GPS_TargetDynModel) GPS_Status.ModeConfig=1;                // dynamic model = 6 => Airborne with >1g acceleration
     else
-    { CFG->dynModel=GPS_dynModel; CFG->mask = 0x01;                               //
+    { CFG->dynModel=GPS_TargetDynModel; CFG->mask = 0x01;                         //
       UBX.RecalcCheck();                                                          // reclaculate the check sum
       UBX.Send(GPS_UART_Write);                                                   // send this UBX packet
     }
@@ -478,6 +518,35 @@ static void GPS_UBX(void)                                                       
     Format_Hex(CONS_UART_Write,  UBX.Byte[1]);
     Format_String(CONS_UART_Write, "\n");
     xSemaphoreGive(CONS_Mutex);
+/*
+    if(UBX.Byte[0]==0x06 && UBX.Byte[1]==0x00 && UBX.ID==0)  // negative ACK to CFG-PRT
+    { static char GPS_Cmd[36];
+      strcpy(GPS_Cmd, "$PUBX,41,1,0007,0003,");              // $PUBX command to change the baud rate
+      uint8_t Len = strlen(GPS_Cmd);
+      Len += Format_UnsDec(GPS_Cmd+Len, GPS_TargetBaudRate);
+      GPS_Cmd[Len++]=','; GPS_Cmd[Len++]='0';
+      Len += NMEA_AppendCheck(GPS_Cmd, Len);
+      GPS_Cmd[Len++]='\n';
+      GPS_Cmd[Len]=0;
+      Format_String(GPS_UART_Write, GPS_Cmd, Len, 0);
+      Format_String(CONS_UART_Write, GPS_Cmd, Len, 0);
+    }
+*/
+/*
+    { UBX_CFG_PRT Cmd =
+      { portID:1,                        // 0 = I2C, 1 = UART1, 2 = UART2, 3 = USB, 4 = SPI
+        reserved0:0,
+        txReady:0,
+        mode:0x08D0,                     // 00 10x x 11 x 1 xxxx => 0x08D0
+        baudRate:GPS_TargetBaudRate,     // [bps]
+        inProtoMask:7,                   // bit 0:UBX, bit 1:NMEA
+        outProtoMask:3,                  // bit 0:UBX, bit 1:NMEA
+        reserved4:0,
+        reserved5:0,
+      } ;
+      UBX_RxMsg::Send(0x06, 0x00, GPS_UART_Write, (uint8_t*)&Cmd, sizeof(Cmd));
+    }
+*/
   }
 #endif
 #endif // WITH_GPS_CONFIG
@@ -635,6 +704,10 @@ static void GPS_MAV(void)                                                  // wh
 // $PMTK251,57600*2C<CR><LF>
 // $PMTK251,115200*1F<CR><LF>
 
+// Baud setting for UBX GPS:
+// $PUBX,41,1,0007,0003,9600,0*10<CR><LF>
+// $PUBX,41,1,0007,0003,38400,0*20<CR><LF>
+
 // static const char *MTK_SetBaudrate_115200 = "$PMTK251,115200*1F\r\n";
 
 
@@ -754,7 +827,7 @@ void vTaskGPS(void* pvParameters)
     { if(GPS_Burst.Active)                                                 // if still in burst
       { if(!GPS_Burst.Complete) GPS_BurstComplete();
         GPS_BurstEnd(); }                                                  // burst just ended
-      else if(LineIdle>=1000)                                              // if idle for more than 1 sec
+      else if(LineIdle>=1500)                                              // if idle for more than 1.5 sec
       { GPS_Status.Flags=0; }
       GPS_Burst.Flags=0;
     }

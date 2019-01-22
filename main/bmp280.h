@@ -25,15 +25,19 @@ class BMP280
    static const uint8_t REG_TEMP_MSB  = 0xFA; // Temperature result: MSB
    static const uint8_t REG_TEMP_LSB  = 0xFB; // Temperature result: LSB
    static const uint8_t REG_TEMP_XLSB = 0xFC; // Temperature result: more LSB
+
   public:
    uint8_t Bus;                              // which I2C bus
    uint8_t ADDR;                             // detected I2C address
+   uint8_t ID;                               // 0x58 for BMP280, 0x60 for BME280
+
   private:
    union
    { int16_t Calib[13];
      struct
-     { uint16_t T1;                // 13 calibration values from EEPROM
+     { uint16_t T1;                // 13 temperature/pressure calibration values from EEPROM
         int16_t T2, T3;
+
        uint16_t P1;
         int16_t P2, P3, P4, P5, P6, P7, P8, P9;
         int16_t D;
@@ -41,11 +45,16 @@ class BMP280
    } ;
   public:
      uint8_t Error;          //      error on the I2C bus (0=no error)
+
      int32_t RawTemp;        //      raw temperature - to be processed
      int32_t FineTemp;       //      for pressure calc.
      int16_t Temperature;    // [0.1 degC] after processing
+
      int32_t RawPress;       //      raw pressure - to be processed
     uint32_t Pressure;       // [0.25Pa  ] after processing
+
+    // uint16_t RawHum;        //      raw humidity - to be processed
+    // int32_t Humidity;       // [0.1 %] relative humidity after processing
 
   public:
 
@@ -66,13 +75,14 @@ class BMP280
 
   uint8_t CheckID(void) // check ID, to make sure the BMP280 is connected and works correctly
   			// if it finds a BME280 it will use it without the humidity part
-   { uint8_t ID;
-     ADDR=0;
+   { ADDR=0;
      Error=I2C_Read(Bus, ADDR0, REG_ID, ID);
      if( (!Error) && ( (ID==0x58) || (ID==0x60) ) ) { ADDR=ADDR0; return 0; }
      Error=I2C_Read(Bus, ADDR1, REG_ID, ID);
      if( (!Error) && ( (ID==0x58) || (ID==0x60) ) ) { ADDR=ADDR1; return 0; }
      return 1; } // 0 => no error and correct ID
+
+  uint8_t hasHumidity(void) const { return ID==0x60; } // is this BME280 ? Can still be used as BMP280
 
   uint8_t ReadCalib(void) // read the calibration constants from the EEPROM
   { Error=I2C_Read(Bus, ADDR, REG_CALIB, (uint8_t *)Calib, 2*13);
@@ -94,31 +104,31 @@ class BMP280
   { uint8_t Data=0x00; Error=I2C_Write(Bus, ADDR, REG_CONFIG, Data); if(Error) return Error;
             Data=0x55; Error=I2C_Write(Bus, ADDR, REG_CTRL,   Data); return Error; } // P.osp=16x, T.osp=2x
 
-  uint8_t ReadRawPress(void)
+  uint8_t ReadRawPress(void)                               // read raw pressure ADC conversion result
   { RawPress=0;
     Error=I2C_Read(Bus, ADDR, REG_PRESS, (uint8_t *)(&RawPress), 3); if(Error) return Error;
     RawPress = ((RawPress<<16)&0xFF0000) | (RawPress&0x00FF00) | ((RawPress>>16)&0x0000FF);
     RawPress>>=4;
     return 0; }
 
-  uint8_t ReadRawTemp(void)
+  uint8_t ReadRawTemp(void)                                // read raw temperature ADC conversion result
   { RawTemp=0;
     Error=I2C_Read(Bus, ADDR, REG_TEMP, (uint8_t *)(&RawTemp), 3); if(Error) return Error;
     RawTemp = ((RawTemp<<16)&0xFF0000) | (RawTemp&0x00FF00) | ((RawTemp>>16)&0x0000FF);
     RawTemp>>=4;
     return 0; }
 
-  uint8_t Acquire(void)
+  uint8_t Acquire(void)                                    // trigger the readout and read raw results
   { if(Trigger()) return Error;
     if(WaitReady()!=1) return Error;
     if(ReadRawTemp()) return Error;
     return ReadRawPress(); }
 
-  void Calculate(void)
-  { CalcTemperature();
-    CalcPressure(); }
+  void Calculate(void)                                     // calculate physical values from raw ADC readouts
+  { calcTemperature();                                     // must be in this order: temperature first
+    calcPressure(); }
 
-  void CalcTemperature(void)   // calculate the temperature from raw readout and calibration values
+  void calcTemperature(void)   // calculate the temperature from raw readout and calibration values
   { int32_t var1 = ((((RawTemp>>3) - ((int32_t)T1<<1))) * ((int32_t)T2)) >> 11;
     int32_t var2 = ( ( (((RawTemp>>4) - (int32_t)T1) * ((RawTemp>>4) - (int32_t)T1) ) >> 12) * ((int32_t)T3) ) >> 14;
     FineTemp = var1 + var2;
@@ -126,7 +136,7 @@ class BMP280
     // Temperature = ( (var1+var2) * 5 + 128) >> 8; // [0.01degC]
   }
 
-  void CalcPressure(void)      // calculate the pressure - must calculate the temperature first !
+  void calcPressure(void)      // calculate the pressure - must calculate the temperature first !
   {
     int64_t var1 = ((int64_t)FineTemp) - 128000;
     int64_t var2 = var1 * var1 * (int64_t)P6;

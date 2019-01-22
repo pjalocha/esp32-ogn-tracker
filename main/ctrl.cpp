@@ -1,12 +1,23 @@
 #include <stdio.h>
 
+#include <sys/types.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "esp_system.h"
+
 #include "hal.h"
 
 #include "ctrl.h"
+#include "log.h"
 
 #include "gps.h"
+#include "ubx.h"
 #include "timesync.h"
 #include "format.h"
+
+// #define DEBUG_PRINT
 
 // ========================================================================================================================
 
@@ -90,8 +101,11 @@ int OLED_DisplayPosition(GPS_Position *GPS=0, uint8_t LineIdx=2)
 // ========================================================================================================================
 
 static NMEA_RxMsg NMEA;
+#ifdef WITH_GPS_UBX_PASS
+static UBX_RxMsg  UBX;
+#endif
 
-static char Line[80];
+static char Line[128];
 
 static void PrintParameters(void)                               // print parameters stored in Flash
 { Parameters.Print(Line);
@@ -122,10 +136,38 @@ static void ReadParameters(void)  // read parameters requested by the user in th
 }
 #endif
 
+#ifdef WITH_LOG
+static void ListLogFile(void)
+{ if(NMEA.Parms!=1) return;
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "ListLogFile() ");
+  Format_String(CONS_UART_Write, (const char *)NMEA.ParmPtr(0), 0, 12);
+  Format_String(CONS_UART_Write, " ");
+  Format_UnsDec(CONS_UART_Write, (uint32_t)NMEA.ParmLen(0));
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
+  uint32_t FileTime = SPIFFSlog_ReadShortFileTime((const char *)NMEA.ParmPtr(0), NMEA.ParmLen(0));
+  if(FileTime==0) return;
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "ListLogFile() ");
+  Format_Hex(CONS_UART_Write, FileTime);
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
+  SPIFFSlog_ListFile(FileTime);
+}
+#endif
+
 static void ProcessNMEA(void)     // process a valid NMEA that got to the console
 {
 #ifdef WITH_CONFIG
   if(NMEA.isPOGNS()) ReadParameters();
+#endif
+#ifdef WITH_LOG
+  if(NMEA.isPOGNL()) ListLogFile();
 #endif
 }
 
@@ -146,25 +188,84 @@ static void ProcessCtrlC(void)                                  // print system 
   if(GPS_Status.BaudConfig)  Format_String(CONS_UART_Write, ",BaudOK");
   if(GPS_Status.ModeConfig)  Format_String(CONS_UART_Write, ",ModeOK");
   CONS_UART_Write('\r'); CONS_UART_Write('\n');
-  PrintTasks(CONS_UART_Write);
+  PrintTasks(CONS_UART_Write);                               // print the FreeRTOS tasks
+
+#ifdef WITH_SPIFFS
+  char FullName[32];
+  strcpy(FullName, "/spiffs/");
+  struct stat Stat;
+  uint32_t Files=0;                                          // count/list files in SPIFFS
+  DIR *Dir=opendir(FullName);                                // open SPIFFS top directory
+  if(Dir)
+  { for( ; ; )                                               // loop over files
+    { struct dirent *Ent = readdir(Dir); if(!Ent) break;     // get the next file of the directory
+      if(Ent->d_type != DT_REG) continue;                    // if not a regular file (directory, link, ...): then skip
+      char *Name = Ent->d_name;
+      strcpy(FullName+8, Name);
+      if(stat(FullName, &Stat)<0) continue;
+      Format_String(CONS_UART_Write, FullName);
+      CONS_UART_Write(' ');
+      Format_UnsDec(CONS_UART_Write, (uint32_t)Stat.st_size);
+      // if(Stat.st_size==0) { unlink(FullName); }           // remove files with zero length
+      Format_String(CONS_UART_Write, "\n");
+      Files++; }                                             // count the (regular) files
+    closedir(Dir); }
+  Format_String(CONS_UART_Write, "SPIFFS: ");
   size_t Total, Used;
-  if(SPIFFS_Info(Total, Used)==0)
-  { Format_String(CONS_UART_Write, "SPIFFS: ");
-    Format_UnsDec(CONS_UART_Write, Used/1024);
+  if(SPIFFS_Info(Total, Used)==0)                            // get the SPIFFS usage summary
+  { Format_UnsDec(CONS_UART_Write, Used/1024);
     Format_String(CONS_UART_Write, "kB used, ");
     Format_UnsDec(CONS_UART_Write, Total/1024);
-    Format_String(CONS_UART_Write, "kB total\n"); }
-  Parameters.WriteFile(stdout);
-  xSemaphoreGive(CONS_Mutex); }
+    Format_String(CONS_UART_Write, "kB total, "); }
+  Format_UnsDec(CONS_UART_Write, Files);
+  Format_String(CONS_UART_Write, " files\n");
+  Parameters.Write(CONS_UART_Write);                         // write the parameters to the console
+  // Parameters.WriteFile(stdout);                                   // write the parameters to the stdout
+#endif // WITH_SPIFFS
+
+#ifdef WITH_SD
+  Format_String(CONS_UART_Write, "SD card:");
+  if(SD_isMounted())
+  { Format_UnsDec(CONS_UART_Write, (uint32_t)SD_getSectors());
+    CONS_UART_Write('x');
+    Format_UnsDec(CONS_UART_Write, (uint32_t)SD_getSectorSize()*5/512, 2, 1);
+    Format_String(CONS_UART_Write, "KB"); }
+  else
+  { Format_String(CONS_UART_Write, " not mounted"); }
+  Format_String(CONS_UART_Write, "\n");
+#endif
+
+  xSemaphoreGive(CONS_Mutex);
+}
+
+static void ProcessCtrlL(void)                                    // print system state to the console
+{ SPIFFSlog_ListFiles(); }
+
+
 
 static void ProcessInput(void)
 { for( ; ; )
   { uint8_t Byte; int Err=CONS_UART_Read(Byte); if(Err<=0) break; // get byte from console, if none: exit the loop
-    if(Byte==0x03) ProcessCtrlC();                            // if Ctrl-C received
-    NMEA.ProcessByte(Byte);                                   // pass the byte through the NMEA processor
-    if(NMEA.isComplete())                                     // if complete NMEA:
-    { ProcessNMEA();                                          // interpret the NMEA
-      NMEA.Clear(); }                                         // clear the NMEA processor for the next sentence
+#ifndef WITH_GPS_UBX_PASS
+    if(Byte==0x03) ProcessCtrlC();                                // if Ctrl-C received
+    if(Byte==0x0C) ProcessCtrlL();                                // if Ctrl-C received
+    if(Byte==0x18) esp_restart() ;                                // if Ctrl-X received then restart
+#endif
+    NMEA.ProcessByte(Byte);                                       // pass the byte through the NMEA processor
+    if(NMEA.isComplete())                                         // if complete NMEA:
+    {
+#ifdef WITH_GPS_NMEA_PASS
+      if(NMEA.isChecked())
+        NMEA.Send(GPS_UART_Write);
+#endif
+      ProcessNMEA();                                              // interpret the NMEA
+      NMEA.Clear(); }                                             // clear the NMEA processor for the next sentence
+#ifdef WITH_GPS_UBX_PASS
+    UBX.ProcessByte(Byte);
+    if(UBX.isComplete())
+    { UBX.Send(GPS_UART_Write);                                   // is there a need for a Mutex on the GPS UART ?
+      UBX.Clear(); }
+#endif
   }
 }
 
@@ -175,23 +276,48 @@ void vTaskCTRL(void* pvParameters)
 { uint32_t PrevTime=0;
   GPS_Position *PrevGPS=0;
   for( ; ; )
-  { ProcessInput();
-    vTaskDelay(5);
-    LED_TimerCheck(5);
+  { ProcessInput();                                   // process console input
+
+    vTaskDelay(1);                                    //
+
+    LED_TimerCheck(1);                                // update the LED flashes
+#ifdef WITH_BEEPER
+    Play_TimerCheck();                                // update the LED flashes
+#endif
+
     uint32_t Time=TimeSync_Time();
     GPS_Position *GPS = GPS_getPosition();
     bool TimeChange = Time!=PrevTime;
     bool GPSchange  = GPS!=PrevGPS;
     if( (!TimeChange) && (!GPSchange) ) continue;
     PrevTime=Time; PrevGPS=GPS;
+
 #ifdef WITH_OLED
-    if(TimeChange) OLED_DisplayStatus(Time, 0);
-    if(GPSchange)  OLED_DisplayPosition(GPS, 2);
-#endif
+    esp_err_t StatErr=ESP_OK;
+    esp_err_t PosErr=ESP_OK;
+    if(TimeChange)
+    { StatErr = OLED_DisplayStatus(Time, 0); }
+    if(GPSchange)
+    { PosErr = OLED_DisplayPosition(GPS, 2); }
 #ifdef DEBUG_PRINT
-    if(!TimeChange || (Time%60)!=0) continue;
+    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    if(TimeChange)
+    { Format_String(CONS_UART_Write, "TimeChange: ");
+      Format_SignDec(CONS_UART_Write, StatErr);
+      Format_String(CONS_UART_Write, "\n"); }
+    if(GPSchange)
+    { Format_String(CONS_UART_Write, "GPSchange: ");
+      Format_SignDec(CONS_UART_Write, PosErr);
+      Format_String(CONS_UART_Write, "\n"); }
+    xSemaphoreGive(CONS_Mutex);
+#endif
+#endif // WITH_OLED
+
+#ifdef DEBUG_PRINT                                      // in debug mode print the parameters and state every 60sec
+    if((Time%60)!=0) continue;
     ProcessCtrlC();
 #endif
+
   }
 }
 

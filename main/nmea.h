@@ -43,7 +43,7 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
          else if(Byte<=' ')                  // other control bytes treat as errors
          { Clear(); return; }                // and drop the frame
          else if(Byte==',')                  // save comma positions to later get back to the fields
-         { if(Parms<MaxParms) Parm[Parms++]=Len+1; }
+         { if(Parms<MaxParms) Parm[Parms++]=Len+1; }       // save the position just after the comma
          if(Len<MaxLen) { Data[Len++]=Byte; Check^=Byte; } // store data but if too much then treat as an error
                    else Clear();             // if too long, then drop the frame completely
        }
@@ -88,26 +88,21 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
    const uint8_t *ParmPtr(uint8_t Field) const            // get a pointer to given (comma separated) field
      { if(Field>=Parms) return 0;
        return Data+Parm[Field]; }
-/*
+
    uint8_t ParmLen(uint8_t Field) const
      { if(Field>=Parms) return 0;
-       if(Field==(Parms-1)) return Len-4-Comma[Field];
+       if(Field==(Parms-1)) return Len-hasCheck()*3-Parm[Field];
        return Parm[Field+1]-Parm[Field]-1; }
-*/
 
-   uint8_t isGP(void) const                    // GPS sentence ?
-   //   { return isGP((const char *)Data); }
-   // uint8_t static isGP(const char *Data)
+   uint8_t isGP(void) const                     // GPS sentence ?
      { if(Data[1]!='G') return 0;
        return Data[2]=='P'; }
 
    uint8_t isGN(void) const
-   //  { return isGN((const char *)Data); }
-   // uint8_t static isGN(const char *Data)
      { if(Data[1]!='G') return 0;
        return Data[2]=='N'; }
 
-   uint8_t isGx(void) const                    // GPS or GLONASS sentence ?
+   uint8_t isGx(void) const                     // GPS or GLONASS sentence ?
      { return Data[1]=='G'; }
 
    uint8_t isGPRMC(void) const                  // GPS recomended minimum data
@@ -190,6 +185,10 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
    uint8_t isPOGNS(void)                         // tracker parameters setup
      { if(!isPOGN()) return 0;
        return Data[5]=='S'; }
+
+   uint8_t isPOGNL(void)                         // log file list request
+     { if(!isPOGN()) return 0;
+       return Data[5]=='L'; }
 
 } ;
 
