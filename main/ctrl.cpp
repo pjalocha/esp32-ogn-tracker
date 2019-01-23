@@ -239,7 +239,11 @@ static void ProcessCtrlC(void)                                  // print system 
 }
 
 static void ProcessCtrlL(void)                                    // print system state to the console
-{ SPIFFSlog_ListFiles(); }
+{
+#ifdef WITH_SPIFFS
+  SPIFFSlog_ListFiles();
+#endif
+}
 
 
 

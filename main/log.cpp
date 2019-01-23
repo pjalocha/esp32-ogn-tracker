@@ -14,6 +14,8 @@
 
 // #define DEBUG_PRINT
 
+#ifdef WITH_SPIFFS
+
 static const char *SPIFFSlog_Path = "/spiffs/";    // path to log files
 static const char *SPIFFSlog_Ext  = ".TLG";        // extension for log files
 static const uint32_t SPIFFSlog_MaxTime = 3600;    // 1 hour max. per single log file
@@ -299,3 +301,5 @@ void vTaskLOG(void* pvParameters)
     if(Diff>=8000) { Copy(); PrevTick=Tick; }                  // if more than 4.0sec than copy the packets
   }
 }
+
+#endif // WITH_SPIFFS
