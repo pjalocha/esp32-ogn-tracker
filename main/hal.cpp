@@ -270,6 +270,11 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 #define PIN_BEEPER    GPIO_NUM_17
 #endif
 
+#if !defined(WITH_OLED) && !defined(WITH_BMP180) && !defined(WITH_BMP280) && !defined(WITH_BME280)
+#undef PIN_I2C_SCL
+#undef PIN_I2C_SDA
+#endif
+
 // ======================================================================================================
 // 48-bit unique ID of the chip
 
