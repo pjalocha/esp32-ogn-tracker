@@ -211,6 +211,7 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 #define PIN_RFM_MOSI GPIO_NUM_23  // SPI MOSI
 #endif // FollowMe
 
+#define RFM_SPI_HOST  VSPI_HOST   // or HSPI_HOST
 #define RFM_SPI_SPEED 4000000     // [Hz] 4MHz SPI clock rate for RF chip
 
 #if defined(WITH_HELTEC) || defined(WITH_TTGO)
@@ -274,6 +275,11 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 #undef PIN_I2C_SCL
 #undef PIN_I2C_SDA
 #endif
+
+#define PIN_SD_MISO   GPIO_NUM_12 // SD card in simple SPI mode, using HSPI IOMUX pins
+#define PIN_SD_MOSI   GPIO_NUM_13
+#define PIN_SD_SCK    GPIO_NUM_14
+#define PIN_SD_CS     GPIO_NUM_15
 
 // ======================================================================================================
 // 48-bit unique ID of the chip
@@ -777,7 +783,7 @@ static sdspi_slot_config_t SlotConfig;
 static esp_vfs_fat_sdmmc_mount_config_t MountConfig =
   { .format_if_mount_failed = false,
     .max_files = 5,
-    .allocation_unit_size = 16 * 1024 };
+    /* .allocation_unit_size = 16 * 1024 */ };
 
 sdmmc_card_t *SD_Card = 0;
 
@@ -801,7 +807,8 @@ static esp_err_t SD_Init(void)
   SlotConfig.gpio_mosi = PIN_SD_MOSI;
   SlotConfig.gpio_sck  = PIN_SD_SCK;
   SlotConfig.gpio_cs   = PIN_SD_CS;
-  return SD_Mount(); }
+  SlotConfig.dma_channel = 2;              // otherwise it conflicts with RFM SPI
+  return SD_Mount(); } // ESP_OK => all good, ESP_FAIL => failed to mount file system, other => failed to init. the SD card
 
 #endif // WITH_SD
 
@@ -837,7 +844,7 @@ void LED_TimerCheck(uint8_t Ticks)
            else LED_TX_Off();
     LED_TX_Counter=Counter; }
 #endif
-#ifdef WITH_LED_TX
+#ifdef WITH_LED_RX
   Counter=LED_RX_Counter;
   if(Counter)
   { if(Ticks<Counter) Counter-=Ticks;
@@ -929,8 +936,8 @@ void IO_Configuration(void)
     pre_cb           : 0,
     post_cb          : 0
   };
-  esp_err_t ret=spi_bus_initialize(HSPI_HOST, &BusCfg, 1);
-  ret=spi_bus_add_device(HSPI_HOST, &DevCfg, &RFM_SPI);
+  esp_err_t ret=spi_bus_initialize(RFM_SPI_HOST, &BusCfg, 1);
+  ret=spi_bus_add_device(RFM_SPI_HOST, &DevCfg, &RFM_SPI);
 
 #ifdef PIN_GPS_PPS
   gpio_set_direction(PIN_GPS_PPS, GPIO_MODE_INPUT);

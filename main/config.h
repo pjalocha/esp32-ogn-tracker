@@ -30,8 +30,8 @@
 // #define WITH_GPS_NMEA_PASS                  // to pass directly NMEA to/from GPS
 
 // #define WITH_BMP180                        // BMP180 pressure sensor
-#define WITH_BMP280                        // BMP280 pressure sensor
-// #define WITH_BME280                        // BMP280 with humidity (but still works with BMP280)
+// #define WITH_BMP280                        // BMP280 pressure sensor
+#define WITH_BME280                        // BMP280 with humidity (but still works with BMP280)
 // #define WITH_MS5607                        // MS5607 pressure sensor
 
 #define WITH_PFLAA                         // PFLAU and PFLAA for compatibility with XCsoar and LK8000
