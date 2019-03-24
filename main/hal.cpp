@@ -375,7 +375,8 @@ static void esp_spp_cb(esp_spp_cb_event_t Event, esp_spp_cb_param_t *Param)
 { switch (Event)
   { case ESP_SPP_INIT_EVT:                                        // [0]
       esp_bt_dev_set_device_name(Parameters.BTname);
-      esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
+      // esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE); // for older ESP-IDF
+      esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
       esp_spp_start_srv(sec_mask, role_slave, 0, "SPP_SERVER");
       break;
     case ESP_SPP_DISCOVERY_COMP_EVT:                              // [8]
