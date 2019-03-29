@@ -204,7 +204,7 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 
 #ifdef WITH_FollowMe
 #define PIN_RFM_RST  GPIO_NUM_32  // Reset
-#define PIN_RFM_IRQ  GPIO_NUM_39  // packet done on receive or transmit
+#define PIN_RFM_IRQ  GPIO_NUM_35  // 39 // packet done on receive or transmit
 #define PIN_RFM_SS   GPIO_NUM_5   // SPI chip-select
 #define PIN_RFM_SCK  GPIO_NUM_18  // SPI clock
 #define PIN_RFM_MISO GPIO_NUM_19  // SPI MISO
