@@ -106,6 +106,12 @@ void  GPS_UART_SetBaudrate(int BaudRate);
 
 bool GPS_PPS_isOn(void);
 
+// #ifdef WITH_ADSB
+int   ADSB_UART_Read       (uint8_t &Byte); // non-blocking
+void  ADSB_UART_Write      (char     Byte); // blocking
+void  ADSB_UART_SetBaudrate(int BaudRate);
+// #endif
+
 void RFM_TransferBlock(uint8_t *Data, uint8_t Len);
 void RFM_RESET(uint8_t On);              // RF module reset
 bool RFM_IRQ_isOn(void);                 // query the IRQ state

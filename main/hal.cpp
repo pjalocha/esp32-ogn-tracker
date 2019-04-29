@@ -125,9 +125,9 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 
  0                                      .
  1    CONS/TxD    CONS/TxD   CONS/TxD   CONS/TxD                Console/Program
- 2                           SD/MISO    .            IO02       Bootstrap: LOW to enter UART download mode
+ 2                           SD/MISO    .            LED        Bootstrap: LOW to enter UART download mode
  3    CONS/RxD    CONS/RxD   CONS/RxD   CONS/RxD                Console/Program
- 4    OLED/SDA    OLED/SDA   ADC/CS     Beeper       GPS/RST
+ 4    OLED/SDA    OLED/SDA   ADC/CS     Beeper       PER/RST
  5    RF/SCK      RF/SCK     RF/SCK     RF/SCK       RF/CS
  6                                                              SD/CLK
  7                                                              SD/DATA0
@@ -135,10 +135,10 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
  9                                                              SD/DATA2
 10                                                              SD/DATA3
 11                                                              SD/CMD
-12    GPS/RxD     GPS/RxD    SD/CS      GPS/RxD      IO12       JTAG/TDI Bootstrap: select output voltage to power the flash chip
-13    GPS/Ena     GPS/Ena    SD/SCK                  IO13       JTAG/TCK
-14    RF/RST      RF/RST     Beeper     LED          IO14       JTAG/TMS
-15    OLED/SCL    OLED/SCL   SD/MOSI    GPS/TxD      IO15       JTAG/TDO
+12    GPS/RxD     GPS/RxD    SD/CS      GPS/RxD      SD/MISO    JTAG/TDI Bootstrap: select output voltage to power the flash chip
+13    GPS/Ena     GPS/Ena    SD/SCK                  SD/MOSI    JTAG/TCK
+14    RF/RST      RF/RST     Beeper     LED          SD/CLK     JTAG/TMS
+15    OLED/SCL    OLED/SCL   SD/MOSI    GPS/TxD      SD/CS      JTAG/TDO
 16    OLED/RST    OLED/RST   RF/IRQ                  GPS/Tx
 17    Beeper      Beeper     RF/RST                  GPS/Rx
 18    RF/CS       RF/CS      RF/MISO    RF/CS        RF/SCK
@@ -148,21 +148,21 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 22                           PWR/ON     I2C/SCL      I2C/CLK
 23                           PWR/LDO    RF/RST       RF/MOSI
 24
-25    LED         DAC2       .          .
-26    RF/IRQ      RF/IRQ     SCL        RF/IRQ
-27    RF/MOSI     RF/MOSI    SDA
+25    LED         DAC2       .          .            TT/RX0
+26    RF/IRQ      RF/IRQ     SCL        RF/IRQ       BMX/INT1
+27    RF/MOSI     RF/MOSI    SDA                     TT/TX0
 28
 29
 30
 31
-32                           GPS/TxD    .            RF/RST
-33                           OLED/RST   .            GPS/EN
+32                           GPS/TxD    .            TT/BOOT
+33                           OLED/RST   .            GPS/WAKE
 34    GPS/PPS     GPS/PPS    GPS/RxD                 GPS/PPS
 35    GPS/TxD     GPS/TxD    GPS/PPS    BAT/Sense    RF/IRQ
-36                           BAT/Sense               LED/DBG
+36                           BAT/Sense               BAT/Sense
 37
 38
-39                                                   LED/TX
+39                                                   Button
 
 */
 
@@ -203,7 +203,7 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 #endif // TBEAM
 
 #ifdef WITH_FollowMe
-#define PIN_RFM_RST  GPIO_NUM_32  // Reset
+// #define PIN_RFM_RST  GPIO_NUM_32  // Reset
 #define PIN_RFM_IRQ  GPIO_NUM_35  // 39 // packet done on receive or transmit
 #define PIN_RFM_SS   GPIO_NUM_5   // SPI chip-select
 #define PIN_RFM_SCK  GPIO_NUM_18  // SPI clock
@@ -234,13 +234,20 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 #define PIN_GPS_RXD  GPIO_NUM_16
 #define PIN_GPS_PPS  GPIO_NUM_34  // high active
 #define PIN_GPS_ENA  GPIO_NUM_33  // Enable: high-active
-#define PIN_GPS_RST  GPIO_NUM_4   // Reset: high-active (inverter to L80 RES input)
+
+#define PIN_PERIPH_RST GPIO_NUM_4   // Reset: high-active
 #endif
 
 #define CONS_UART UART_NUM_0      // UART0 for the console (the system does this for us)
 #define GPS_UART  UART_NUM_1      // UART1 for GPS data read and dialog
 
 #define I2C_BUS     I2C_NUM_1     // use bus #1 to talk to OLED and Baro sensor
+
+#ifdef WITH_FollowMe
+#define ADSB_UART     UART_NUM_2  // UART2
+#define PIN_ADSB_TXD  GPIO_NUM_25
+#define PIN_ADSB_RXD  GPIO_NUM_27
+#endif
 
 #if defined(WITH_HELTEC) || defined(WITH_TTGO)
 #define PIN_I2C_SCL GPIO_NUM_15   // SCL pin
@@ -258,7 +265,7 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 #define PIN_I2C_SCL GPIO_NUM_22   // SCL pin
 #define PIN_I2C_SDA GPIO_NUM_21   // SDA pin
 #define OLED_I2C_ADDR 0x3C        // I2C address of the OLED display
-#define PIN_OLED_RST GPIO_NUM_15  // OLED RESET: low-active
+// #define PIN_OLED_RST GPIO_NUM_15  // OLED RESET: low-active
 #endif
 
 uint8_t BARO_I2C = (uint8_t)I2C_BUS;
@@ -560,12 +567,23 @@ int  CONS_UART_Read  (uint8_t &Byte)  { int Ret=getchar(); if(Ret>=0) { Byte=Ret
 // int  CONS_UART_Full  (void)           { return UART2_Full(); }
 
 //--------------------------------------------------------------------------------------------------------
+// ADS-B UART
+
+#ifdef ADSB_UART
+int   ADSB_UART_Read       (uint8_t &Byte) { return uart_read_bytes  (ADSB_UART, &Byte, 1, 0); }  // should be buffered and non-blocking
+void  ADSB_UART_Write      (char     Byte) {        uart_write_bytes (ADSB_UART, &Byte, 1);    }  // should be buffered and blocking
+void  ADSB_UART_SetBaudrate(int BaudRate)  {        uart_set_baudrate(ADSB_UART, BaudRate);    }
+#endif
+
+//--------------------------------------------------------------------------------------------------------
 // GPS UART
 
+#ifdef GPS_UART
 // int   GPS_UART_Full       (void)          { size_t Full=0; uart_get_buffered_data_len(GPS_UART, &Full); return Full; }
 int   GPS_UART_Read       (uint8_t &Byte) { return uart_read_bytes  (GPS_UART, &Byte, 1, 0); }  // should be buffered and non-blocking
 void  GPS_UART_Write      (char     Byte) {        uart_write_bytes (GPS_UART, &Byte, 1);    }  // should be buffered and blocking
 void  GPS_UART_SetBaudrate(int BaudRate)  {        uart_set_baudrate(GPS_UART, BaudRate);    }
+#endif
 
 #ifdef WITH_GPS_ENABLE
 void GPS_DISABLE(void) { gpio_set_level(PIN_GPS_ENA, 0); }
@@ -940,6 +958,10 @@ void IO_Configuration(void)
   esp_err_t ret=spi_bus_initialize(RFM_SPI_HOST, &BusCfg, 1);
   ret=spi_bus_add_device(RFM_SPI_HOST, &DevCfg, &RFM_SPI);
 
+#ifdef PIN_PERIPH_RST
+  gpio_set_direction(PIN_PERIPH_RST, GPIO_MODE_OUTPUT);
+  gpio_set_level(PIN_PERIPH_RST, 1);
+#endif
 #ifdef PIN_GPS_PPS
   gpio_set_direction(PIN_GPS_PPS, GPIO_MODE_INPUT);
 #endif
@@ -952,6 +974,7 @@ void IO_Configuration(void)
   gpio_set_level(PIN_GPS_ENA, 1);
 #endif
 
+#ifdef GPS_UART
   uart_config_t GPS_UART_Config =                       // GPS UART
   { baud_rate : 9600,
     data_bits : UART_DATA_8_BITS,
@@ -964,6 +987,22 @@ void IO_Configuration(void)
   uart_param_config  (GPS_UART, &GPS_UART_Config);
   uart_set_pin       (GPS_UART, PIN_GPS_TXD, PIN_GPS_RXD, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
   uart_driver_install(GPS_UART, 256, 256, 0, 0, 0);
+#endif
+
+#ifdef ADSB_UART
+  uart_config_t ADSB_UART_Config =                      // ADSB UART
+  { baud_rate : 115200,
+    data_bits : UART_DATA_8_BITS,
+    parity    : UART_PARITY_DISABLE,
+    stop_bits : UART_STOP_BITS_1,
+    flow_ctrl : UART_HW_FLOWCTRL_DISABLE,
+    rx_flow_ctrl_thresh: 0,
+    use_ref_tick: 0
+  };
+  uart_param_config  (ADSB_UART, &ADSB_UART_Config);
+  uart_set_pin       (ADSB_UART, PIN_ADSB_TXD, PIN_ADSB_RXD, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+  uart_driver_install(ADSB_UART, 256, 256, 0, 0, 0);
+#endif
 
 #if defined(WITH_OLED) && defined(PIN_OLED_RST)
   gpio_set_direction(PIN_OLED_RST, GPIO_MODE_OUTPUT);
@@ -1010,6 +1049,17 @@ void IO_Configuration(void)
   ADC_Init();
 
   // esp_register_freertos_tick_hook(&vApplicationTickHook);
+
+/*
+#ifdef PIN_PERIPH_RST
+  gpio_set_level(PIN_PERIPH_RST, 0);
+#endif
+#ifdef PIN_GPS_ENA
+  gpio_set_level(PIN_GPS_ENA, 0);
+#endif
+  esp_light_sleep_start();
+*/
+
 }
 
 // ======================================================================================================
