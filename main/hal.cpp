@@ -764,6 +764,17 @@ esp_err_t OLED_DisplayON(uint8_t ON, uint8_t DispIdx)
   i2c_cmd_link_delete(cmd);
   return espRc; }
 
+esp_err_t OLED_DisplayINV(uint8_t INV, uint8_t DispIdx)
+{ i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+  i2c_master_start(cmd);
+  i2c_master_write_byte(cmd, ((OLED_I2C_ADDR+DispIdx)<<1) | I2C_MASTER_WRITE, true);
+  i2c_master_write_byte(cmd, OLED_CONTROL_BYTE_CMD_STREAM, true);
+  i2c_master_write_byte(cmd, OLED_CMD_DISPLAY_NORMAL+INV, true);
+  i2c_master_stop(cmd);
+  esp_err_t espRc = i2c_master_cmd_begin(I2C_BUS, cmd, 10);
+  i2c_cmd_link_delete(cmd);
+  return espRc; }
+
 esp_err_t OLED_SetContrast(uint8_t Contrast, uint8_t DispIdx)
 { i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
