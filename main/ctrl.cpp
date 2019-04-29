@@ -245,8 +245,6 @@ static void ProcessCtrlL(void)                                    // print syste
 #endif
 }
 
-
-
 static void ProcessInput(void)
 { for( ; ; )
   { uint8_t Byte; int Err=CONS_UART_Read(Byte); if(Err<=0) break; // get byte from console, if none: exit the loop
@@ -286,8 +284,9 @@ void vTaskCTRL(void* pvParameters)
 
     LED_TimerCheck(1);                                // update the LED flashes
 #ifdef WITH_BEEPER
-    Play_TimerCheck();                                // update the LED flashes
+    Play_TimerCheck(1);                               // read the button(s)
 #endif
+    Button_TimerCheck();
 
     uint32_t Time=TimeSync_Time();
     GPS_Position *GPS = GPS_getPosition();
@@ -297,12 +296,16 @@ void vTaskCTRL(void* pvParameters)
     PrevTime=Time; PrevGPS=GPS;
 
 #ifdef WITH_OLED
-    esp_err_t StatErr=ESP_OK;
-    esp_err_t PosErr=ESP_OK;
-    if(TimeChange)
-    { StatErr = OLED_DisplayStatus(Time, 0); }
-    if(GPSchange)
-    { PosErr = OLED_DisplayPosition(GPS, 2); }
+    if(Button_SleepRequest)
+    { OLED_DisplayON(0); }
+    else
+    { esp_err_t StatErr=ESP_OK;
+      esp_err_t PosErr=ESP_OK;
+      if(TimeChange)
+      { StatErr = OLED_DisplayStatus(Time, 0); }
+      if(GPSchange)
+      { PosErr = OLED_DisplayPosition(GPS, 2); }
+    }
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
     if(TimeChange)

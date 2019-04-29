@@ -117,6 +117,7 @@ void RFM_RESET(uint8_t On);              // RF module reset
 bool RFM_IRQ_isOn(void);                 // query the IRQ state
 
 #ifdef WITH_OLED
+int OLED_DisplayON(uint8_t ON, uint8_t DispIdx=0);
 int OLED_SetContrast(uint8_t Contrast, uint8_t DispIdx=0);
 int OLED_PutLine(uint8_t Line, const char *Text, uint8_t DispIdx=0);
 #endif
@@ -168,6 +169,9 @@ void LED_RX_Flash(uint8_t Time=100);
 #endif
 
 void LED_TimerCheck(uint8_t Ticks=1);
+
+extern bool Button_SleepRequest;
+void Button_TimerCheck(uint8_t Ticks=1);
 
 void IO_Configuration(void);             // Configure I/O
 

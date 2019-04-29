@@ -404,6 +404,12 @@ static void GPS_NMEA(void)                                                 // wh
   if(NMEA.isGxRMC()) GPS_Burst.GxRMC=1;
   if(NMEA.isGxGGA()) GPS_Burst.GxGGA=1;
   if(NMEA.isGxGSA()) GPS_Burst.GxGSA=1;
+  if(Button_SleepRequest)
+  {
+#ifdef WITH_GPS_MTK
+    Format_String(GPS_UART_Write, "$PMTK225,4*2F\r\n", 15, 0);             // request to the GPS to enter sleep
+#endif
+  }
 #ifdef DEBUG_PRINT
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60);

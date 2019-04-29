@@ -123,7 +123,7 @@ PSRM32 = SDIO ?
 
 GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 
- 0                                      .
+ 0                Button
  1    CONS/TxD    CONS/TxD   CONS/TxD   CONS/TxD                Console/Program
  2                           SD/MISO    .            LED        Bootstrap: LOW to enter UART download mode
  3    CONS/RxD    CONS/RxD   CONS/RxD   CONS/RxD                Console/Program
@@ -288,6 +288,12 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 #define PIN_SD_SCK    GPIO_NUM_14
 #define PIN_SD_CS     GPIO_NUM_15
 
+#ifdef WITH_FollowMe
+#define PIN_BUTTON    GPIO_NUM_39
+#else
+#define PIN_BUTTON    GPIO_NUM_0
+#endif
+
 // ======================================================================================================
 // 48-bit unique ID of the chip
 
@@ -335,6 +341,11 @@ void LED_PCB_Off  (void) { gpio_set_level(PIN_LED_PCB, 0); }
 void LED_PCB_Dir  (void) { }
 void LED_PCB_On   (void) { }
 void LED_PCB_Off  (void) { }
+#endif
+
+#ifdef PIN_BUTTON
+void Button_Dir      (void) { gpio_set_direction(PIN_BUTTON, GPIO_MODE_INPUT); }
+bool Button_isPressed(void) { return !gpio_get_level(PIN_BUTTON); }
 #endif
 
 // ========================================================================================================
@@ -742,6 +753,17 @@ esp_err_t OLED_Init(uint8_t DispIdx)
   i2c_cmd_link_delete(cmd);
   return espRc; }
 
+esp_err_t OLED_DisplayON(uint8_t ON, uint8_t DispIdx)
+{ i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+  i2c_master_start(cmd);
+  i2c_master_write_byte(cmd, ((OLED_I2C_ADDR+DispIdx)<<1) | I2C_MASTER_WRITE, true);
+  i2c_master_write_byte(cmd, OLED_CONTROL_BYTE_CMD_STREAM, true);
+  i2c_master_write_byte(cmd, OLED_CMD_DISPLAY_OFF+ON, true);
+  i2c_master_stop(cmd);
+  esp_err_t espRc = i2c_master_cmd_begin(I2C_BUS, cmd, 10);
+  i2c_cmd_link_delete(cmd);
+  return espRc; }
+
 esp_err_t OLED_SetContrast(uint8_t Contrast, uint8_t DispIdx)
 { i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
@@ -874,6 +896,62 @@ void LED_TimerCheck(uint8_t Ticks)
 #endif
 }
 
+bool Button_SleepRequest = 0;
+
+const  int8_t Button_FilterTime  = 20;                    // [ms]
+const  int8_t Button_FilterThres = Button_FilterTime/2;
+static int8_t Button_Filter=(-Button_FilterTime);
+
+void Sleep(void)
+{
+// #ifdef PIN_PERIPH_RST
+//   gpio_set_level(PIN_PERIPH_RST, 0);
+// #endif
+#ifdef PIN_GPS_ENA
+  gpio_set_level(PIN_GPS_ENA, 0);
+#endif
+  esp_light_sleep_start();
+  Button_SleepRequest = 0;
+//  #ifdef PIN_PERIPH_RST
+//    gpio_set_level(PIN_PERIPH_RST, 0);
+//
+//    gpio_set_level(PIN_PERIPH_RST, 1);
+//  #endif
+}
+
+uint32_t Button_PressTime=0;                              // [ms] counts for how long the button is kept pressed
+void Button_keptPressed(uint8_t Ticks)
+{ Button_PressTime+=Ticks;
+  Button_SleepRequest = Button_PressTime>=4000; }            // [ms] setup SleepRequest if button pressed for >= 4sec
+
+void Button_keptReleased(uint8_t Ticks)
+{
+  if(Button_PressTime)
+  { Format_String(CONS_UART_Write, "Button released:");
+    Format_UnsDec(CONS_UART_Write, Button_PressTime);
+    Format_String(CONS_UART_Write, "\n");
+    if(Button_SleepRequest)
+    { Format_String(CONS_UART_Write, "Sleep in 1 sec\n");
+      vTaskDelay(1000);
+      Sleep(); }
+  }
+  Button_PressTime=0; }
+
+void Button_TimerCheck(uint8_t Ticks)
+{
+#ifdef PIN_BUTTON
+ if(Button_isPressed())
+ { Button_Filter+=Ticks; if(Button_Filter>Button_FilterTime) Button_Filter=Button_FilterTime;
+   if(Button_Filter>=Button_FilterThres) { Button_keptPressed(Ticks); }
+ }
+ else
+ { Button_Filter-=Ticks; if(Button_Filter<(-Button_FilterTime)) Button_Filter=(-Button_FilterTime);
+   if(Button_Filter<=(-Button_FilterThres)) { Button_keptReleased(Ticks); }
+ }
+#endif
+
+}
+
 /*
 extern "C"
 void vApplicationIdleHook(void) // when RTOS is idle: should call "sleep until an interrupt"
@@ -924,6 +1002,9 @@ void IO_Configuration(void)
 #ifdef PIN_LED_PCB
   LED_PCB_Dir();
   LED_PCB_Off();
+#endif
+#ifdef PIN_BUTTON
+  Button_Dir();
 #endif
 
   RFM_IRQ_Dir();
@@ -1049,16 +1130,6 @@ void IO_Configuration(void)
   ADC_Init();
 
   // esp_register_freertos_tick_hook(&vApplicationTickHook);
-
-/*
-#ifdef PIN_PERIPH_RST
-  gpio_set_level(PIN_PERIPH_RST, 0);
-#endif
-#ifdef PIN_GPS_ENA
-  gpio_set_level(PIN_GPS_ENA, 0);
-#endif
-  esp_light_sleep_start();
-*/
 
 }
 
