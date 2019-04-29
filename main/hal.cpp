@@ -930,29 +930,27 @@ static void Button_keptPressed(uint8_t Ticks)
   //   { Format_String(CONS_UART_Write, "Sleep in 2 sec\n");
   //     vTaskDelay(2000);
   //     Sleep(); }
-
   if(Button_ReleaseTime)
-  { Format_String(CONS_UART_Write, "Button pressed:");
-    Format_UnsDec(CONS_UART_Write, Button_PressTime);
-    Format_String(CONS_UART_Write, "\n");
+  { Format_String(CONS_UART_Write, "Button pressed: released for ");
+    Format_UnsDec(CONS_UART_Write, Button_ReleaseTime, 4, 3);
+    Format_String(CONS_UART_Write, "sec\n");
+    Button_ReleaseTime=0;
   }
-  Button_ReleaseTime=0;
 }
 
 static void Button_keptReleased(uint8_t Ticks)
 { Button_ReleaseTime+=Ticks;
-  if(Button_PressTime)
-  { Format_String(CONS_UART_Write, "Button released:");
-    Format_UnsDec(CONS_UART_Write, Button_PressTime);
-    Format_String(CONS_UART_Write, "\n");
 
+  if(Button_PressTime)
+  { Format_String(CONS_UART_Write, "Button released: pressed for ");
+    Format_UnsDec(CONS_UART_Write, Button_PressTime, 4, 3);
+    Format_String(CONS_UART_Write, "sec\n");
     // if(Button_SleepRequest)
     // { Format_String(CONS_UART_Write, "Sleep in 2 sec\n");
     //   vTaskDelay(2000);
     //   Sleep(); }
-
+    Button_PressTime=0;
   }
-  Button_PressTime=0;
 }
 
 void Button_TimerCheck(uint8_t Ticks)
