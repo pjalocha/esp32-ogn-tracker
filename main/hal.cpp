@@ -747,7 +747,7 @@ esp_err_t OLED_Init(uint8_t DispIdx)
   i2c_master_write_byte(cmd, 0x14, true);
   i2c_master_write_byte(cmd, OLED_CMD_SET_SEGMENT_REMAP, true); // reverse left-right mapping
   i2c_master_write_byte(cmd, OLED_CMD_SET_COM_SCAN_MODE, true); // reverse up-bottom mapping
-  i2c_master_write_byte(cmd, OLED_CMD_DISPLAY_ON, true);
+  i2c_master_write_byte(cmd, OLED_CMD_DISPLAY_ON, true);        // Turn ON the display
   i2c_master_stop(cmd);
   esp_err_t espRc = i2c_master_cmd_begin(I2C_BUS, cmd, 10);
   i2c_cmd_link_delete(cmd);
@@ -793,9 +793,9 @@ esp_err_t OLED_PutLine(uint8_t Line, const char *Text, uint8_t DispIdx)
   i2c_master_start(cmd);
   i2c_master_write_byte(cmd, ((OLED_I2C_ADDR+DispIdx)<<1) | I2C_MASTER_WRITE, true);
   i2c_master_write_byte(cmd, OLED_CONTROL_BYTE_CMD_STREAM, true);
-  i2c_master_write_byte(cmd, 0x00, true);
-  i2c_master_write_byte(cmd, 0x10, true);
-  i2c_master_write_byte(cmd, 0xB0 | Line, true);
+  i2c_master_write_byte(cmd, 0x00, true);           // 0x0L => column address: Lower nibble
+  i2c_master_write_byte(cmd, 0x10, true);           // 0x1H => column address: Higher nibble
+  i2c_master_write_byte(cmd, 0xB0 | Line, true);    // 0xBP => Page address
   i2c_master_stop(cmd);
   esp_err_t espRc = i2c_master_cmd_begin(I2C_BUS, cmd, 10);
   i2c_cmd_link_delete(cmd);
