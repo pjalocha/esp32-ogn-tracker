@@ -105,6 +105,10 @@ void  GPS_UART_Write      (char     Byte); // blocking
 void  GPS_UART_SetBaudrate(int BaudRate);
 
 bool GPS_PPS_isOn(void);
+#ifdef WITH_GPS_ENABLE
+void GPS_ENABLE(void);
+void GPS_DISABLE(void);
+#endif
 
 // #ifdef WITH_ADSB
 int   ADSB_UART_Read       (uint8_t &Byte); // non-blocking

@@ -315,6 +315,8 @@ void vTaskSENS(void* pvParameters)
 
   while(1)
   {
+    if(Button_SleepRequest)
+    { vTaskDelay(1000); }
 #if defined(WITH_BMP180) || defined(WITH_BMP280) || defined(WITH_MS5607) || defined(WITH_BME280)
     ProcBaro();
 #else

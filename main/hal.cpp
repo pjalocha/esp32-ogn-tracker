@@ -898,48 +898,67 @@ void LED_TimerCheck(uint8_t Ticks)
 
 bool Button_SleepRequest = 0;
 
+uint32_t Button_PressTime=0;                              // [ms] counts for how long the button is kept pressed
+uint32_t Button_ReleaseTime=0;
+
 const  int8_t Button_FilterTime  = 20;                    // [ms]
 const  int8_t Button_FilterThres = Button_FilterTime/2;
 static int8_t Button_Filter=(-Button_FilterTime);
 
-void Sleep(void)
-{
+// void Sleep(void)
+// {
 // #ifdef PIN_PERIPH_RST
 //   gpio_set_level(PIN_PERIPH_RST, 0);
 // #endif
-#ifdef PIN_GPS_ENA
-  gpio_set_level(PIN_GPS_ENA, 0);
-#endif
-  esp_light_sleep_start();
-  Button_SleepRequest = 0;
+// #ifdef PIN_GPS_ENA
+//   gpio_set_level(PIN_GPS_ENA, 0);
+// #endif
+//   esp_light_sleep_start();
+//   Button_SleepRequest = 0;
+//   Button_PressTime=0;
 //  #ifdef PIN_PERIPH_RST
 //    gpio_set_level(PIN_PERIPH_RST, 0);
 //
 //    gpio_set_level(PIN_PERIPH_RST, 1);
 //  #endif
+// }
+
+static void Button_keptPressed(uint8_t Ticks)
+{ Button_PressTime+=Ticks;
+  // Button_SleepRequest = Button_PressTime>=30000;           // [ms] setup SleepRequest if button pressed for >= 4sec
+  // if(Button_PressTime>=32000)
+  //   { Format_String(CONS_UART_Write, "Sleep in 2 sec\n");
+  //     vTaskDelay(2000);
+  //     Sleep(); }
+
+  if(Button_ReleaseTime)
+  { Format_String(CONS_UART_Write, "Button pressed:");
+    Format_UnsDec(CONS_UART_Write, Button_PressTime);
+    Format_String(CONS_UART_Write, "\n");
+  }
+  Button_ReleaseTime=0;
 }
 
-uint32_t Button_PressTime=0;                              // [ms] counts for how long the button is kept pressed
-void Button_keptPressed(uint8_t Ticks)
-{ Button_PressTime+=Ticks;
-  Button_SleepRequest = Button_PressTime>=4000; }            // [ms] setup SleepRequest if button pressed for >= 4sec
-
-void Button_keptReleased(uint8_t Ticks)
-{
+static void Button_keptReleased(uint8_t Ticks)
+{ Button_ReleaseTime+=Ticks;
   if(Button_PressTime)
   { Format_String(CONS_UART_Write, "Button released:");
     Format_UnsDec(CONS_UART_Write, Button_PressTime);
     Format_String(CONS_UART_Write, "\n");
-    if(Button_SleepRequest)
-    { Format_String(CONS_UART_Write, "Sleep in 1 sec\n");
-      vTaskDelay(1000);
-      Sleep(); }
+
+    // if(Button_SleepRequest)
+    // { Format_String(CONS_UART_Write, "Sleep in 2 sec\n");
+    //   vTaskDelay(2000);
+    //   Sleep(); }
+
   }
-  Button_PressTime=0; }
+  Button_PressTime=0;
+}
 
 void Button_TimerCheck(uint8_t Ticks)
 {
 #ifdef PIN_BUTTON
+ // CONS_UART_Write(Button_isPressed()?'^':'_');
  if(Button_isPressed())
  { Button_Filter+=Ticks; if(Button_Filter>Button_FilterTime) Button_Filter=Button_FilterTime;
    if(Button_Filter>=Button_FilterThres) { Button_keptPressed(Ticks); }
@@ -1052,7 +1071,11 @@ void IO_Configuration(void)
 #endif
 #ifdef PIN_GPS_ENA
   gpio_set_direction(PIN_GPS_ENA, GPIO_MODE_OUTPUT);
-  gpio_set_level(PIN_GPS_ENA, 1);
+#ifdef WITH_GPS_MTK
+  gpio_set_level(PIN_GPS_ENA, 0);                       //
+#else
+  gpio_set_level(PIN_GPS_ENA, 1);                       //
+#endif
 #endif
 
 #ifdef GPS_UART

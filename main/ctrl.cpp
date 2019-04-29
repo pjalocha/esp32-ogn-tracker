@@ -219,9 +219,10 @@ static void ProcessCtrlC(void)                                  // print system 
     Format_String(CONS_UART_Write, "kB total, "); }
   Format_UnsDec(CONS_UART_Write, Files);
   Format_String(CONS_UART_Write, " files\n");
+#endif // WITH_SPIFFS
+
   Parameters.Write(CONS_UART_Write);                         // write the parameters to the console
   // Parameters.WriteFile(stdout);                                   // write the parameters to the stdout
-#endif // WITH_SPIFFS
 
 #ifdef WITH_SD
   Format_String(CONS_UART_Write, "SD card:");

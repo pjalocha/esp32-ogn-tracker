@@ -407,7 +407,10 @@ static void GPS_NMEA(void)                                                 // wh
   if(Button_SleepRequest)
   {
 #ifdef WITH_GPS_MTK
-    Format_String(GPS_UART_Write, "$PMTK225,4*2F\r\n", 15, 0);             // request to the GPS to enter sleep
+#ifdef WITH_GPS_ENABLE
+    GPS_DISABLE();
+#endif
+    Format_String(GPS_UART_Write, /* "$PMTK161,0*28\r\n", */ "$PMTK225,4*2F\r\n", 15, 0);             // 225 or "$PMTK161,0*28\r\n" request to the GPS to enter sleep
 #endif
   }
 #ifdef DEBUG_PRINT
@@ -851,5 +854,3 @@ void vTaskGPS(void* pvParameters)
     }
   }
 }
-
-
