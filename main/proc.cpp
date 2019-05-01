@@ -201,6 +201,10 @@ static void ReadStatus(OGN_Packet &Packet)
       Format_String(Log_Write, Line, Len);                                     // send the NMEA out to the log file
       xSemaphoreGive(Log_Mutex); }
 #endif
+
+// #ifdef WITH_FollowMe
+//     Format_String(ADSB_UART_Write, "ADS-B UART test\n");
+// #endif
   }
 }
 

@@ -207,6 +207,9 @@ extern "C"
 
   for( ; ; )
   {
+    while(Button_SleepRequest)
+    { TRX.WriteMode(RF_OPMODE_SLEEP);
+      vTaskDelay(100); }
 
     uint32_t RxRssiSum=0; uint16_t RxRssiCount=0;                              // measure the average RSSI for lower frequency
     do

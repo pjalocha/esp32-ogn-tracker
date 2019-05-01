@@ -48,6 +48,10 @@
 #include "font8x8_basic.h"
 #endif
 
+#ifdef WITH_U8G2
+#include "u8g2.h"
+#endif
+
 // ======================================================================================================
 /*
 The HELTEC AUtomation board WiFi LoRa 32 with sx1278 (RFM95)
@@ -123,11 +127,11 @@ PSRM32 = SDIO ?
 
 GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 
- 0                                      .
+ 0                Button
  1    CONS/TxD    CONS/TxD   CONS/TxD   CONS/TxD                Console/Program
- 2                           SD/MISO    .            IO02       Bootstrap: LOW to enter UART download mode
+ 2                           SD/MISO    .            LED        Bootstrap: LOW to enter UART download mode
  3    CONS/RxD    CONS/RxD   CONS/RxD   CONS/RxD                Console/Program
- 4    OLED/SDA    OLED/SDA   ADC/CS     Beeper       GPS/RST
+ 4    OLED/SDA    OLED/SDA   ADC/CS     Beeper       PER/RST
  5    RF/SCK      RF/SCK     RF/SCK     RF/SCK       RF/CS
  6                                                              SD/CLK
  7                                                              SD/DATA0
@@ -135,10 +139,10 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
  9                                                              SD/DATA2
 10                                                              SD/DATA3
 11                                                              SD/CMD
-12    GPS/RxD     GPS/RxD    SD/CS      GPS/RxD      IO12       JTAG/TDI Bootstrap: select output voltage to power the flash chip
-13    GPS/Ena     GPS/Ena    SD/SCK                  IO13       JTAG/TCK
-14    RF/RST      RF/RST     Beeper     LED          IO14       JTAG/TMS
-15    OLED/SCL    OLED/SCL   SD/MOSI    GPS/TxD      IO15       JTAG/TDO
+12    GPS/RxD     GPS/RxD    SD/CS      GPS/RxD      SD/MISO    JTAG/TDI Bootstrap: select output voltage to power the flash chip
+13    GPS/Ena     GPS/Ena    SD/SCK                  SD/MOSI    JTAG/TCK
+14    RF/RST      RF/RST     Beeper     LED          SD/CLK     JTAG/TMS
+15    OLED/SCL    OLED/SCL   SD/MOSI    GPS/TxD      SD/CS      JTAG/TDO
 16    OLED/RST    OLED/RST   RF/IRQ                  GPS/Tx
 17    Beeper      Beeper     RF/RST                  GPS/Rx
 18    RF/CS       RF/CS      RF/MISO    RF/CS        RF/SCK
@@ -148,21 +152,21 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 22                           PWR/ON     I2C/SCL      I2C/CLK
 23                           PWR/LDO    RF/RST       RF/MOSI
 24
-25    LED         DAC2       .          .
-26    RF/IRQ      RF/IRQ     SCL        RF/IRQ
-27    RF/MOSI     RF/MOSI    SDA
+25    LED         DAC2       .          .            TT/RX0
+26    RF/IRQ      RF/IRQ     SCL        RF/IRQ       BMX/INT1
+27    RF/MOSI     RF/MOSI    SDA                     TT/TX0
 28
 29
 30
 31
-32                           GPS/TxD    .            RF/RST
-33                           OLED/RST   .            GPS/EN
+32                           GPS/TxD    .            TT/BOOT
+33                           OLED/RST   .            GPS/WAKE
 34    GPS/PPS     GPS/PPS    GPS/RxD                 GPS/PPS
 35    GPS/TxD     GPS/TxD    GPS/PPS    BAT/Sense    RF/IRQ
-36                           BAT/Sense               LED/DBG
+36                           BAT/Sense               BAT/Sense
 37
 38
-39                                                   LED/TX
+39                                                   Button
 
 */
 
@@ -203,7 +207,7 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 #endif // TBEAM
 
 #ifdef WITH_FollowMe
-#define PIN_RFM_RST  GPIO_NUM_32  // Reset
+// #define PIN_RFM_RST  GPIO_NUM_32  // Reset
 #define PIN_RFM_IRQ  GPIO_NUM_35  // 39 // packet done on receive or transmit
 #define PIN_RFM_SS   GPIO_NUM_5   // SPI chip-select
 #define PIN_RFM_SCK  GPIO_NUM_18  // SPI clock
@@ -234,13 +238,20 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 #define PIN_GPS_RXD  GPIO_NUM_16
 #define PIN_GPS_PPS  GPIO_NUM_34  // high active
 #define PIN_GPS_ENA  GPIO_NUM_33  // Enable: high-active
-#define PIN_GPS_RST  GPIO_NUM_4   // Reset: high-active (inverter to L80 RES input)
+
+#define PIN_PERIPH_RST GPIO_NUM_4   // Reset: high-active
 #endif
 
 #define CONS_UART UART_NUM_0      // UART0 for the console (the system does this for us)
 #define GPS_UART  UART_NUM_1      // UART1 for GPS data read and dialog
 
 #define I2C_BUS     I2C_NUM_1     // use bus #1 to talk to OLED and Baro sensor
+
+#ifdef WITH_FollowMe
+#define ADSB_UART     UART_NUM_2  // UART2
+#define PIN_ADSB_TXD  GPIO_NUM_25
+#define PIN_ADSB_RXD  GPIO_NUM_27
+#endif
 
 #if defined(WITH_HELTEC) || defined(WITH_TTGO)
 #define PIN_I2C_SCL GPIO_NUM_15   // SCL pin
@@ -252,13 +263,14 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 #ifdef WITH_TBEAM                 // T-Beam
 #define PIN_I2C_SCL GPIO_NUM_22   // SCL pin => this way the pin pattern fits the BMP280 module
 #define PIN_I2C_SDA GPIO_NUM_21   // SDA pin
+#define OLED_I2C_ADDR 0x3C        // I2C address of the OLED display
 #endif
 
 #ifdef WITH_FollowMe              //
 #define PIN_I2C_SCL GPIO_NUM_22   // SCL pin
 #define PIN_I2C_SDA GPIO_NUM_21   // SDA pin
 #define OLED_I2C_ADDR 0x3C        // I2C address of the OLED display
-#define PIN_OLED_RST GPIO_NUM_15  // OLED RESET: low-active
+// #define PIN_OLED_RST GPIO_NUM_15  // OLED RESET: low-active
 #endif
 
 uint8_t BARO_I2C = (uint8_t)I2C_BUS;
@@ -271,7 +283,7 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 #define PIN_BEEPER    GPIO_NUM_17
 #endif
 
-#if !defined(WITH_OLED) && !defined(WITH_BMP180) && !defined(WITH_BMP280) && !defined(WITH_BME280)
+#if !defined(WITH_OLED) && !defined(WITH_U8G2) && !defined(WITH_BMP180) && !defined(WITH_BMP280) && !defined(WITH_BME280)
 #undef PIN_I2C_SCL
 #undef PIN_I2C_SDA
 #endif
@@ -280,6 +292,12 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 #define PIN_SD_MOSI   GPIO_NUM_13
 #define PIN_SD_SCK    GPIO_NUM_14
 #define PIN_SD_CS     GPIO_NUM_15
+
+#ifdef WITH_FollowMe
+#define PIN_BUTTON    GPIO_NUM_39
+#else
+#define PIN_BUTTON    GPIO_NUM_0
+#endif
 
 // ======================================================================================================
 // 48-bit unique ID of the chip
@@ -328,6 +346,11 @@ void LED_PCB_Off  (void) { gpio_set_level(PIN_LED_PCB, 0); }
 void LED_PCB_Dir  (void) { }
 void LED_PCB_On   (void) { }
 void LED_PCB_Off  (void) { }
+#endif
+
+#ifdef PIN_BUTTON
+void Button_Dir      (void) { gpio_set_direction(PIN_BUTTON, GPIO_MODE_INPUT); }
+bool Button_isPressed(void) { return !gpio_get_level(PIN_BUTTON); }
 #endif
 
 // ========================================================================================================
@@ -560,12 +583,23 @@ int  CONS_UART_Read  (uint8_t &Byte)  { int Ret=getchar(); if(Ret>=0) { Byte=Ret
 // int  CONS_UART_Full  (void)           { return UART2_Full(); }
 
 //--------------------------------------------------------------------------------------------------------
+// ADS-B UART
+
+#ifdef ADSB_UART
+int   ADSB_UART_Read       (uint8_t &Byte) { return uart_read_bytes  (ADSB_UART, &Byte, 1, 0); }  // should be buffered and non-blocking
+void  ADSB_UART_Write      (char     Byte) {        uart_write_bytes (ADSB_UART, &Byte, 1);    }  // should be buffered and blocking
+void  ADSB_UART_SetBaudrate(int BaudRate)  {        uart_set_baudrate(ADSB_UART, BaudRate);    }
+#endif
+
+//--------------------------------------------------------------------------------------------------------
 // GPS UART
 
+#ifdef GPS_UART
 // int   GPS_UART_Full       (void)          { size_t Full=0; uart_get_buffered_data_len(GPS_UART, &Full); return Full; }
 int   GPS_UART_Read       (uint8_t &Byte) { return uart_read_bytes  (GPS_UART, &Byte, 1, 0); }  // should be buffered and non-blocking
 void  GPS_UART_Write      (char     Byte) {        uart_write_bytes (GPS_UART, &Byte, 1);    }  // should be buffered and blocking
 void  GPS_UART_SetBaudrate(int BaudRate)  {        uart_set_baudrate(GPS_UART, BaudRate);    }
+#endif
 
 #ifdef WITH_GPS_ENABLE
 void GPS_DISABLE(void) { gpio_set_level(PIN_GPS_ENA, 0); }
@@ -718,7 +752,29 @@ esp_err_t OLED_Init(uint8_t DispIdx)
   i2c_master_write_byte(cmd, 0x14, true);
   i2c_master_write_byte(cmd, OLED_CMD_SET_SEGMENT_REMAP, true); // reverse left-right mapping
   i2c_master_write_byte(cmd, OLED_CMD_SET_COM_SCAN_MODE, true); // reverse up-bottom mapping
-  i2c_master_write_byte(cmd, OLED_CMD_DISPLAY_ON, true);
+  i2c_master_write_byte(cmd, OLED_CMD_DISPLAY_ON, true);        // Turn ON the display
+  i2c_master_stop(cmd);
+  esp_err_t espRc = i2c_master_cmd_begin(I2C_BUS, cmd, 10);
+  i2c_cmd_link_delete(cmd);
+  return espRc; }
+
+esp_err_t OLED_DisplayON(uint8_t ON, uint8_t DispIdx)
+{ i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+  i2c_master_start(cmd);
+  i2c_master_write_byte(cmd, ((OLED_I2C_ADDR+DispIdx)<<1) | I2C_MASTER_WRITE, true);
+  i2c_master_write_byte(cmd, OLED_CONTROL_BYTE_CMD_STREAM, true);
+  i2c_master_write_byte(cmd, OLED_CMD_DISPLAY_OFF+ON, true);
+  i2c_master_stop(cmd);
+  esp_err_t espRc = i2c_master_cmd_begin(I2C_BUS, cmd, 10);
+  i2c_cmd_link_delete(cmd);
+  return espRc; }
+
+esp_err_t OLED_DisplayINV(uint8_t INV, uint8_t DispIdx)
+{ i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+  i2c_master_start(cmd);
+  i2c_master_write_byte(cmd, ((OLED_I2C_ADDR+DispIdx)<<1) | I2C_MASTER_WRITE, true);
+  i2c_master_write_byte(cmd, OLED_CONTROL_BYTE_CMD_STREAM, true);
+  i2c_master_write_byte(cmd, OLED_CMD_DISPLAY_NORMAL+INV, true);
   i2c_master_stop(cmd);
   esp_err_t espRc = i2c_master_cmd_begin(I2C_BUS, cmd, 10);
   i2c_cmd_link_delete(cmd);
@@ -742,9 +798,9 @@ esp_err_t OLED_PutLine(uint8_t Line, const char *Text, uint8_t DispIdx)
   i2c_master_start(cmd);
   i2c_master_write_byte(cmd, ((OLED_I2C_ADDR+DispIdx)<<1) | I2C_MASTER_WRITE, true);
   i2c_master_write_byte(cmd, OLED_CONTROL_BYTE_CMD_STREAM, true);
-  i2c_master_write_byte(cmd, 0x00, true);
-  i2c_master_write_byte(cmd, 0x10, true);
-  i2c_master_write_byte(cmd, 0xB0 | Line, true);
+  i2c_master_write_byte(cmd, 0x00, true);           // 0x0L => column address: Lower nibble
+  i2c_master_write_byte(cmd, 0x10, true);           // 0x1H => column address: Higher nibble
+  i2c_master_write_byte(cmd, 0xB0 | Line, true);    // 0xBP => Page address
   i2c_master_stop(cmd);
   esp_err_t espRc = i2c_master_cmd_begin(I2C_BUS, cmd, 10);
   i2c_cmd_link_delete(cmd);
@@ -774,6 +830,163 @@ esp_err_t OLED_Clear(uint8_t DispIdx)
   return espRc; }
 #endif
 
+#ifdef WITH_U8G2
+
+static i2c_cmd_handle_t U8G2_Cmd;
+
+static uint8_t u8g2_esp32_i2c_byte_cb(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr)
+{
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "u8g2_byte_cb(");
+  CONS_UART_Write(',');
+  Format_UnsDec(CONS_UART_Write, (uint16_t)msg);
+  CONS_UART_Write(',');
+  Format_UnsDec(CONS_UART_Write, (uint16_t)arg_int);
+  Format_String(CONS_UART_Write, ") ");
+#endif
+  switch(msg)
+  { case U8X8_MSG_BYTE_SET_DC:
+      break;
+    case U8X8_MSG_BYTE_INIT:
+      break;
+    case U8X8_MSG_BYTE_START_TRANSFER:
+      { U8G2_Cmd=i2c_cmd_link_create();
+        uint8_t Addr = u8x8_GetI2CAddress(u8x8);
+#ifdef DEBUG_PRINT
+        Format_Hex(CONS_UART_Write, Addr);
+#endif
+        i2c_master_start(U8G2_Cmd);
+        i2c_master_write_byte(U8G2_Cmd, (Addr<<1) | I2C_MASTER_WRITE, true);
+        break; }
+    case U8X8_MSG_BYTE_SEND:
+      // { i2c_master_write(U8G2_Cmd, (uint8_t *)arg_ptr, arg_int, true); break; }
+      { uint8_t* Data = (uint8_t *)arg_ptr;
+        for( int Idx=0; Idx<arg_int; Idx++)
+        {
+#ifdef DEBUG_PRINT
+          Format_Hex(CONS_UART_Write, Data[Idx]);
+#endif
+          i2c_master_write_byte(U8G2_Cmd, Data[Idx], true); }
+        break; }
+    case U8X8_MSG_BYTE_END_TRANSFER:
+      { i2c_master_stop(U8G2_Cmd);
+        i2c_master_cmd_begin(I2C_BUS, U8G2_Cmd, 10);
+        i2c_cmd_link_delete(U8G2_Cmd);
+        break; }
+  }
+#ifdef DEBUG_PRINT
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
+  return 0; }
+
+static uint8_t u8g2_esp32_gpio_and_delay_cb(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr)
+{
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "u8g2_gpio_cb(");
+  CONS_UART_Write(',');
+  Format_UnsDec(CONS_UART_Write, (uint16_t)msg);
+  CONS_UART_Write(',');
+  Format_UnsDec(CONS_UART_Write, (uint16_t)arg_int);
+  Format_String(CONS_UART_Write, ")\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
+  switch(msg)
+  { case U8X8_MSG_GPIO_AND_DELAY_INIT: break;
+    case U8X8_MSG_GPIO_RESET:
+    {
+#ifdef PIN_OLED_RST
+      gpio_set_level(PIN_OLED_RST, arg_int);
+#endif
+      break; }
+    case U8X8_MSG_GPIO_CS:             break;
+    case U8X8_MSG_GPIO_I2C_CLOCK:      break;
+    case U8X8_MSG_GPIO_I2C_DATA:       break;
+    case U8X8_MSG_DELAY_MILLI: vTaskDelay(arg_int); break;
+  }
+  return 0; }
+
+u8g2_t U8G2_OLED;
+
+void U8G2_DrawLogo(u8g2_t *OLED)  // draw logo and hardware options in software
+{
+  u8g2_DrawCircle(OLED, 96, 32, 30, U8G2_DRAW_ALL);
+  u8g2_DrawCircle(OLED, 96, 32, 34, U8G2_DRAW_UPPER_RIGHT);
+  u8g2_DrawCircle(OLED, 96, 32, 38, U8G2_DRAW_UPPER_RIGHT);
+  // u8g2_SetFont(OLED, u8g2_font_open_iconic_all_4x_t);
+  // u8g2_DrawGlyph(OLED, 64, 32, 0xF0);
+  u8g2_SetFont(OLED, u8g2_font_ncenB14_tr);
+  u8g2_DrawStr(OLED, 74, 31, "OGN");
+  u8g2_SetFont(OLED, u8g2_font_8x13_tr);
+  u8g2_DrawStr(OLED, 69, 43, "Tracker");
+
+#ifdef WITH_FollowMe
+  u8g2_DrawStr(OLED, 0, 16 ,"FollowMe");
+#endif
+#ifdef WITH_TTGO
+  u8g2_DrawStr(OLED, 0, 16 ,"TTGO");
+#endif
+#ifdef WITH_HELTEC
+  u8g2_DrawStr(OLED, 0, 16 ,"HELTEC");
+#endif
+#ifdef WITH_TBEAM
+  u8g2_DrawStr(OLED, 0, 16 ,"T-BEAM");
+#endif
+
+#ifdef WITH_GPS_MTK
+  u8g2_DrawStr(OLED, 0, 28 ,"MTK GPS");
+#endif
+#ifdef WITH_GPS_UBX
+  u8g2_DrawStr(OLED, 0, 28 ,"UBX GPS");
+#endif
+#ifdef WITH_GPS_SRF
+  u8g2_DrawStr(OLED, 0, 28 ,"SRF GPS");
+#endif
+
+#ifdef WITH_RFM95
+  u8g2_DrawStr(OLED, 0, 40 ,"RFM95");
+#endif
+#ifdef WITH_RFM69
+  u8g2_DrawStr(OLED, 0, 40 ,"RFM69");
+#endif
+
+#ifdef WITH_BMP180
+  u8g2_DrawStr(OLED, 0, 52 ,"BMP180");
+#endif
+#ifdef WITH_BMP280
+  u8g2_DrawStr(OLED, 0, 52 ,"BMP280");
+#endif
+#ifdef WITH_BME280
+  u8g2_DrawStr(&OLED, 0, 52 ,"BME280");
+#endif
+
+#ifdef WITH_BT_SPP
+  u8g2_DrawStr(OLED, 0, 64 ,"BT SPP");
+#endif
+}
+
+void U8G2_Init(void)
+{
+#ifdef WITH_FollowMe
+  u8g2_Setup_sh1106_i2c_128x64_noname_f(&U8G2_OLED, U8G2_R0, u8g2_esp32_i2c_byte_cb, u8g2_esp32_gpio_and_delay_cb);
+#else
+  u8g2_Setup_ssd1306_i2c_128x64_noname_f(&U8G2_OLED, U8G2_R0, u8g2_esp32_i2c_byte_cb, u8g2_esp32_gpio_and_delay_cb);
+#endif
+  u8x8_SetI2CAddress(&U8G2_OLED.u8x8, OLED_I2C_ADDR);
+  u8g2_InitDisplay(&U8G2_OLED);
+  u8g2_SetPowerSave(&U8G2_OLED, 0);
+  u8g2_ClearBuffer(&U8G2_OLED);
+
+  // u8g2_DrawBox  (&U8G2_OLED, 0, 26,  80, 6);
+  // u8g2_DrawFrame(&U8G2_OLED, 0, 26, 100, 6);
+  U8G2_DrawLogo(&U8G2_OLED);
+  u8g2_SendBuffer(&U8G2_OLED);
+}
+
+#endif
+
 //--------------------------------------------------------------------------------------------------------
 // SD card in SPI mode
 
@@ -798,7 +1011,7 @@ void SD_Unmount(void)
 esp_err_t SD_Mount(void)
 { esp_err_t Ret = esp_vfs_fat_sdmmc_mount("/sdcard", &Host, &SlotConfig, &MountConfig, &SD_Card); // ESP_OK => good, ESP_FAIL => failed to mound the file system, other => HW not working
   if(Ret!=ESP_OK) SD_Unmount();
-  return Ret; }
+  return Ret; } // ESP_OK => all good, ESP_FAIL => failed to mount file system, other => failed to init. the SD card
 
 static esp_err_t SD_Init(void)
 {
@@ -856,6 +1069,84 @@ void LED_TimerCheck(uint8_t Ticks)
 #endif
 }
 
+bool Button_SleepRequest = 0;
+
+uint32_t Button_PressTime=0;                              // [ms] counts for how long the button is kept pressed
+uint32_t Button_ReleaseTime=0;
+
+const  int8_t Button_FilterTime  = 20;                    // [ms]
+const  int8_t Button_FilterThres = Button_FilterTime/2;
+static int8_t Button_Filter=(-Button_FilterTime);
+
+// void Sleep(void)
+// {
+// #ifdef PIN_PERIPH_RST
+//   gpio_set_level(PIN_PERIPH_RST, 0);
+// #endif
+// #ifdef PIN_GPS_ENA
+//   gpio_set_level(PIN_GPS_ENA, 0);
+// #endif
+//   esp_light_sleep_start();
+//   Button_SleepRequest = 0;
+//   Button_PressTime=0;
+//  #ifdef PIN_PERIPH_RST
+//    gpio_set_level(PIN_PERIPH_RST, 0);
+//
+//    gpio_set_level(PIN_PERIPH_RST, 1);
+//  #endif
+// }
+
+static uint32_t Button_keptPressed(uint8_t Ticks)
+{ uint32_t ReleaseTime=0;
+  Button_PressTime+=Ticks;
+  // Button_SleepRequest = Button_PressTime>=30000;           // [ms] setup SleepRequest if button pressed for >= 4sec
+  // if(Button_PressTime>=32000)
+  //   { Format_String(CONS_UART_Write, "Sleep in 2 sec\n");
+  //     vTaskDelay(2000);
+  //     Sleep(); }
+  if(Button_ReleaseTime)
+  { // Format_String(CONS_UART_Write, "Button pressed: released for ");
+    // Format_UnsDec(CONS_UART_Write, Button_ReleaseTime, 4, 3);
+    // Format_String(CONS_UART_Write, "sec\n");
+    ReleaseTime=Button_ReleaseTime;
+    Button_ReleaseTime=0; }
+  return ReleaseTime; }  // [ms] when button was pressed, return the release time
+
+static uint32_t Button_keptReleased(uint8_t Ticks)
+{ uint32_t PressTime=0;
+  Button_ReleaseTime+=Ticks;
+  if(Button_PressTime)
+  { // Format_String(CONS_UART_Write, "Button released: pressed for ");
+    // Format_UnsDec(CONS_UART_Write, Button_PressTime, 4, 3);
+    // Format_String(CONS_UART_Write, "sec\n");
+    // if(Button_SleepRequest)
+    // { Format_String(CONS_UART_Write, "Sleep in 2 sec\n");
+    //   vTaskDelay(2000);
+    //   Sleep(); }
+    PressTime=Button_PressTime;
+    Button_PressTime=0;
+  }
+  return PressTime; }  // [ms] when button is released, return the press time
+
+int32_t Button_TimerCheck(uint8_t Ticks)
+{ int32_t PressReleaseTime=0;
+#ifdef PIN_BUTTON
+ // CONS_UART_Write(Button_isPressed()?'^':'_');
+ if(Button_isPressed())
+ { Button_Filter+=Ticks; if(Button_Filter>Button_FilterTime) Button_Filter=Button_FilterTime;
+   if(Button_Filter>=Button_FilterThres)
+   { uint32_t ReleaseTime=Button_keptPressed(Ticks);
+     if(ReleaseTime) PressReleaseTime=(-(int32_t)ReleaseTime);; }
+ }
+ else
+ { Button_Filter-=Ticks; if(Button_Filter<(-Button_FilterTime)) Button_Filter=(-Button_FilterTime);
+   if(Button_Filter<=(-Button_FilterThres))
+   { uint32_t PressTime=Button_keptReleased(Ticks);
+     if(PressTime) PressReleaseTime=PressTime; }
+ }
+#endif
+  return PressReleaseTime; } // [ms] return press (positive) or release (negative) button times
+
 /*
 extern "C"
 void vApplicationIdleHook(void) // when RTOS is idle: should call "sleep until an interrupt"
@@ -907,6 +1198,9 @@ void IO_Configuration(void)
   LED_PCB_Dir();
   LED_PCB_Off();
 #endif
+#ifdef PIN_BUTTON
+  Button_Dir();
+#endif
 
   RFM_IRQ_Dir();
   RFM_RESET_Dir();
@@ -940,6 +1234,10 @@ void IO_Configuration(void)
   esp_err_t ret=spi_bus_initialize(RFM_SPI_HOST, &BusCfg, 1);
   ret=spi_bus_add_device(RFM_SPI_HOST, &DevCfg, &RFM_SPI);
 
+#ifdef PIN_PERIPH_RST
+  gpio_set_direction(PIN_PERIPH_RST, GPIO_MODE_OUTPUT);
+  gpio_set_level(PIN_PERIPH_RST, 1);
+#endif
 #ifdef PIN_GPS_PPS
   gpio_set_direction(PIN_GPS_PPS, GPIO_MODE_INPUT);
 #endif
@@ -949,9 +1247,14 @@ void IO_Configuration(void)
 #endif
 #ifdef PIN_GPS_ENA
   gpio_set_direction(PIN_GPS_ENA, GPIO_MODE_OUTPUT);
-  gpio_set_level(PIN_GPS_ENA, 1);
+#ifdef WITH_GPS_MTK
+  gpio_set_level(PIN_GPS_ENA, 0);                       //
+#else
+  gpio_set_level(PIN_GPS_ENA, 1);                       //
+#endif
 #endif
 
+#ifdef GPS_UART
   uart_config_t GPS_UART_Config =                       // GPS UART
   { baud_rate : 9600,
     data_bits : UART_DATA_8_BITS,
@@ -964,9 +1267,27 @@ void IO_Configuration(void)
   uart_param_config  (GPS_UART, &GPS_UART_Config);
   uart_set_pin       (GPS_UART, PIN_GPS_TXD, PIN_GPS_RXD, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
   uart_driver_install(GPS_UART, 256, 256, 0, 0, 0);
+#endif
 
-#if defined(WITH_OLED) && defined(PIN_OLED_RST)
+#ifdef ADSB_UART
+  uart_config_t ADSB_UART_Config =                      // ADSB UART
+  { baud_rate : 115200,
+    data_bits : UART_DATA_8_BITS,
+    parity    : UART_PARITY_DISABLE,
+    stop_bits : UART_STOP_BITS_1,
+    flow_ctrl : UART_HW_FLOWCTRL_DISABLE,
+    rx_flow_ctrl_thresh: 0,
+    use_ref_tick: 0
+  };
+  uart_param_config  (ADSB_UART, &ADSB_UART_Config);
+  uart_set_pin       (ADSB_UART, PIN_ADSB_TXD, PIN_ADSB_RXD, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+  uart_driver_install(ADSB_UART, 256, 256, 0, 0, 0);
+#endif
+
+#if defined(WITH_OLED) || defined(WITH_U8G2)
+#ifdef PIN_OLED_RST
   gpio_set_direction(PIN_OLED_RST, GPIO_MODE_OUTPUT);
+#endif
 #endif
 
 #if defined(PIN_I2C_SCL) && defined(PIN_I2C_SDA)
@@ -999,6 +1320,10 @@ void IO_Configuration(void)
 #endif
 #endif
 
+#ifdef WITH_U8G2
+  U8G2_Init();
+#endif
+
 #ifdef WITH_SD
   SD_Init();
 #endif
@@ -1010,6 +1335,7 @@ void IO_Configuration(void)
   ADC_Init();
 
   // esp_register_freertos_tick_hook(&vApplicationTickHook);
+
 }
 
 // ======================================================================================================

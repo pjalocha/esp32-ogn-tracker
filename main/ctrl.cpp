@@ -98,6 +98,92 @@ int OLED_DisplayPosition(GPS_Position *GPS=0, uint8_t LineIdx=2)
   return 0; }
 #endif
 
+#ifdef WITH_U8G2
+
+void OLED_PutLine(u8g2_t *OLED, uint8_t LineIdx, const char *Line)
+{ if(Line==0) return;
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "OLED_PutLine( ,");
+  Format_UnsDec(CONS_UART_Write, (uint16_t)LineIdx);
+  CONS_UART_Write(',');
+  Format_String(CONS_UART_Write, Line);
+  Format_String(CONS_UART_Write, ")\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
+  // u8g2_SetFont(OLED, u8g2_font_5x8_tr);
+  u8g2_SetFont(OLED, u8g2_font_amstrad_cpc_extended_8r);
+  u8g2_DrawStr(OLED, 0, (LineIdx+1)*8, Line);
+}
+
+void OLED_DrawStatus(u8g2_t *OLED, uint32_t Time, uint8_t LineIdx=0)
+{ char Line[32];
+  Format_String(Line   , "OGN Tx/Rx      ");
+  Format_HHMMSS(Line+10, Time); Line[16]=0;
+  OLED_PutLine(OLED, LineIdx++, Line);
+  Parameters.Print(Line); Line[16]=0;
+  OLED_PutLine(OLED, LineIdx++, Line); }
+
+void OLED_DrawPosition(u8g2_t *OLED, GPS_Position *GPS=0, uint8_t LineIdx=2)
+{ char Line[20];
+  if(GPS && GPS->isValid())
+  { Line[0]=' ';
+    Format_SignDec(Line+1,  GPS->Latitude /60, 6, 4); Line[9]=' ';
+    Format_UnsDec (Line+10, GPS->Altitude /10, 5, 0); Line[15]='m';
+    OLED_PutLine(OLED, LineIdx  , Line);
+    Format_SignDec(Line,    GPS->Longitude/60, 7, 4);
+    Format_SignDec(Line+10, GPS->ClimbRate,    4, 1);
+    OLED_PutLine(OLED, LineIdx+1, Line);
+    Format_UnsDec (Line   , GPS->Speed, 4, 1); Format_String(Line+5, "m/s  ");
+    Format_UnsDec (Line+10, GPS->Heading, 4, 1); Line[15]='^';
+    OLED_PutLine(OLED, LineIdx+2, Line);
+    Format_String(Line, "0D/00sat DOP00.0");
+    Line[0]+=GPS->FixMode; Format_UnsDec(Line+3, GPS->Satellites, 2);
+    Format_UnsDec(Line+12, (uint16_t)GPS->HDOP, 3, 1);
+    OLED_PutLine(OLED, LineIdx+3, Line);
+  }
+  // else { OLED_PutLine(OLED, LineIdx, 0); OLED_PutLine(OLED, LineIdx+1, 0); OLED_PutLine(LineIdx+2, 0); OLED_PutLine(LineIdx+3, 0); }
+  if(GPS && GPS->isDateValid())
+  { Format_UnsDec (Line   , (uint16_t)GPS->Day,   2, 0); Line[2]='.';
+    Format_UnsDec (Line+ 3, (uint16_t)GPS->Month, 2, 0); Line[5]='.';
+    Format_UnsDec (Line+ 6, (uint16_t)GPS->Year , 2, 0); Line[8]=' '; Line[9]=' '; }
+  else Format_String(Line, "          ");
+  if(GPS && GPS->isTimeValid())
+  { Format_UnsDec (Line+10, (uint16_t)GPS->Hour,  2, 0);
+    Format_UnsDec (Line+12, (uint16_t)GPS->Min,   2, 0);
+    Format_UnsDec (Line+14, (uint16_t)GPS->Sec,   2, 0);
+  } else Line[10]=0;
+  OLED_PutLine(OLED, LineIdx+4, Line);
+  Line[0]=0;
+  if(GPS && GPS->hasBaro)
+  { Format_String(Line   , "0000.0hPa 00000m");
+    Format_UnsDec(Line   , GPS->Pressure/40, 5, 1);
+    Format_UnsDec(Line+10, GPS->StdAltitude/10, 5, 0); }
+  OLED_PutLine(OLED, LineIdx+5, Line);
+}
+
+void OLED_DrawGPS(u8g2_t *OLED)
+{ u8g2_SetFont(OLED, u8g2_font_ncenB14_tr);
+  u8g2_DrawStr(OLED, 0, 16, "GPS");
+}
+
+void OLED_DrawRF(u8g2_t *OLED)
+{ u8g2_SetFont(OLED, u8g2_font_ncenB14_tr);
+  u8g2_DrawStr(OLED, 0, 16, "RF");
+}
+
+void OLED_DrawBARO(u8g2_t *OLED)
+{ u8g2_SetFont(OLED, u8g2_font_ncenB14_tr);
+  u8g2_DrawStr(OLED, 0, 16, "Baro");
+}
+
+void OLED_DrawSYS(u8g2_t *OLED)
+{ u8g2_SetFont(OLED, u8g2_font_ncenB14_tr);
+  u8g2_DrawStr(OLED, 0, 16, "SYS");
+}
+
+#endif
+
 // ========================================================================================================================
 
 static NMEA_RxMsg NMEA;
@@ -219,9 +305,10 @@ static void ProcessCtrlC(void)                                  // print system 
     Format_String(CONS_UART_Write, "kB total, "); }
   Format_UnsDec(CONS_UART_Write, Files);
   Format_String(CONS_UART_Write, " files\n");
+#endif // WITH_SPIFFS
+
   Parameters.Write(CONS_UART_Write);                         // write the parameters to the console
   // Parameters.WriteFile(stdout);                                   // write the parameters to the stdout
-#endif // WITH_SPIFFS
 
 #ifdef WITH_SD
   Format_String(CONS_UART_Write, "SD card:");
@@ -244,8 +331,6 @@ static void ProcessCtrlL(void)                                    // print syste
   SPIFFSlog_ListFiles();
 #endif
 }
-
-
 
 static void ProcessInput(void)
 { for( ; ; )
@@ -275,6 +360,9 @@ static void ProcessInput(void)
 
 // ========================================================================================================================
 
+const uint8_t OLED_Pages = 5;
+static uint8_t OLED_Page=0;
+
 extern "C"
 void vTaskCTRL(void* pvParameters)
 { uint32_t PrevTime=0;
@@ -286,8 +374,23 @@ void vTaskCTRL(void* pvParameters)
 
     LED_TimerCheck(1);                                // update the LED flashes
 #ifdef WITH_BEEPER
-    Play_TimerCheck();                                // update the LED flashes
+    Play_TimerCheck(1);                               // read the button(s)
 #endif
+    bool PageChange=0;
+    int32_t PressRelease=Button_TimerCheck();
+    if(PressRelease!=0)
+    { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, "PressRelease = ");
+      Format_SignDec(CONS_UART_Write, PressRelease);
+      Format_String(CONS_UART_Write, "ms\n");
+      xSemaphoreGive(CONS_Mutex); }
+    if(PressRelease>0)
+    { if(PressRelease<=300)                                            // short button push: switch pages
+      { OLED_Page++; if(OLED_Page>=OLED_Pages) OLED_Page=0;
+        PageChange=1; }
+      else if(PressRelease<=2000)                                      // long button push: some page action
+      { }
+    }
 
     uint32_t Time=TimeSync_Time();
     GPS_Position *GPS = GPS_getPosition();
@@ -297,12 +400,16 @@ void vTaskCTRL(void* pvParameters)
     PrevTime=Time; PrevGPS=GPS;
 
 #ifdef WITH_OLED
-    esp_err_t StatErr=ESP_OK;
-    esp_err_t PosErr=ESP_OK;
-    if(TimeChange)
-    { StatErr = OLED_DisplayStatus(Time, 0); }
-    if(GPSchange)
-    { PosErr = OLED_DisplayPosition(GPS, 2); }
+    if(Button_SleepRequest)
+    { OLED_DisplayON(0); }
+    else
+    { esp_err_t StatErr=ESP_OK;
+      esp_err_t PosErr=ESP_OK;
+      if(TimeChange)
+      { StatErr = OLED_DisplayStatus(Time, 0); }
+      if(GPSchange)
+      { PosErr = OLED_DisplayPosition(GPS, 2); }
+    }
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
     if(TimeChange)
@@ -316,6 +423,24 @@ void vTaskCTRL(void* pvParameters)
     xSemaphoreGive(CONS_Mutex);
 #endif
 #endif // WITH_OLED
+
+#ifdef WITH_U8G2
+    if(Button_SleepRequest)
+    { u8g2_SetPowerSave(&U8G2_OLED, 0); }
+    else if(TimeChange || PageChange)
+    { u8g2_ClearBuffer(&U8G2_OLED);
+      switch(OLED_Page)
+      { case 1: OLED_DrawGPS(&U8G2_OLED); break;
+        case 2: OLED_DrawRF(&U8G2_OLED); break;
+        case 3: OLED_DrawBARO(&U8G2_OLED); break;
+        case 4: OLED_DrawSYS(&U8G2_OLED); break;
+        default:
+        { OLED_DrawStatus(&U8G2_OLED, Time, 0);
+          OLED_DrawPosition(&U8G2_OLED, GPS, 2); }
+      }
+      u8g2_SendBuffer(&U8G2_OLED);
+    }
+#endif
 
 #ifdef DEBUG_PRINT                                      // in debug mode print the parameters and state every 60sec
     if((Time%60)!=0) continue;
