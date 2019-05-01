@@ -908,7 +908,64 @@ static uint8_t u8g2_esp32_gpio_and_delay_cb(u8x8_t *u8x8, uint8_t msg, uint8_t a
   }
   return 0; }
 
-static u8g2_t U8G2_OLED;
+u8g2_t U8G2_OLED;
+
+void U8G2_DrawLogo(u8g2_t *OLED)  // draw logo and hardware options in software
+{
+  u8g2_DrawCircle(OLED, 96, 32, 30, U8G2_DRAW_ALL);
+  u8g2_DrawCircle(OLED, 96, 32, 34, U8G2_DRAW_UPPER_RIGHT);
+  u8g2_DrawCircle(OLED, 96, 32, 38, U8G2_DRAW_UPPER_RIGHT);
+  // u8g2_SetFont(OLED, u8g2_font_open_iconic_all_4x_t);
+  // u8g2_DrawGlyph(OLED, 64, 32, 0xF0);
+  u8g2_SetFont(OLED, u8g2_font_ncenB14_tr);
+  u8g2_DrawStr(OLED, 74, 31, "OGN");
+  u8g2_SetFont(OLED, u8g2_font_8x13_tr);
+  u8g2_DrawStr(OLED, 69, 43, "Tracker");
+
+#ifdef WITH_FollowMe
+  u8g2_DrawStr(OLED, 0, 16 ,"FollowMe");
+#endif
+#ifdef WITH_TTGO
+  u8g2_DrawStr(OLED, 0, 16 ,"TTGO");
+#endif
+#ifdef WITH_HELTEC
+  u8g2_DrawStr(OLED, 0, 16 ,"HELTEC");
+#endif
+#ifdef WITH_TBEAM
+  u8g2_DrawStr(OLED, 0, 16 ,"T-BEAM");
+#endif
+
+#ifdef WITH_GPS_MTK
+  u8g2_DrawStr(OLED, 0, 28 ,"MTK GPS");
+#endif
+#ifdef WITH_GPS_UBX
+  u8g2_DrawStr(OLED, 0, 28 ,"UBX GPS");
+#endif
+#ifdef WITH_GPS_SRF
+  u8g2_DrawStr(OLED, 0, 28 ,"SRF GPS");
+#endif
+
+#ifdef WITH_RFM95
+  u8g2_DrawStr(OLED, 0, 40 ,"RFM95");
+#endif
+#ifdef WITH_RFM69
+  u8g2_DrawStr(OLED, 0, 40 ,"RFM69");
+#endif
+
+#ifdef WITH_BMP180
+  u8g2_DrawStr(OLED, 0, 52 ,"BMP180");
+#endif
+#ifdef WITH_BMP280
+  u8g2_DrawStr(OLED, 0, 52 ,"BMP280");
+#endif
+#ifdef WITH_BME280
+  u8g2_DrawStr(&OLED, 0, 52 ,"BME280");
+#endif
+
+#ifdef WITH_BT_SPP
+  u8g2_DrawStr(OLED, 0, 64 ,"BT SPP");
+#endif
+}
 
 void U8G2_Init(void)
 {
@@ -921,58 +978,10 @@ void U8G2_Init(void)
   u8g2_InitDisplay(&U8G2_OLED);
   u8g2_SetPowerSave(&U8G2_OLED, 0);
   u8g2_ClearBuffer(&U8G2_OLED);
+
   // u8g2_DrawBox  (&U8G2_OLED, 0, 26,  80, 6);
   // u8g2_DrawFrame(&U8G2_OLED, 0, 26, 100, 6);
-  u8g2_DrawCircle(&U8G2_OLED, 96, 32, 30, U8G2_DRAW_ALL);
-  u8g2_SetFont(&U8G2_OLED, u8g2_font_ncenB14_tr);
-  u8g2_DrawStr(&U8G2_OLED, 74, 40 ,"OGN");
-
-  u8g2_SetFont(&U8G2_OLED, u8g2_font_8x13_tr);
-
-#ifdef WITH_FollowMe
-  u8g2_DrawStr(&U8G2_OLED, 0, 16 ,"FollowMe");
-#endif
-#ifdef WITH_TTGO
-  u8g2_DrawStr(&U8G2_OLED, 0, 16 ,"TTGO");
-#endif
-#ifdef WITH_HELTEC
-  u8g2_DrawStr(&U8G2_OLED, 0, 16 ,"HELTEC");
-#endif
-#ifdef WITH_TBEAM
-  u8g2_DrawStr(&U8G2_OLED, 0, 16 ,"T-BEAM");
-#endif
-
-#ifdef WITH_GPS_MTK
-  u8g2_DrawStr(&U8G2_OLED, 0, 28 ,"MTK GPS");
-#endif
-#ifdef WITH_GPS_UBX
-  u8g2_DrawStr(&U8G2_OLED, 0, 28 ,"UBX GPS");
-#endif
-#ifdef WITH_GPS_SRF
-  u8g2_DrawStr(&U8G2_OLED, 0, 28 ,"SRF GPS");
-#endif
-
-#ifdef WITH_RFM95
-  u8g2_DrawStr(&U8G2_OLED, 0, 40 ,"RFM95");
-#endif
-#ifdef WITH_RFM69
-  u8g2_DrawStr(&U8G2_OLED, 0, 40 ,"RFM69");
-#endif
-
-#ifdef WITH_BMP180
-  u8g2_DrawStr(&U8G2_OLED, 0, 52 ,"BMP180");
-#endif
-#ifdef WITH_BMP280
-  u8g2_DrawStr(&U8G2_OLED, 0, 52 ,"BMP280");
-#endif
-#ifdef WITH_BME280
-  u8g2_DrawStr(&U8G2_OLED, 0, 52 ,"BME280");
-#endif
-
-#ifdef WITH_BT_SPP
-  u8g2_DrawStr(&U8G2_OLED, 0, 64 ,"BT SPP");
-#endif
-
+  U8G2_DrawLogo(&U8G2_OLED);
   u8g2_SendBuffer(&U8G2_OLED);
 }
 
@@ -1087,51 +1096,56 @@ static int8_t Button_Filter=(-Button_FilterTime);
 //  #endif
 // }
 
-static void Button_keptPressed(uint8_t Ticks)
-{ Button_PressTime+=Ticks;
+static uint32_t Button_keptPressed(uint8_t Ticks)
+{ uint32_t ReleaseTime=0;
+  Button_PressTime+=Ticks;
   // Button_SleepRequest = Button_PressTime>=30000;           // [ms] setup SleepRequest if button pressed for >= 4sec
   // if(Button_PressTime>=32000)
   //   { Format_String(CONS_UART_Write, "Sleep in 2 sec\n");
   //     vTaskDelay(2000);
   //     Sleep(); }
   if(Button_ReleaseTime)
-  { Format_String(CONS_UART_Write, "Button pressed: released for ");
-    Format_UnsDec(CONS_UART_Write, Button_ReleaseTime, 4, 3);
-    Format_String(CONS_UART_Write, "sec\n");
-    Button_ReleaseTime=0;
-  }
-}
+  { // Format_String(CONS_UART_Write, "Button pressed: released for ");
+    // Format_UnsDec(CONS_UART_Write, Button_ReleaseTime, 4, 3);
+    // Format_String(CONS_UART_Write, "sec\n");
+    ReleaseTime=Button_ReleaseTime;
+    Button_ReleaseTime=0; }
+  return ReleaseTime; }  // [ms] when button was pressed, return the release time
 
-static void Button_keptReleased(uint8_t Ticks)
-{ Button_ReleaseTime+=Ticks;
-
+static uint32_t Button_keptReleased(uint8_t Ticks)
+{ uint32_t PressTime=0;
+  Button_ReleaseTime+=Ticks;
   if(Button_PressTime)
-  { Format_String(CONS_UART_Write, "Button released: pressed for ");
-    Format_UnsDec(CONS_UART_Write, Button_PressTime, 4, 3);
-    Format_String(CONS_UART_Write, "sec\n");
+  { // Format_String(CONS_UART_Write, "Button released: pressed for ");
+    // Format_UnsDec(CONS_UART_Write, Button_PressTime, 4, 3);
+    // Format_String(CONS_UART_Write, "sec\n");
     // if(Button_SleepRequest)
     // { Format_String(CONS_UART_Write, "Sleep in 2 sec\n");
     //   vTaskDelay(2000);
     //   Sleep(); }
+    PressTime=Button_PressTime;
     Button_PressTime=0;
   }
-}
+  return PressTime; }  // [ms] when button is released, return the press time
 
-void Button_TimerCheck(uint8_t Ticks)
-{
+int32_t Button_TimerCheck(uint8_t Ticks)
+{ int32_t PressReleaseTime=0;
 #ifdef PIN_BUTTON
  // CONS_UART_Write(Button_isPressed()?'^':'_');
  if(Button_isPressed())
  { Button_Filter+=Ticks; if(Button_Filter>Button_FilterTime) Button_Filter=Button_FilterTime;
-   if(Button_Filter>=Button_FilterThres) { Button_keptPressed(Ticks); }
+   if(Button_Filter>=Button_FilterThres)
+   { uint32_t ReleaseTime=Button_keptPressed(Ticks);
+     if(ReleaseTime) PressReleaseTime=(-(int32_t)ReleaseTime);; }
  }
  else
  { Button_Filter-=Ticks; if(Button_Filter<(-Button_FilterTime)) Button_Filter=(-Button_FilterTime);
-   if(Button_Filter<=(-Button_FilterThres)) { Button_keptReleased(Ticks); }
+   if(Button_Filter<=(-Button_FilterThres))
+   { uint32_t PressTime=Button_keptReleased(Ticks);
+     if(PressTime) PressReleaseTime=PressTime; }
  }
 #endif
-
-}
+  return PressReleaseTime; } // [ms] return press (positive) or release (negative) button times
 
 /*
 extern "C"
