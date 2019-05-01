@@ -48,6 +48,10 @@
 #include "font8x8_basic.h"
 #endif
 
+#ifdef WITH_U8G2
+#include "u8g2.h"
+#endif
+
 // ======================================================================================================
 /*
 The HELTEC AUtomation board WiFi LoRa 32 with sx1278 (RFM95)
@@ -259,6 +263,7 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 #ifdef WITH_TBEAM                 // T-Beam
 #define PIN_I2C_SCL GPIO_NUM_22   // SCL pin => this way the pin pattern fits the BMP280 module
 #define PIN_I2C_SDA GPIO_NUM_21   // SDA pin
+#define OLED_I2C_ADDR 0x3C        // I2C address of the OLED display
 #endif
 
 #ifdef WITH_FollowMe              //
@@ -278,7 +283,7 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 #define PIN_BEEPER    GPIO_NUM_17
 #endif
 
-#if !defined(WITH_OLED) && !defined(WITH_BMP180) && !defined(WITH_BMP280) && !defined(WITH_BME280)
+#if !defined(WITH_OLED) && !defined(WITH_U8G2) && !defined(WITH_BMP180) && !defined(WITH_BMP280) && !defined(WITH_BME280)
 #undef PIN_I2C_SCL
 #undef PIN_I2C_SDA
 #endif
@@ -825,6 +830,107 @@ esp_err_t OLED_Clear(uint8_t DispIdx)
   return espRc; }
 #endif
 
+#ifdef WITH_U8G2
+
+static i2c_cmd_handle_t U8G2_Cmd;
+
+static uint8_t u8g2_esp32_i2c_byte_cb(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr)
+{
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "u8g2_byte_cb(");
+  CONS_UART_Write(',');
+  Format_UnsDec(CONS_UART_Write, (uint16_t)msg);
+  CONS_UART_Write(',');
+  Format_UnsDec(CONS_UART_Write, (uint16_t)arg_int);
+  Format_String(CONS_UART_Write, ") ");
+#endif
+  switch(msg)
+  { case U8X8_MSG_BYTE_SET_DC:
+      break;
+    case U8X8_MSG_BYTE_INIT:
+      break;
+    case U8X8_MSG_BYTE_START_TRANSFER:
+      { U8G2_Cmd=i2c_cmd_link_create();
+        uint8_t Addr = u8x8_GetI2CAddress(u8x8);
+#ifdef DEBUG_PRINT
+        Format_Hex(CONS_UART_Write, Addr);
+#endif
+        i2c_master_start(U8G2_Cmd);
+        i2c_master_write_byte(U8G2_Cmd, (Addr<<1) | I2C_MASTER_WRITE, true);
+        break; }
+    case U8X8_MSG_BYTE_SEND:
+      // { i2c_master_write(U8G2_Cmd, (uint8_t *)arg_ptr, arg_int, true); break; }
+      { uint8_t* Data = (uint8_t *)arg_ptr;
+        for( int Idx=0; Idx<arg_int; Idx++)
+        {
+#ifdef DEBUG_PRINT
+          Format_Hex(CONS_UART_Write, Data[Idx]);
+#endif
+          i2c_master_write_byte(U8G2_Cmd, Data[Idx], true); }
+        break; }
+    case U8X8_MSG_BYTE_END_TRANSFER:
+      { i2c_master_stop(U8G2_Cmd);
+        i2c_master_cmd_begin(I2C_BUS, U8G2_Cmd, 10);
+        i2c_cmd_link_delete(U8G2_Cmd);
+        break; }
+  }
+#ifdef DEBUG_PRINT
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
+  return 0; }
+
+static uint8_t u8g2_esp32_gpio_and_delay_cb(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr)
+{
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "u8g2_gpio_cb(");
+  CONS_UART_Write(',');
+  Format_UnsDec(CONS_UART_Write, (uint16_t)msg);
+  CONS_UART_Write(',');
+  Format_UnsDec(CONS_UART_Write, (uint16_t)arg_int);
+  Format_String(CONS_UART_Write, ")\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
+  switch(msg)
+  { case U8X8_MSG_GPIO_AND_DELAY_INIT: break;
+    case U8X8_MSG_GPIO_RESET:
+    {
+#ifdef PIN_OLED_RST
+      gpio_set_level(PIN_OLED_RST, arg_int);
+#endif
+      break; }
+    case U8X8_MSG_GPIO_CS:             break;
+    case U8X8_MSG_GPIO_I2C_CLOCK:      break;
+    case U8X8_MSG_GPIO_I2C_DATA:       break;
+    case U8X8_MSG_DELAY_MILLI: vTaskDelay(arg_int); break;
+  }
+  return 0; }
+
+static u8g2_t U8G2_OLED;
+
+void U8G2_Init(void)
+{
+  // u8g2_Setup_ssd1306_i2c_128x64_alt0_f(&U8G2_OLED, U8G2_R0, u8g2_esp32_i2c_byte_cb, u8g2_esp32_gpio_and_delay_cb);
+  u8g2_Setup_ssd1306_i2c_128x64_noname_f(&U8G2_OLED, U8G2_R0, u8g2_esp32_i2c_byte_cb, u8g2_esp32_gpio_and_delay_cb);
+  // u8g2_Setup_ssd1306_i2c_128x64_noname_2(&U8G2_OLED, U8G2_R0, u8g2_esp32_i2c_byte_cb, u8g2_esp32_gpio_and_delay_cb);
+  // u8g2_Setup_ssd1306_i2c_128x64_noname_1(&U8G2_OLED, U8G2_R0, u8g2_esp32_i2c_byte_cb, u8g2_esp32_gpio_and_delay_cb);
+  // u8g2_Setup_ssd1306_i2c_128x64_alt0_2(&U8G2_OLED, U8G2_R0, u8g2_esp32_i2c_byte_cb, u8g2_esp32_gpio_and_delay_cb);
+  u8x8_SetI2CAddress(&U8G2_OLED.u8x8, OLED_I2C_ADDR);
+  u8g2_InitDisplay(&U8G2_OLED);
+  u8g2_SetPowerSave(&U8G2_OLED, 0);
+  u8g2_ClearBuffer(&U8G2_OLED);
+  u8g2_DrawCircle(&U8G2_OLED, 64, 32, 30, U8G2_DRAW_ALL);
+  // u8g2_DrawBox  (&U8G2_OLED, 0, 26,  80, 6);
+  // u8g2_DrawFrame(&U8G2_OLED, 0, 26, 100, 6);
+  u8g2_SetFont(&U8G2_OLED, u8g2_font_ncenB14_tr);
+  u8g2_DrawStr(&U8G2_OLED, 42, 40 ,"OGN");
+  u8g2_SendBuffer(&U8G2_OLED);
+}
+
+#endif
+
 //--------------------------------------------------------------------------------------------------------
 // SD card in SPI mode
 
@@ -849,7 +955,7 @@ void SD_Unmount(void)
 esp_err_t SD_Mount(void)
 { esp_err_t Ret = esp_vfs_fat_sdmmc_mount("/sdcard", &Host, &SlotConfig, &MountConfig, &SD_Card); // ESP_OK => good, ESP_FAIL => failed to mound the file system, other => HW not working
   if(Ret!=ESP_OK) SD_Unmount();
-  return Ret; }
+  return Ret; } // ESP_OK => all good, ESP_FAIL => failed to mount file system, other => failed to init. the SD card
 
 static esp_err_t SD_Init(void)
 {
@@ -1117,8 +1223,10 @@ void IO_Configuration(void)
   uart_driver_install(ADSB_UART, 256, 256, 0, 0, 0);
 #endif
 
-#if defined(WITH_OLED) && defined(PIN_OLED_RST)
+#if defined(WITH_OLED) || defined(WITH_U8G2)
+#ifdef PIN_OLED_RST
   gpio_set_direction(PIN_OLED_RST, GPIO_MODE_OUTPUT);
+#endif
 #endif
 
 #if defined(PIN_I2C_SCL) && defined(PIN_I2C_SDA)
@@ -1149,6 +1257,10 @@ void IO_Configuration(void)
   OLED_Clear(1);
   OLED_SetContrast(128, 1);
 #endif
+#endif
+
+#ifdef WITH_U8G2
+  U8G2_Init();
 #endif
 
 #ifdef WITH_SD
