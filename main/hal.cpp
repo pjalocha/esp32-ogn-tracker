@@ -912,20 +912,67 @@ static u8g2_t U8G2_OLED;
 
 void U8G2_Init(void)
 {
-  // u8g2_Setup_ssd1306_i2c_128x64_alt0_f(&U8G2_OLED, U8G2_R0, u8g2_esp32_i2c_byte_cb, u8g2_esp32_gpio_and_delay_cb);
+#ifdef WITH_FollowMe
+  u8g2_Setup_sh1106_i2c_128x64_noname_f(&U8G2_OLED, U8G2_R0, u8g2_esp32_i2c_byte_cb, u8g2_esp32_gpio_and_delay_cb);
+#else
   u8g2_Setup_ssd1306_i2c_128x64_noname_f(&U8G2_OLED, U8G2_R0, u8g2_esp32_i2c_byte_cb, u8g2_esp32_gpio_and_delay_cb);
-  // u8g2_Setup_ssd1306_i2c_128x64_noname_2(&U8G2_OLED, U8G2_R0, u8g2_esp32_i2c_byte_cb, u8g2_esp32_gpio_and_delay_cb);
-  // u8g2_Setup_ssd1306_i2c_128x64_noname_1(&U8G2_OLED, U8G2_R0, u8g2_esp32_i2c_byte_cb, u8g2_esp32_gpio_and_delay_cb);
-  // u8g2_Setup_ssd1306_i2c_128x64_alt0_2(&U8G2_OLED, U8G2_R0, u8g2_esp32_i2c_byte_cb, u8g2_esp32_gpio_and_delay_cb);
+#endif
   u8x8_SetI2CAddress(&U8G2_OLED.u8x8, OLED_I2C_ADDR);
   u8g2_InitDisplay(&U8G2_OLED);
   u8g2_SetPowerSave(&U8G2_OLED, 0);
   u8g2_ClearBuffer(&U8G2_OLED);
-  u8g2_DrawCircle(&U8G2_OLED, 64, 32, 30, U8G2_DRAW_ALL);
   // u8g2_DrawBox  (&U8G2_OLED, 0, 26,  80, 6);
   // u8g2_DrawFrame(&U8G2_OLED, 0, 26, 100, 6);
+  u8g2_DrawCircle(&U8G2_OLED, 96, 32, 30, U8G2_DRAW_ALL);
   u8g2_SetFont(&U8G2_OLED, u8g2_font_ncenB14_tr);
-  u8g2_DrawStr(&U8G2_OLED, 42, 40 ,"OGN");
+  u8g2_DrawStr(&U8G2_OLED, 74, 40 ,"OGN");
+
+  u8g2_SetFont(&U8G2_OLED, u8g2_font_8x13_tr);
+
+#ifdef WITH_FollowMe
+  u8g2_DrawStr(&U8G2_OLED, 0, 16 ,"FollowMe");
+#endif
+#ifdef WITH_TTGO
+  u8g2_DrawStr(&U8G2_OLED, 0, 16 ,"TTGO");
+#endif
+#ifdef WITH_HELTEC
+  u8g2_DrawStr(&U8G2_OLED, 0, 16 ,"HELTEC");
+#endif
+#ifdef WITH_TBEAM
+  u8g2_DrawStr(&U8G2_OLED, 0, 16 ,"T-BEAM");
+#endif
+
+#ifdef WITH_GPS_MTK
+  u8g2_DrawStr(&U8G2_OLED, 0, 28 ,"MTK GPS");
+#endif
+#ifdef WITH_GPS_UBX
+  u8g2_DrawStr(&U8G2_OLED, 0, 28 ,"UBX GPS");
+#endif
+#ifdef WITH_GPS_SRF
+  u8g2_DrawStr(&U8G2_OLED, 0, 28 ,"SRF GPS");
+#endif
+
+#ifdef WITH_RFM95
+  u8g2_DrawStr(&U8G2_OLED, 0, 40 ,"RFM95");
+#endif
+#ifdef WITH_RFM69
+  u8g2_DrawStr(&U8G2_OLED, 0, 40 ,"RFM69");
+#endif
+
+#ifdef WITH_BMP180
+  u8g2_DrawStr(&U8G2_OLED, 0, 52 ,"BMP180");
+#endif
+#ifdef WITH_BMP280
+  u8g2_DrawStr(&U8G2_OLED, 0, 52 ,"BMP280");
+#endif
+#ifdef WITH_BME280
+  u8g2_DrawStr(&U8G2_OLED, 0, 52 ,"BME280");
+#endif
+
+#ifdef WITH_BT_SPP
+  u8g2_DrawStr(&U8G2_OLED, 0, 64 ,"BT SPP");
+#endif
+
   u8g2_SendBuffer(&U8G2_OLED);
 }
 
