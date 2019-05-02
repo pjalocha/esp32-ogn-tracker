@@ -959,7 +959,7 @@ void U8G2_DrawLogo(u8g2_t *OLED)  // draw logo and hardware options in software
   u8g2_DrawStr(OLED, 0, 52 ,"BMP280");
 #endif
 #ifdef WITH_BME280
-  u8g2_DrawStr(&OLED, 0, 52 ,"BME280");
+  u8g2_DrawStr(OLED, 0, 52 ,"BME280");
 #endif
 
 #ifdef WITH_BT_SPP
