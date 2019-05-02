@@ -588,7 +588,7 @@ static void GPS_MAV(void)                                                  // wh
   uint64_t UnixTime_ms = MAV_getUnixTime();                                   // get the time from the MAVlink message
   if( (MsgID!=MAV_ID_SYSTEM_TIME) && UnixTime_ms)
   { if(Position[PosIdx].hasTime)
-    { uint64_t PrevUnixTime_ms = Position[PosIdx].getUnixTime_ms();
+    { uint64_t PrevUnixTime_ms = 1000*(uint64_t)Position[PosIdx].getUnixTime()+10*(uint32_t)Position[PosIdx].FracSec; // Position[PosIdx].getUnixTime_ms();
       int32_t TimeDiff_ms = UnixTime_ms-PrevUnixTime_ms;
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
