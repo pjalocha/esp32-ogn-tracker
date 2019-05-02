@@ -26,9 +26,10 @@ class FreqPlan
    { setPlan(calcPlan(Latitude, Longitude)); }
 
    const char *getPlanName(void) { return getPlanName(Plan); }
+   uint32_t getCenterFreq(void) { return BaseFreq + ChanSepar/2*(Channels-1); }
 
    static const char *getPlanName(uint8_t Plan)
-   { static const char *Name[6] = { "Default", "Europe/Africa", "USA/Canada", "Australia/South America", "New Zeeland", "Europe/Africa 434MHz" } ;
+   { static const char *Name[6] = { "Default", "EU/Africa", "USA/Canada", "Australia/Chile", "New Zeeland", "EU/Africa 434MHz" } ;
      if(Plan>=6) return 0;
      return Name[Plan]; }
 
