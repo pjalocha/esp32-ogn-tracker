@@ -261,7 +261,8 @@ class FlashParameters
     Line[Len++]='/';
     Len+=Format_SignDec(Line+Len, (int16_t)getTxPower());
     Len+=Format_String(Line+Len, "dBm");
-    Line[Len++]=' '; Len+=Format_SignDec(Line+Len, (int32_t)RFchipFreqCorr, 2, 1); Len+=Format_String(Line+Len, "ppm");
+    Line[Len++]=' '; Len+=Format_SignDec(Line+Len, (int32_t)RFchipFreqCorr, 2, 1);
+    Len+=Format_String(Line+Len, "ppm");
     Len+=Format_String(Line+Len, " CON:");
     Len+=Format_UnsDec(Line+Len, CONbaud);
     Len+=Format_String(Line+Len, "bps\n");

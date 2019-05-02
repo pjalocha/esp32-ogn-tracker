@@ -9,6 +9,7 @@
 
 #include "hal.h"
 
+#include "rf.h"
 #include "ctrl.h"
 #include "log.h"
 
@@ -18,6 +19,8 @@
 #include "format.h"
 
 // #define DEBUG_PRINT
+
+static char Line[128];
 
 // ========================================================================================================================
 
@@ -51,8 +54,7 @@ void PrintTasks(void (*CONS_UART_Write)(char))
 
 #ifdef WITH_OLED
 int OLED_DisplayStatus(uint32_t Time, uint8_t LineIdx=0)
-{ char Line[20];
-  Format_String(Line   , "OGN Tx/Rx      ");
+{ Format_String(Line   , "OGN Tx/Rx      ");
   Format_HHMMSS(Line+10, Time);
   OLED_PutLine(LineIdx++, Line);
   Parameters.Print(Line);
@@ -60,8 +62,7 @@ int OLED_DisplayStatus(uint32_t Time, uint8_t LineIdx=0)
   return 0; }
 
 int OLED_DisplayPosition(GPS_Position *GPS=0, uint8_t LineIdx=2)
-{ char Line[20];
-  if(GPS && GPS->isValid())
+{ if(GPS && GPS->isValid())
   { Line[0]=' ';
     Format_SignDec(Line+1,  GPS->Latitude /60, 6, 4); Line[9]=' ';
     Format_UnsDec (Line+10, GPS->Altitude /10, 5, 0); Line[15]='m';
@@ -117,16 +118,14 @@ void OLED_PutLine(u8g2_t *OLED, uint8_t LineIdx, const char *Line)
 }
 
 void OLED_DrawStatus(u8g2_t *OLED, uint32_t Time, uint8_t LineIdx=0)
-{ char Line[32];
-  Format_String(Line   , "OGN Tx/Rx      ");
+{ Format_String(Line   , "OGN Tx/Rx      ");
   Format_HHMMSS(Line+10, Time); Line[16]=0;
   OLED_PutLine(OLED, LineIdx++, Line);
   Parameters.Print(Line); Line[16]=0;
   OLED_PutLine(OLED, LineIdx++, Line); }
 
 void OLED_DrawPosition(u8g2_t *OLED, GPS_Position *GPS=0, uint8_t LineIdx=2)
-{ char Line[20];
-  if(GPS && GPS->isValid())
+{ if(GPS && GPS->isValid())
   { Line[0]=' ';
     Format_SignDec(Line+1,  GPS->Latitude /60, 6, 4); Line[9]=' ';
     Format_UnsDec (Line+10, GPS->Altitude /10, 5, 0); Line[15]='m';
@@ -162,24 +161,122 @@ void OLED_DrawPosition(u8g2_t *OLED, GPS_Position *GPS=0, uint8_t LineIdx=2)
   OLED_PutLine(OLED, LineIdx+5, Line);
 }
 
-void OLED_DrawGPS(u8g2_t *OLED)
-{ u8g2_SetFont(OLED, u8g2_font_ncenB14_tr);
-  u8g2_DrawStr(OLED, 0, 16, "GPS");
+void OLED_DrawGPS(u8g2_t *OLED, GPS_Position *GPS=0)
+{ // u8g2_SetFont(OLED, u8g2_font_ncenB14_tr);
+  u8g2_SetFont(OLED, u8g2_font_7x13_tf);
+  uint8_t Len=0;
+  Len+=Format_String(Line+Len, "GPS ");
+#ifdef WITH_GPS_UBX
+  Len+=Format_String(Line+Len, "UBX ");
+#endif
+#ifdef WITH_GPS_MTK
+  Len+=Format_String(Line+Len, "MTK ");
+#endif
+#ifdef WITH_GPS_SRF
+  Len+=Format_String(Line+Len, "SRF ");
+#endif
+  Len+=Format_UnsDec(Line+Len, GPS_getBaudRate(), 1);
+  Len+=Format_String(Line+Len, "bps");
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 12, Line);
+  if(GPS && GPS->isDateValid())
+  { Format_UnsDec (Line   , (uint16_t)GPS->Day,   2, 0); Line[2]='.';
+    Format_UnsDec (Line+ 3, (uint16_t)GPS->Month, 2, 0); Line[5]='.';
+    Format_UnsDec (Line+ 6, (uint16_t)GPS->Year , 2, 0); Line[8]=' ';
+  } else Format_String(Line, "  .  .   ");
+  if(GPS && GPS->isTimeValid())
+  { Format_UnsDec (Line+ 9, (uint16_t)GPS->Hour,  2, 0); Line[11]=':';
+    Format_UnsDec (Line+12, (uint16_t)GPS->Min,   2, 0); Line[14]=':';
+    Format_UnsDec (Line+15, (uint16_t)GPS->Sec,   2, 0);
+  } else Format_String(Line+9, "  :  :  ");
+  Line[17]=0;
+  u8g2_DrawStr(OLED, 0, 24, Line);
+  Len=0;
+  Len+=Format_String(Line+Len, "Lat:  ");
+  if(GPS && GPS->isValid())
+  { Len+=Format_SignDec(Line+Len,  GPS->Latitude /6, 7, 5);
+    Line[Len++]=0xB0; }
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 36, Line);
+  Len=0;
+  Len+=Format_String(Line+Len, "Lon: ");
+  if(GPS && GPS->isValid())
+  { Len+=Format_SignDec(Line+Len,  GPS->Longitude /6, 8, 5);
+    Line[Len++]=0xB0; }
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 48, Line);
+  Len=0;
+  Len+=Format_String(Line+Len, "Alt: ");
+  if(GPS && GPS->isValid())
+  { Len+=Format_SignDec(Line+Len,  GPS->Altitude, 4, 1);
+    Line[Len++]='m'; }
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 60, Line);
 }
 
 void OLED_DrawRF(u8g2_t *OLED)
-{ u8g2_SetFont(OLED, u8g2_font_ncenB14_tr);
-  u8g2_DrawStr(OLED, 0, 16, "RF");
+{ u8g2_SetFont(OLED, u8g2_font_7x13_tf);
+  uint8_t Len=0;
+#ifdef WITH_RFM69
+  Len+=Format_String(Line+Len, "RFM69");
+  if(isTxTypeHW()) Line[Len++]='H';
+  Line[Len++]='W';
+#endif
+#ifdef WITH_RFM95
+  Len+=Format_String(Line+Len, "RFM95");
+#endif
+#ifdef WITH_SX1272
+  Len+=Format_String(Line+Len, "SX1272");
+#endif
+  Line[Len++]=':';
+  Len+=Format_SignDec(Line+Len, (int16_t)Parameters.getTxPower());
+  Len+=Format_String(Line+Len, "dBm");
+  Line[Len++]=' ';
+  Len+=Format_SignDec(Line+Len, (int32_t)Parameters.RFchipFreqCorr, 2, 1);
+  Len+=Format_String(Line+Len, "ppm");
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 12, Line);
+  Len=0;
+  Len+=Format_String(Line+Len, "Rx:");
+  Len+=Format_SignDec(Line+Len, -5*RX_AverRSSI, 2, 1);
+  Len+=Format_String(Line+Len, "dBm ");
+  Len+=Format_UnsDec(Line+Len, RX_OGN_Count64);
+  Len+=Format_String(Line+Len, "/min");
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 24, Line);
+  Len=0;
+  Len+=Format_SignDec(Line+Len, (int16_t)RF_Temp);
+  Line[Len++]=0xB0;
+  Line[Len++]='C';
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 36, Line);
+  // u8g2_DrawStr(OLED, 0, 48, RF_FreqPlan.getPlanName());
+  Len=0;
+  Len+=Format_String(Line+Len, RF_FreqPlan.getPlanName());
+  Line[Len++]=' ';
+  Len+=Format_UnsDec(Line+Len, (uint16_t)(RF_FreqPlan.getCenterFreq()/100000), 3, 1);
+  Len+=Format_String(Line+Len, "MHz");
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 48, Line);
+
 }
 
-void OLED_DrawBARO(u8g2_t *OLED)
+void OLED_DrawBaro(u8g2_t *OLED)
 { u8g2_SetFont(OLED, u8g2_font_ncenB14_tr);
-  u8g2_DrawStr(OLED, 0, 16, "Baro");
+// #ifdef WITH_BMP180
+   u8g2_DrawStr(OLED, 0, 16, "Baro");
+// #endif
 }
 
-void OLED_DrawSYS(u8g2_t *OLED)
+void OLED_DrawSystem(u8g2_t *OLED)
 { u8g2_SetFont(OLED, u8g2_font_ncenB14_tr);
-  u8g2_DrawStr(OLED, 0, 16, "SYS");
+  u8g2_DrawStr(OLED, 0, 16, "System");
+}
+
+void OLED_DrawConfig(u8g2_t *OLED)
+{ u8g2_SetFont(OLED, u8g2_font_timR18_tr);
+  Parameters.Print(Line); Line[10]=0;
+  u8g2_DrawStr(OLED, 0, 20, Line);
 }
 
 #endif
@@ -190,8 +287,6 @@ static NMEA_RxMsg NMEA;
 #ifdef WITH_GPS_UBX_PASS
 static UBX_RxMsg  UBX;
 #endif
-
-static char Line[128];
 
 static void PrintParameters(void)                               // print parameters stored in Flash
 { Parameters.Print(Line);
@@ -360,8 +455,8 @@ static void ProcessInput(void)
 
 // ========================================================================================================================
 
-const uint8_t OLED_Pages = 5;
-static uint8_t OLED_Page=0;
+const uint8_t OLED_Pages = 6;
+static uint8_t OLED_Page = 1;
 
 extern "C"
 void vTaskCTRL(void* pvParameters)
@@ -430,10 +525,11 @@ void vTaskCTRL(void* pvParameters)
     else if(TimeChange || PageChange)
     { u8g2_ClearBuffer(&U8G2_OLED);
       switch(OLED_Page)
-      { case 1: OLED_DrawGPS(&U8G2_OLED); break;
+      { case 1: OLED_DrawGPS(&U8G2_OLED, GPS); break;
         case 2: OLED_DrawRF(&U8G2_OLED); break;
-        case 3: OLED_DrawBARO(&U8G2_OLED); break;
-        case 4: OLED_DrawSYS(&U8G2_OLED); break;
+        case 3: OLED_DrawBaro(&U8G2_OLED); break;
+        case 4: OLED_DrawConfig(&U8G2_OLED); break;
+        case 5: OLED_DrawSystem(&U8G2_OLED); break;
         default:
         { OLED_DrawStatus(&U8G2_OLED, Time, 0);
           OLED_DrawPosition(&U8G2_OLED, GPS, 2); }

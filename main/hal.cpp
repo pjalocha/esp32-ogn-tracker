@@ -219,10 +219,10 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 #define RFM_SPI_SPEED 4000000     // [Hz] 4MHz SPI clock rate for RF chip
 
 #if defined(WITH_HELTEC) || defined(WITH_TTGO)
-                                  // VK2828U   GN-801   MAVlink
-#define PIN_GPS_TXD  GPIO_NUM_12  // green     green    green
-#define PIN_GPS_RXD  GPIO_NUM_35  // blue      yellow   yellow
-#define PIN_GPS_PPS  GPIO_NUM_34  // white     blue
+                                  // VK2828U   GN-801   GG-1802   MAVlink
+#define PIN_GPS_TXD  GPIO_NUM_12  // green     green    blue      green
+#define PIN_GPS_RXD  GPIO_NUM_35  // blue      yellow   green     yellow
+#define PIN_GPS_PPS  GPIO_NUM_34  // white     blue     yellow
 #define PIN_GPS_ENA  GPIO_NUM_13  // yellow    white
 #endif // HELTEC || TTGO
 
