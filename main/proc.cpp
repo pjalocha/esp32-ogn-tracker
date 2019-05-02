@@ -73,19 +73,19 @@ static void PrintRelayQueue(uint8_t Idx)                    // for debug
 #endif
 
 static bool GetRelayPacket(OGN_TxPacket<OGN_Packet> *Packet)      // prepare a packet to be relayed
-{ if(RelayQueue.Sum==0) return 0;
-  XorShift32(RX_Random);
-  uint8_t Idx=RelayQueue.getRand(RX_Random);
-  if(RelayQueue.Packet[Idx].Rank==0) return 0;
-  memcpy(Packet->Packet.Byte(), RelayQueue[Idx]->Byte(), OGN_Packet::Bytes);
-  Packet->Packet.Header.Relay=1;
-  Packet->Packet.Whiten(); Packet->calcFEC();
+{ if(RelayQueue.Sum==0) return 0;                     // if no packets in the relay queue
+  XorShift32(RX_Random);                              // produce a new random number
+  uint8_t Idx=RelayQueue.getRand(RX_Random);          // get weight-random packet from the relay queue
+  if(RelayQueue.Packet[Idx].Rank==0) return 0;        // should not happen ...
+  memcpy(Packet->Packet.Byte(), RelayQueue[Idx]->Byte(), OGN_Packet::Bytes); // copy the packet
+  Packet->Packet.Header.Relay=1;                // increment the relay count (in fact we only do single relay)
+  Packet->Packet.Whiten(); Packet->calcFEC();         // whiten and calc. the FEC code => packet ready for transmission
   // PrintRelayQueue(Idx);  // for debug
-  RelayQueue.decrRank(Idx);
+  RelayQueue.decrRank(Idx);                           // reduce the rank of the packet selected for relay
   return 1; }
 
-static void CleanRelayQueue(uint32_t Time, uint32_t Delay=20)
-{ RelayQueue.cleanTime((Time-Delay)%60); }
+static void CleanRelayQueue(uint32_t Time, uint32_t Delay=20) // remove "old" packets from the relay queue
+{ RelayQueue.cleanTime((Time-Delay)%60); }            // remove packets 20(default) seconds into the past
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
 
@@ -211,12 +211,32 @@ static void ReadStatus(OGN_Packet &Packet)
 // static void ReadStatus(OGN_TxPacket<OGN_Packet> &StatPacket)
 // { ReadStatus(StatPacket.Packet); }
 
-// ---------------------------------------------------------------------------------------------------------------------------------------
+static uint8_t WritePFLAU(char *NMEA, uint8_t GPS=1)    // produce the (mostly dummy) PFLAU to satisfy XCsoar and LK8000
+{ uint8_t Len=0;
+  Len+=Format_String(NMEA+Len, "$PFLAU,");
+  NMEA[Len++]='0';
+  NMEA[Len++]=',';
+  NMEA[Len++]='0'+GPS;                                  // TX status
+  NMEA[Len++]=',';
+  NMEA[Len++]='0'+GPS;                                  // GPS status
+  NMEA[Len++]=',';
+  NMEA[Len++]='1';                                      // power status: one could monitor the supply
+  NMEA[Len++]=',';
+  NMEA[Len++]='0';
+  NMEA[Len++]=',';
+  NMEA[Len++]=',';
+  NMEA[Len++]='0';
+  NMEA[Len++]=',';
+  NMEA[Len++]=',';
+  Len+=NMEA_AppendCheckCRNL(NMEA, Len);
+  NMEA[Len]=0;
+  return Len; }
+
 // ---------------------------------------------------------------------------------------------------------------------------------------
 
 static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacketIdx, uint32_t RxTime)  // process every (correctly) received packet
 { int32_t LatDist=0, LonDist=0; uint8_t Warn=0;
-  if( RxPacket->Packet.Header.NonPos /* || RxPacket->Packet.Header.Encrypted */ ) return ;   // status packet or encrypted: ignore
+  if( RxPacket->Packet.Header.NonPos || RxPacket->Packet.Header.Encrypted ) return ;   // status packet or encrypted: ignore
   uint8_t MyOwnPacket = ( RxPacket->Packet.Header.Address  == Parameters.Address  )
                      && ( RxPacket->Packet.Header.AddrType == Parameters.AddrType );
   if(MyOwnPacket) return;                                                             // don't process my own (relayed) packets
