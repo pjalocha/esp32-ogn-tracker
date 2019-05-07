@@ -173,7 +173,7 @@ void OLED_DrawGPS(u8g2_t *OLED, GPS_Position *GPS=0)  // GPS time, position, alt
     Len+=Format_String(Line+Len, "sat DOP");
     Len+=Format_UnsDec(Line+Len, (uint16_t)GPS->HDOP, 2, 1); }
   else
-  { Len+=Format_String(Line+Len, " wait for lock"); }
+  { Len+=Format_String(Line+Len, "(no lock)"); }
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 12, Line);
   if(GPS && GPS->isDateValid())
@@ -235,16 +235,18 @@ void OLED_DrawRF(u8g2_t *OLED)                      // RF
   u8g2_DrawStr(OLED, 0, 12, Line);
   Len=0;
   Len+=Format_String(Line+Len, "Rx:");                                     //
-  Len+=Format_SignDec(Line+Len, -5*RX_AverRSSI, 2, 1);                     // noise level seen by the receiver
+  Len+=Format_SignDec(Line+Len, -5*TRX.averRSSI, 2, 1);                    // noise level seen by the receiver
   Len+=Format_String(Line+Len, "dBm ");
   Len+=Format_UnsDec(Line+Len, RX_OGN_Count64);                            // received packet/min
   Len+=Format_String(Line+Len, "/min");
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 24, Line);
   Len=0;
-  Len+=Format_SignDec(Line+Len, (int16_t)RF_Temp);                         // RF chip internal temperature (not calibrated)
-  Line[Len++]=0xB0;
-  Line[Len++]='C';
+  Len+=Format_SignDec(Line+Len, (int16_t)TRX.chipTemp);                    // RF chip internal temperature (not calibrated)
+  // Line[Len++]=0xB0;
+  // Line[Len++]='C';
+  Len+=Format_String(Line+Len, "\260C    RxFIFO:");
+  Len+=Format_UnsDec(Line+Len, RF_RxFIFO.Full());                                    // how many packets wait in the RX queue
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 36, Line);
   // u8g2_DrawStr(OLED, 0, 48, RF_FreqPlan.getPlanName());

@@ -16,8 +16,8 @@
   extern FIFO<OGN_TxPacket<OGN_Packet>, 4> RF_TxFIFO;   // buffer for transmitted packets
 
   extern uint8_t RX_OGN_Packets;              // [packets] counts received packets
-  extern uint8_t   RX_AverRSSI;               // [-0.5dBm] average RSSI
-  extern  int8_t       RF_Temp;               // [degC] temperature of the RF chip: uncalibrated
+  // extern uint8_t   RX_AverRSSI;               // [-0.5dBm] average RSSI
+  // extern  int8_t       RF_Temp;               // [degC] temperature of the RF chip: uncalibrated
   extern RFM_TRX           TRX;               // RF transceiver
   extern FreqPlan  RF_FreqPlan;               // frequency hopping pattern calculator
   extern uint16_t    TX_Credit;               // counts transmitted packets vs. time to avoid using more than 1% of the time

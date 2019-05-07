@@ -21,8 +21,8 @@ static const uint8_t *OGN_SYNC = OGN2_SYNC;
 
        RFM_TRX           TRX;               // radio transceiver
 
-       uint8_t   RX_AverRSSI;               // [-0.5dBm] average RSSI
-        int8_t       RF_Temp;               // [degC] temperature of the RF chip: uncalibrated
+     //  uint8_t   RX_AverRSSI;               // [-0.5dBm] average RSSI
+     // int8_t       RF_Temp;               // [degC] temperature of the RF chip: uncalibrated
 
 static uint32_t  RF_SlotTime;               // [sec] UTC time which belongs to the current time slot (0.3sec late by GPS UTC)
        FreqPlan  RF_FreqPlan;               // frequency hopping pattern calculator
@@ -228,9 +228,9 @@ extern "C"
     vTaskDelay(1);
     SetFreqPlan();
 
-    RX_AverRSSI=RX_RSSI.getOutput();
+    TRX.averRSSI=RX_RSSI.getOutput();
 
-    RX_OGN_Count64 += RX_OGN_Packets - RX_OGN_CountDelay.Input(RX_OGN_Packets); // add OGN packets received, subtract packets received 64 second$
+    RX_OGN_Count64 += RX_OGN_Packets - RX_OGN_CountDelay.Input(RX_OGN_Packets); // add OGN packets received, subtract packets received 64 seconds ago
 
     RX_OGN_Packets=0;                                                           // clear the received packet count
 
@@ -239,12 +239,12 @@ extern "C"
 #ifdef WITH_RFM69
     TRX.TriggerTemp();                                                         // trigger RF chip temperature readout
     vTaskDelay(1); // while(TRX.RunningTemp()) taskYIELD();                    // wait for conversion to be ready
-    RF_Temp= TRX.ReadTemp();                                                   // [degC] read RF chip temperature
+    TRX.ReadTemp();                                                            // [degC] read RF chip temperature
 #endif
 #ifdef WITH_RFM95
-    RF_Temp= TRX.ReadTemp();                                                   // [degC] read RF chip temperature
+    TRX.ReadTemp();                                                            // [degC] read RF chip temperature
 #endif
-    RF_Temp+=Parameters.RFchipTempCorr;
+    TRX.chipTemp+=Parameters.RFchipTempCorr;
                                                                                // Note: on RFM95 temperature sens does not work in STANDBY
     RF_SlotTime = TimeSync_Time();
     uint8_t TxChan = RF_FreqPlan.getChannel(RF_SlotTime, 0, 1);                // tranmsit channel
@@ -284,7 +284,7 @@ extern "C"
     { if( (RX_Channel!=TxChan) && (TxPkt0->Packet.Header.Relay==0) )
       { const uint8_t *Tmp=TxPktData0; TxPktData0=TxPktData1; TxPktData1=Tmp; } // swap 1st and 2nd packet data
     }
-    TimeSlot(TxChan, 800-TimeSync_msTime(), TxPktData0,   RX_AverRSSI, 0, TxTime); // run a Time-Slot till 0.800sec
+    TimeSlot(TxChan, 800-TimeSync_msTime(), TxPktData0, TRX.averRSSI, 0, TxTime); // run a Time-Slot till 0.800sec
 
     TRX.WriteMode(RF_OPMODE_STANDBY);                                          // switch to receive mode
     TxChan = RF_FreqPlan.getChannel(RF_SlotTime, 1, 1);                        // transmit channel
@@ -296,7 +296,7 @@ extern "C"
     XorShift32(RX_Random);
     TxTime = (RX_Random&0x3F)+1; TxTime*=6;
 
-    TimeSlot(TxChan, 1250-TimeSync_msTime(), TxPktData1,   RX_AverRSSI, 0, TxTime);
+    TimeSlot(TxChan, 1250-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
 
     if(TxPkt0) RF_TxFIFO.Read();
     if(TxPkt1) RF_TxFIFO.Read();

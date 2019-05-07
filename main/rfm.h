@@ -145,9 +145,6 @@ class RFM_RxPktData                  // packet received by the RF chip
 class RFM_TRX
 { public:                             // hardware access functions
 
-  uint8_t chipVer;                    // [] version ID read from the RF chip
-   int8_t chipTemp;                   // [degC] temperature read from the RF chip
-
 #ifdef USE_BLOCK_SPI                                                    // SPI transfers in blocks, implicit control of the SPI-select
    void (*TransferBlock)(uint8_t *Data, uint8_t Len);
    static const size_t MaxBlockLen = 64;
@@ -179,6 +176,10 @@ class RFM_TRX
    uint32_t ChannelSpacing;           // [32MHz/2^19/2^8] spacing between channels
     int16_t FreqCorr;                 // [0.1ppm]
     int16_t Channel;                  // [       integer] channel being used
+
+  uint8_t chipVer;                    // [] version ID read from the RF chip
+   int8_t chipTemp;                   // [degC] temperature read from the RF chip
+  uint8_t averRSSI;                   // [-0.5dB]
 
   // private:
    static uint32_t calcSynthFrequency(uint32_t Frequency) { return (((uint64_t)Frequency<<16)+7812)/15625; }

@@ -157,8 +157,8 @@ static void ReadStatus(OGN_Packet &Packet)
   Packet.EncodeVoltage(((Battery*64)+500)/1000);            // [1/64V]
 #endif
 
-  if(Packet.Status.Pressure==0) Packet.EncodeTemperature(RF_Temp*10); // [0.1degC]
-  Packet.Status.RadioNoise = RX_AverRSSI;                         // [-0.5dBm] write radio noise to the status packet
+  if(Packet.Status.Pressure==0) Packet.EncodeTemperature(TRX.chipTemp*10); // [0.1degC]
+  Packet.Status.RadioNoise = TRX.averRSSI;                         // [-0.5dBm] write radio noise to the status packet
 
   Packet.Status.TxPower = Parameters.getTxPower()-4;
 
@@ -173,11 +173,11 @@ static void ReadStatus(OGN_Packet &Packet)
     Len+=Format_UnsDec(Line+Len, RX_OGN_Count64);                            // number of OGN packets received
     Line[Len++]=',';
     Line[Len++]=',';
-    Len+=Format_SignDec(Line+Len, -5*RX_AverRSSI, 2, 1);                     // average RF level (over all channels)
+    Len+=Format_SignDec(Line+Len, -5*TRX.averRSSI, 2, 1);                     // average RF level (over all channels)
     Line[Len++]=',';
     Len+=Format_UnsDec(Line+Len, (uint16_t)TX_Credit);
     Line[Len++]=',';
-    Len+=Format_SignDec(Line+Len, (int16_t)RF_Temp);                         // the temperature of the RF chip
+    Len+=Format_SignDec(Line+Len, (int16_t)TRX.chipTemp);                    // the temperature of the RF chip
     Line[Len++]=',';
     // Len+=Format_SignDec(Line+Len, MCU_Temp, 2, 1);
     Line[Len++]=',';
