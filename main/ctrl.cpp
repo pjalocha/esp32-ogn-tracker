@@ -161,9 +161,9 @@ void OLED_DrawPosition(u8g2_t *OLED, GPS_Position *GPS=0, uint8_t LineIdx=2)
   OLED_PutLine(OLED, LineIdx+5, Line);
 }
 
-void OLED_DrawGPS(u8g2_t *OLED, GPS_Position *GPS=0)
+void OLED_DrawGPS(u8g2_t *OLED, GPS_Position *GPS=0)  // GPS time, position, altitude
 { // u8g2_SetFont(OLED, u8g2_font_ncenB14_tr);
-  u8g2_SetFont(OLED, u8g2_font_7x13_tf);
+  u8g2_SetFont(OLED, u8g2_font_7x13_tf);              // 5 lines, 12 pixels/line
   uint8_t Len=0;
   Len+=Format_String(Line+Len, "GPS ");
 #ifdef WITH_GPS_UBX
@@ -214,11 +214,11 @@ void OLED_DrawGPS(u8g2_t *OLED, GPS_Position *GPS=0)
   u8g2_DrawStr(OLED, 0, 60, Line);
 }
 
-void OLED_DrawRF(u8g2_t *OLED)
-{ u8g2_SetFont(OLED, u8g2_font_7x13_tf);
+void OLED_DrawRF(u8g2_t *OLED)                      // RF
+{ u8g2_SetFont(OLED, u8g2_font_7x13_tf);            // 5 lines. 12 pixels/line
   uint8_t Len=0;
 #ifdef WITH_RFM69
-  Len+=Format_String(Line+Len, "RFM69");
+  Len+=Format_String(Line+Len, "RFM69");            // Type of RF chip used
   if(isTxTypeHW()) Line[Len++]='H';
   Line[Len++]='W';
 #endif
@@ -229,43 +229,73 @@ void OLED_DrawRF(u8g2_t *OLED)
   Len+=Format_String(Line+Len, "SX1272");
 #endif
   Line[Len++]=':';
-  Len+=Format_SignDec(Line+Len, (int16_t)Parameters.getTxPower());
+  Len+=Format_SignDec(Line+Len, (int16_t)Parameters.getTxPower());        // Tx power
   Len+=Format_String(Line+Len, "dBm");
   Line[Len++]=' ';
-  Len+=Format_SignDec(Line+Len, (int32_t)Parameters.RFchipFreqCorr, 2, 1);
+  Len+=Format_SignDec(Line+Len, (int32_t)Parameters.RFchipFreqCorr, 2, 1); // frequency correction
   Len+=Format_String(Line+Len, "ppm");
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 12, Line);
   Len=0;
-  Len+=Format_String(Line+Len, "Rx:");
-  Len+=Format_SignDec(Line+Len, -5*RX_AverRSSI, 2, 1);
+  Len+=Format_String(Line+Len, "Rx:");                                     //
+  Len+=Format_SignDec(Line+Len, -5*RX_AverRSSI, 2, 1);                     // noise level seen by the receiver
   Len+=Format_String(Line+Len, "dBm ");
-  Len+=Format_UnsDec(Line+Len, RX_OGN_Count64);
+  Len+=Format_UnsDec(Line+Len, RX_OGN_Count64);                            // received packet/min
   Len+=Format_String(Line+Len, "/min");
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 24, Line);
   Len=0;
-  Len+=Format_SignDec(Line+Len, (int16_t)RF_Temp);
+  Len+=Format_SignDec(Line+Len, (int16_t)RF_Temp);                         // RF chip internal temperature (not calibrated)
   Line[Len++]=0xB0;
   Line[Len++]='C';
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 36, Line);
   // u8g2_DrawStr(OLED, 0, 48, RF_FreqPlan.getPlanName());
   Len=0;
-  Len+=Format_String(Line+Len, RF_FreqPlan.getPlanName());
+  Len+=Format_String(Line+Len, RF_FreqPlan.getPlanName());                 // name of the frequency plan
   Line[Len++]=' ';
-  Len+=Format_UnsDec(Line+Len, (uint16_t)(RF_FreqPlan.getCenterFreq()/100000), 3, 1);
+  Len+=Format_UnsDec(Line+Len, (uint16_t)(RF_FreqPlan.getCenterFreq()/100000), 3, 1); // center frequency
   Len+=Format_String(Line+Len, "MHz");
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 48, Line);
 
 }
 
-void OLED_DrawBaro(u8g2_t *OLED)
-{ u8g2_SetFont(OLED, u8g2_font_ncenB14_tr);
-// #ifdef WITH_BMP180
-   u8g2_DrawStr(OLED, 0, 16, "Baro");
-// #endif
+void OLED_DrawBaro(u8g2_t *OLED, GPS_Position *GPS=0)
+{ u8g2_SetFont(OLED, u8g2_font_7x13_tf);              // 5 lines, 12 pixels/line
+  uint8_t Len=0;
+#ifdef WITH_BMP180
+  Len+=Format_String(Line+Len, "BMP180 ");
+#endif
+#ifdef WITH_BMP280
+  Len+=Format_String(Line+Len, "BMP280 ");
+#endif
+#ifdef WITH_BME280
+  Len+=Format_String(Line+Len, "BME280 ");
+#endif
+#ifdef WITH_MS5607
+  Len+=Format_String(Line+Len, "MS5607 ");
+#endif
+  Len+=Format_UnsDec(Line+Len, GPS->Pressure/4, 5, 2);
+  Len+=Format_String(Line+Len, "Pa");
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 12, Line);
+  Len=0;
+  Len+=Format_UnsDec(Line+Len, GPS->StdAltitude, 5, 1);
+  Len+=Format_String(Line+Len, "m ");
+  Len+=Format_SignDec(Line+Len, GPS->ClimbRate, 2, 1);
+  Len+=Format_String(Line+Len, "m/s");
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 24, Line);
+  Len=0;
+  Len+=Format_SignDec(Line+Len, GPS->Temperature, 2, 1);
+  Line[Len++]=0xB0;
+  Line[Len++]='C';
+  Line[Len++]=' ';
+  Len+=Format_SignDec(Line+Len, GPS->Humidity, 2, 1);
+  Line[Len++]='%';
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 32, Line);
 }
 
 void OLED_DrawSystem(u8g2_t *OLED)
@@ -527,7 +557,7 @@ void vTaskCTRL(void* pvParameters)
       switch(OLED_Page)
       { case 1: OLED_DrawGPS(&U8G2_OLED, GPS); break;
         case 2: OLED_DrawRF(&U8G2_OLED); break;
-        case 3: OLED_DrawBaro(&U8G2_OLED); break;
+        case 3: OLED_DrawBaro(&U8G2_OLED, GPS); break;
         case 4: OLED_DrawConfig(&U8G2_OLED); break;
         case 5: OLED_DrawSystem(&U8G2_OLED); break;
         default:
