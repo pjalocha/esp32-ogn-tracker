@@ -330,10 +330,15 @@ void OLED_DrawSystem(u8g2_t *OLED)
 
 }
 
-void OLED_DrawConfig(u8g2_t *OLED)
-{ u8g2_SetFont(OLED, u8g2_font_timR18_tr);
-  Parameters.Print(Line); Line[10]=0;
+void OLED_DrawID(u8g2_t *OLED)
+{ u8g2_SetFont(OLED, u8g2_font_9x15_tr);
+  strcpy(Line, "ID: "); Parameters.Print(Line+4); Line[14]=0;
   u8g2_DrawStr(OLED, 0, 20, Line);
+  u8g2_SetFont(OLED, u8g2_font_10x20_tr);
+#ifdef WITH_FollowMe
+  u8g2_DrawStr(OLED,  8, 40, "FollowMe868");
+  u8g2_DrawStr(OLED, 16, 60, "by AVIONIX");
+#endif
 }
 
 #endif
@@ -582,10 +587,10 @@ void vTaskCTRL(void* pvParameters)
     else if(TimeChange || PageChange)
     { u8g2_ClearBuffer(&U8G2_OLED);
       switch(OLED_Page)
-      { case 1: OLED_DrawGPS   (&U8G2_OLED, GPS); break;
-        case 2: OLED_DrawRF    (&U8G2_OLED); break;
-        case 3: OLED_DrawBaro  (&U8G2_OLED, GPS); break;
-        case 4: OLED_DrawConfig(&U8G2_OLED); break;
+      { case 2: OLED_DrawGPS   (&U8G2_OLED, GPS); break;
+        case 3: OLED_DrawRF    (&U8G2_OLED); break;
+        case 4: OLED_DrawBaro  (&U8G2_OLED, GPS); break;
+        case 1: OLED_DrawID    (&U8G2_OLED); break;
         case 5: OLED_DrawSystem(&U8G2_OLED); break;
         default:
         { OLED_DrawStatus(&U8G2_OLED, Time, 0);
