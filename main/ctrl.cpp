@@ -166,17 +166,13 @@ void OLED_DrawGPS(u8g2_t *OLED, GPS_Position *GPS=0)  // GPS time, position, alt
   u8g2_SetFont(OLED, u8g2_font_7x13_tf);              // 5 lines, 12 pixels/line
   uint8_t Len=0;
   Len+=Format_String(Line+Len, "GPS ");
-#ifdef WITH_GPS_UBX
-  Len+=Format_String(Line+Len, "UBX ");
-#endif
-#ifdef WITH_GPS_MTK
-  Len+=Format_String(Line+Len, "MTK ");
-#endif
-#ifdef WITH_GPS_SRF
-  Len+=Format_String(Line+Len, "SRF ");
-#endif
-  Len+=Format_UnsDec(Line+Len, GPS_getBaudRate(), 1);
-  Len+=Format_String(Line+Len, "bps");
+  if(GPS && GPS->isValid())
+  { Line[Len++]='0'+GPS->FixMode; Line[Len++]='D'; Line[Len++]='/';
+    Len+=Format_UnsDec(Line+Len, GPS->Satellites, 1);
+    Len+=Format_String(Line+Len, "sat DOP");
+    Len+=Format_UnsDec(Line+Len, (uint16_t)GPS->HDOP, 2, 1); }
+  else
+  { Len+=Format_String(Line+Len, " wait for lock"); }
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 12, Line);
   if(GPS && GPS->isDateValid())
@@ -295,12 +291,43 @@ void OLED_DrawBaro(u8g2_t *OLED, GPS_Position *GPS=0)
   Len+=Format_SignDec(Line+Len, GPS->Humidity, 2, 1);
   Line[Len++]='%';
   Line[Len]=0;
-  u8g2_DrawStr(OLED, 0, 32, Line);
+  u8g2_DrawStr(OLED, 0, 36, Line);
 }
 
 void OLED_DrawSystem(u8g2_t *OLED)
-{ u8g2_SetFont(OLED, u8g2_font_ncenB14_tr);
-  u8g2_DrawStr(OLED, 0, 16, "System");
+{
+  u8g2_SetFont(OLED, u8g2_font_7x13_tf);              // 5 lines, 12 pixels/line
+  uint8_t Len=0;
+  Len+=Format_String(Line+Len, "GPS ");
+#ifdef WITH_GPS_UBX
+  Len+=Format_String(Line+Len, "UBX ");
+#endif
+#ifdef WITH_GPS_MTK
+  Len+=Format_String(Line+Len, "MTK ");
+#endif
+#ifdef WITH_GPS_SRF
+  Len+=Format_String(Line+Len, "SRF ");
+#endif
+  Len+=Format_UnsDec(Line+Len, GPS_getBaudRate(), 1);
+  Len+=Format_String(Line+Len, "bps");
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 12, Line);
+
+#ifdef WITH_SD
+  Len=0;
+  Len += Format_String(Line+Len, "SD ");
+  if(SD_isMounted())
+  { Len+=Format_UnsDec(Line+Len, (uint32_t)SD_getSectors());
+    Line[Len++]='x';
+    Len+=Format_UnsDec(Line+Len, (uint32_t)SD_getSectorSize()*5/512, 2, 1);
+    Len+=Format_String(Line+Len, "KB"); }
+  else
+  { Len+=Format_String(Line+Len, "none"); }
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 60, Line);
+
+#endif
+
 }
 
 void OLED_DrawConfig(u8g2_t *OLED)
@@ -555,9 +582,9 @@ void vTaskCTRL(void* pvParameters)
     else if(TimeChange || PageChange)
     { u8g2_ClearBuffer(&U8G2_OLED);
       switch(OLED_Page)
-      { case 1: OLED_DrawGPS(&U8G2_OLED, GPS); break;
-        case 2: OLED_DrawRF(&U8G2_OLED); break;
-        case 3: OLED_DrawBaro(&U8G2_OLED, GPS); break;
+      { case 1: OLED_DrawGPS   (&U8G2_OLED, GPS); break;
+        case 2: OLED_DrawRF    (&U8G2_OLED); break;
+        case 3: OLED_DrawBaro  (&U8G2_OLED, GPS); break;
         case 4: OLED_DrawConfig(&U8G2_OLED); break;
         case 5: OLED_DrawSystem(&U8G2_OLED); break;
         default:
