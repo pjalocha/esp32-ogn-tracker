@@ -19,7 +19,7 @@ static const uint8_t *OGN_SYNC = OGN1_SYNC;
 static const uint8_t *OGN_SYNC = OGN2_SYNC;
 #endif
 
-static RFM_TRX           TRX;               // radio transceiver
+       RFM_TRX           TRX;               // radio transceiver
 
        uint8_t   RX_AverRSSI;               // [-0.5dBm] average RSSI
         int8_t       RF_Temp;               // [degC] temperature of the RF chip: uncalibrated
@@ -239,10 +239,10 @@ extern "C"
 #ifdef WITH_RFM69
     TRX.TriggerTemp();                                                         // trigger RF chip temperature readout
     vTaskDelay(1); // while(TRX.RunningTemp()) taskYIELD();                    // wait for conversion to be ready
-    RF_Temp= 165-TRX.ReadTemp();                                               // [degC] read RF chip temperature
+    RF_Temp= TRX.ReadTemp();                                                   // [degC] read RF chip temperature
 #endif
 #ifdef WITH_RFM95
-    RF_Temp= 15-TRX.ReadTemp();                                                // [degC] read RF chip temperature
+    RF_Temp= TRX.ReadTemp();                                                   // [degC] read RF chip temperature
 #endif
     RF_Temp+=Parameters.RFchipTempCorr;
                                                                                // Note: on RFM95 temperature sens does not work in STANDBY

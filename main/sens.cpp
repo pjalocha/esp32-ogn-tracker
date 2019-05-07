@@ -13,22 +13,6 @@
 
 #if defined(WITH_BMP180) || defined(WITH_BMP280) || defined(WITH_MS5607) || defined(WITH_BME280)
 
-#ifdef WITH_BMP180
-#include "bmp180.h"
-#endif
-
-#ifdef WITH_BMP280
-#include "bmp280.h"
-#endif
-
-#ifdef WITH_BME280
-#include "bme280.h"
-#endif
-
-#ifdef WITH_MS5607
-#include "ms5607.h"
-#endif
-
 #include "atmosphere.h"
 #include "slope.h"
 #include "lowpass2.h"
@@ -60,19 +44,19 @@ void VarioSound(int32_t ClimbRate)
 #endif // WITH_BEEPER
 
 #ifdef WITH_BMP180
-static BMP180   Baro;                       // BMP180 barometer sensor
+       BMP180   Baro;                       // BMP180 barometer sensor
 #endif
 
 #ifdef WITH_BMP280
-static BMP280   Baro;                       // BMP280 barometer sensor
+       BMP280   Baro;                       // BMP280 barometer sensor
 #endif
 
 #ifdef WITH_BME280
-static BME280   Baro;                       // BMP280 barometer sensor with humidity sensor
+       BME280   Baro;                       // BMP280 barometer sensor with humidity sensor
 #endif
 
 #ifdef WITH_MS5607
-static MS5607   Baro;                       // BMP280 barometer sensor
+       MS5607   Baro;                       // BMP280 barometer sensor
 #endif
 
 static uint32_t AverPress;                  // [ Pa] summed Pressure over several readouts

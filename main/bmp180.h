@@ -1,3 +1,6 @@
+#ifndef __BMP180_H__
+#define __BMP180_H__
+
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
@@ -144,3 +147,5 @@ class BMP180
             Pressure += (X1+X2+3791)>>4; }
 
 } ;
+
+#endif // __BMP180_H__

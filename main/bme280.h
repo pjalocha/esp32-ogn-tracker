@@ -1,3 +1,6 @@
+#ifndef __BME280_H__
+#define __BME280_H__
+
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
@@ -122,3 +125,4 @@ class BME280: public BMP280
 
 } ;
 
+#endif // __BME280_H__

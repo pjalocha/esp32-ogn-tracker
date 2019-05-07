@@ -10,6 +10,7 @@
 #include "hal.h"
 
 #include "rf.h"
+#include "sens.h"
 #include "ctrl.h"
 #include "log.h"
 
@@ -312,6 +313,43 @@ void OLED_DrawSystem(u8g2_t *OLED)
   Len+=Format_String(Line+Len, "bps");
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 12, Line);
+
+  Len=0;
+#ifdef WITH_RFM69
+  Len+=Format_String(Line+Len, "RFM69 v");            // Type of RF chip used
+  if(isTxTypeHW()) Line[Len++]='H';
+  Line[Len++]='W';
+#endif
+#ifdef WITH_RFM95
+  Len+=Format_String(Line+Len, "RFM95 v");
+#endif
+#ifdef WITH_SX1272
+  Len+=Format_String(Line+Len, "SX1272 v");
+#endif
+  Len+=Format_Hex(Line+Len, TRX.chipVer);
+  Line[Len++]=' ';
+  Len+=Format_SignDec(Line+Len, (int16_t)TRX.chipTemp);
+  Line[Len++]=0xB0;
+  Line[Len++]='C';
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 24, Line);
+
+  Len=0;
+#ifdef WITH_BMP180
+  Len+=Format_String(Line+Len, "BMP180 0x");
+#endif
+#ifdef WITH_BMP280
+  Len+=Format_String(Line+Len, "BMP280 0x");
+#endif
+#ifdef WITH_BME280
+  Len+=Format_String(Line+Len, "BME280 0x");
+#endif
+#ifdef WITH_MS5607
+  Len+=Format_String(Line+Len, "MS5607 0x");
+#endif
+  Len+=Format_Hex(Line+Len, Baro.ADDR);
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 36, Line);
 
 #ifdef WITH_SD
   Len=0;

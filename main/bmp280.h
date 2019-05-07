@@ -1,3 +1,6 @@
+#ifndef __BMP280_H__
+#define __BMP280_H__
+
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
@@ -21,7 +24,7 @@ class BMP280
    static const uint8_t REG_PRESS_LSB  = 0xF8; // Pressure result: LSB
    static const uint8_t REG_PRESS_XLSB = 0xF9; // Pressure result: more LSB
 
-   static const uint8_t REG_TEMP      = 0xFA; // Temperature result:
+   static const uint8_t REG_TEMP_     = 0xFA; // Temperature result:
    static const uint8_t REG_TEMP_MSB  = 0xFA; // Temperature result: MSB
    static const uint8_t REG_TEMP_LSB  = 0xFB; // Temperature result: LSB
    static const uint8_t REG_TEMP_XLSB = 0xFC; // Temperature result: more LSB
@@ -113,7 +116,7 @@ class BMP280
 
   uint8_t ReadRawTemp(void)                                // read raw temperature ADC conversion result
   { RawTemp=0;
-    Error=I2C_Read(Bus, ADDR, REG_TEMP, (uint8_t *)(&RawTemp), 3); if(Error) return Error;
+    Error=I2C_Read(Bus, ADDR, REG_TEMP_, (uint8_t *)(&RawTemp), 3); if(Error) return Error;
     RawTemp = ((RawTemp<<16)&0xFF0000) | (RawTemp&0x00FF00) | ((RawTemp>>16)&0x0000FF);
     RawTemp>>=4;
     return 0; }
@@ -154,3 +157,5 @@ class BMP280
   }
 
 } ;
+
+#endif // __BMP280_H__

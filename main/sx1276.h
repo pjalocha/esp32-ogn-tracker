@@ -12,8 +12,8 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 
 Maintainer: Miguel Luis and Gregory Cristian
 */
-#ifndef __SX1276_REGS_FSK_H__
-#define __SX1276_REGS_FSK_H__
+#ifndef __SX1276_H__
+#define __SX1276_H__
 
 /*!
  * ============================================================================
@@ -1125,7 +1125,7 @@ Maintainer: Miguel Luis and Gregory Cristian
 #define RF_PLL_BANDWIDTH_225                        0x80
 #define RF_PLL_BANDWIDTH_300                        0xC0  // Default
 
-#endif // __SX1276_REGS_FSK_H__
+#endif // __SX1276_H__
 
 
 

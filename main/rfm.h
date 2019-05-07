@@ -1,3 +1,8 @@
+#ifndef __RFM_H__
+#define __RFM_H__
+
+#include <stdint.h>
+
 // -----------------------------------------------------------------------------------------------------------------------
 
 #include "config.h"
@@ -139,6 +144,9 @@ class RFM_RxPktData                  // packet received by the RF chip
 
 class RFM_TRX
 { public:                             // hardware access functions
+
+  uint8_t chipVer;                    // [] version ID read from the RF chip
+   int8_t chipTemp;                   // [degC] temperature read from the RF chip
 
 #ifdef USE_BLOCK_SPI                                                    // SPI transfers in blocks, implicit control of the SPI-select
    void (*TransferBlock)(uint8_t *Data, uint8_t Len);
@@ -464,7 +472,7 @@ class RFM_TRX
 
 #endif
 
-     uint8_t ReadVersion(void) { return ReadByte(REG_VERSION); }           // normally returns: 0x24
+     uint8_t ReadVersion(void) { chipVer=ReadByte(REG_VERSION); return chipVer; }           // 0x24 for RFM69 or 0x12 for RFM95
 
 #ifdef WITH_RFM69
      void    TriggerRSSI(void) { WriteByte(0x01, REG_RSSICONFIG); }        // trigger measurement
@@ -475,11 +483,10 @@ class RFM_TRX
 #ifdef WITH_RFM69
      void    TriggerTemp(void) { WriteByte(0x08, REG_TEMP1); }             // trigger measurement
      uint8_t RunningTemp(void) { return ReadByte(REG_TEMP1) & 0x04; }      // still running ?
-     uint8_t ReadTemp(void)    { return ReadByte(REG_TEMP2); }             // read value: -1 deg/LSB
+     int8_t ReadTemp(void)     { chipTemp=165-ReadByte(REG_TEMP2); return chipTemp; } // [deg]
 #endif
-// #ifdef WITH_RFM95
 #if defined(WITH_RFM95) || defined(WITH_SX1272)
-     uint8_t ReadTemp(void)    { return ReadByte(REG_TEMP); }              // read value: -1 deg/LSB
+     int8_t ReadTemp(void)     { chipTemp = 15-ReadByte(REG_TEMP); return chipTemp; } // [degC]
 #endif
 /*
      void Dump(uint8_t EndAddr=0x20)
@@ -491,4 +498,5 @@ class RFM_TRX
 */
 } ;
 
+#endif // __RFM_H__
 
