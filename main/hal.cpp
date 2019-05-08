@@ -248,9 +248,9 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 #define I2C_BUS     I2C_NUM_1     // use bus #1 to talk to OLED and Baro sensor
 
 #ifdef WITH_FollowMe
-#define ADSB_UART     UART_NUM_2  // UART2
-#define PIN_ADSB_TXD  GPIO_NUM_25
-#define PIN_ADSB_RXD  GPIO_NUM_27
+#define AERO_UART     UART_NUM_2  // UART2
+#define PIN_AERO_TXD  GPIO_NUM_25
+#define PIN_AERO_RXD  GPIO_NUM_27
 #endif
 
 #if defined(WITH_HELTEC) || defined(WITH_TTGO)
@@ -585,10 +585,10 @@ int  CONS_UART_Read  (uint8_t &Byte)  { int Ret=getchar(); if(Ret>=0) { Byte=Ret
 //--------------------------------------------------------------------------------------------------------
 // ADS-B UART
 
-#ifdef ADSB_UART
-int   ADSB_UART_Read       (uint8_t &Byte) { return uart_read_bytes  (ADSB_UART, &Byte, 1, 0); }  // should be buffered and non-blocking
-void  ADSB_UART_Write      (char     Byte) {        uart_write_bytes (ADSB_UART, &Byte, 1);    }  // should be buffered and blocking
-void  ADSB_UART_SetBaudrate(int BaudRate)  {        uart_set_baudrate(ADSB_UART, BaudRate);    }
+#ifdef AERO_UART
+int   AERO_UART_Read       (uint8_t &Byte) { return uart_read_bytes  (AERO_UART, &Byte, 1, 0); }  // should be buffered and non-blocking
+void  AERO_UART_Write      (char     Byte) {        uart_write_bytes (AERO_UART, &Byte, 1);    }  // should be buffered and blocking
+void  AERO_UART_SetBaudrate(int BaudRate)  {        uart_set_baudrate(AERO_UART, BaudRate);    }
 #endif
 
 //--------------------------------------------------------------------------------------------------------
@@ -1269,8 +1269,8 @@ void IO_Configuration(void)
   uart_driver_install(GPS_UART, 256, 256, 0, 0, 0);
 #endif
 
-#ifdef ADSB_UART
-  uart_config_t ADSB_UART_Config =                      // ADSB UART
+#ifdef AERO_UART
+  uart_config_t AERO_UART_Config =                      // AERO UART
   { baud_rate : 115200,
     data_bits : UART_DATA_8_BITS,
     parity    : UART_PARITY_DISABLE,
@@ -1279,9 +1279,9 @@ void IO_Configuration(void)
     rx_flow_ctrl_thresh: 0,
     use_ref_tick: 0
   };
-  uart_param_config  (ADSB_UART, &ADSB_UART_Config);
-  uart_set_pin       (ADSB_UART, PIN_ADSB_TXD, PIN_ADSB_RXD, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-  uart_driver_install(ADSB_UART, 256, 256, 0, 0, 0);
+  uart_param_config  (AERO_UART, &AERO_UART_Config);
+  uart_set_pin       (AERO_UART, PIN_AERO_TXD, PIN_AERO_RXD, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+  uart_driver_install(AERO_UART, 256, 256, 0, 0, 0);
 #endif
 
 #if defined(WITH_OLED) || defined(WITH_U8G2)

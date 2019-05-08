@@ -64,10 +64,10 @@ void GPS_ENABLE(void);
 void GPS_DISABLE(void);
 #endif
 
-// #ifdef WITH_ADSB
-int   ADSB_UART_Read       (uint8_t &Byte); // non-blocking
-void  ADSB_UART_Write      (char     Byte); // blocking
-void  ADSB_UART_SetBaudrate(int BaudRate);
+// #ifdef WITH_AERO
+int   AERO_UART_Read       (uint8_t &Byte); // non-blocking
+void  AERO_UART_Write      (char     Byte); // blocking
+void  AERO_UART_SetBaudrate(int BaudRate);
 // #endif
 
 void RFM_TransferBlock(uint8_t *Data, uint8_t Len);

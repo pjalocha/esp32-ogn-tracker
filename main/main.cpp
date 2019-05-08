@@ -12,6 +12,10 @@
 #include "ctrl.h"                 // Control task
 #include "log.h"                  // Data logging task
 
+#ifdef WITH_AERO
+#include "aero.h"
+#endif
+
 #ifdef WITH_WIFI
 #include "wifi.h"                 // WIFI task
 #endif
@@ -54,6 +58,9 @@ void app_main(void)
     xTaskCreate(vTaskGPS,   "GPS",   2048, 0, tskIDLE_PRIORITY+4, 0);
 #if defined(WITH_BMP180) || defined(WITH_BMP280) || defined(WITH_BME280) || defined(WITH_MS5607)
     xTaskCreate(vTaskSENS,  "SENS",  2048, 0, tskIDLE_PRIORITY+4, 0);
+#endif
+#ifdef WITH_AERO
+    xTaskCreate(vTaskAERO,  "AERO",  2048, 0, tskIDLE_PRIORITY+4, 0);
 #endif
 #ifdef WITH_WIFI
     xTaskCreate(vTaskWIFI,  "WIFI",  4096, 0, tskIDLE_PRIORITY+2, 0);
