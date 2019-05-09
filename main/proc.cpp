@@ -284,9 +284,13 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
    MAV_ADSB_VEHICLE MAV_RxReport;
    RxPacket->Packet.Encode(&MAV_RxReport);
    MAV_RxMsg::Send(sizeof(MAV_RxReport), MAV_Seq++, MAV_SysID, MAV_COMP_ID_ADSB, MAV_ID_ADSB_VEHICLE, (const uint8_t *)&MAV_RxReport, GPS_UART_Write);
-   // xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-   // MAV_RxMsg::Send(sizeof(MAV_RxReport), MAV_Seq++, MAV_SysID, MAV_COMP_ID_ADSB, MAV_ID_ADSB_VEHICLE, (const uint8_t *)&MAV_RxReport, CONS_UART_Write);
-   // xSemaphoreGive(CONS_Mutex);
+#ifdef DEBUG_PRINT
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, "MAV_ADSB_VEHICLE sent. ID=");
+      Format_Hex(CONS_UART_Write, MAV_RxReport.ICAO_address);
+      CONS_UART_Write('\r'); CONS_UART_Write('\n');
+      xSemaphoreGive(CONS_Mutex);
+#endif
 #endif
   }
 }
@@ -435,6 +439,24 @@ void vTaskPROC(void* pvParameters)
       if( (AverSpeed>10) || ((RX_Random&0x3)==0) )                      // send only some positions if the speed is less than 1m/s
         RF_TxFIFO.Write();                                              // complete the write into the TxFIFO
       Position->Sent=1;
+// #ifdef WITH_MAVLINK
+//     { MAV_HEARTBEAT MAV_HeartBeat;
+//     // = { custom_mode:0,
+//     //     type:0,
+//     //     autopilot:0,
+//     //     base_mode:0,
+//     //     system_status:4,
+//     //     mavlink_version:1
+//     //   };
+//       MAV_HeartBeat.custom_mode=0;
+//       MAV_HeartBeat.type=0;
+//       MAV_HeartBeat.autopilot=0;
+//       MAV_HeartBeat.base_mode=0;
+//       MAV_HeartBeat.system_status=4;
+//       MAV_HeartBeat.mavlink_version=1;
+//       MAV_RxMsg::Send(sizeof(MAV_HeartBeat), MAV_Seq++, MAV_SysID, MAV_COMP_ID_ADSB, MAV_ID_HEARTBEAT, (const uint8_t *)&MAV_HeartBeat, GPS_UART_Write);
+//     }
+// #endif
 #ifdef WITH_LOOKOUT
       const LookOut_Target *Tgt=Look.ProcessOwn(PosPacket.Packet);         // process own position, get the most dangerous target
 #ifdef WITH_PFLAA
