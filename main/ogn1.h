@@ -227,7 +227,7 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      printf("\n");
    }
 
-   void Encode(MAV_ADSB_VEHICLE *MAV)
+/*   void Encode(MAV_ADSB_VEHICLE *MAV)
    { MAV->ICAO_address = HeaderWord&0x03FFFFFF;
      MAV->lat      = ((int64_t)50*DecodeLatitude()+1)/3;
      MAV->lon      = ((int64_t)50*DecodeLongitude()+1)/3;
@@ -240,6 +240,32 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      MAV->callsign[0]   =    0;
      MAV->tslc          =    0;
      MAV->emiter_type   =    0; }
+*/
+
+   void Encode(MAV_ADSB_VEHICLE *MAV)
+   { MAV->ICAO_address = Header.Address;
+     MAV->lat           = ((int64_t)50*DecodeLatitude()+1)/3;          // convert coordinates to [1e-7deg]
+     MAV->lon           = ((int64_t)50*DecodeLongitude()+1)/3;
+     MAV->altitude      = 1000*DecodeAltitude();                       // convert to [mm[
+     MAV->heading       = 10*DecodeHeading();                          // [cdeg/s]
+     MAV->hor_velocity  = 10*DecodeSpeed();                            // [cm/s]
+     MAV->ver_velocity  = 10*DecodeClimbRate();                        // [cm/s]
+     MAV->flags         = 0x1F;                                        // all valid except for Squawk, not simulated
+     MAV->altitude_type =    1;                                        // GPS altitude
+     const static char Prefix[4] = { 'R', 'I', 'F', 'O' };             // prefix for Random, ICAO, Flarm and OGN address-types
+     MAV->callsign[0]   =    Prefix[Header.AddrType];                  // create a call-sign from address-type and address
+     Format_Hex((char *)MAV->callsign+1, ( uint8_t)(Header.Address>>16));      // highest byte
+     Format_Hex((char *)MAV->callsign+3, (uint16_t)(Header.Address&0xFFFF));   // two lower bytes
+     MAV->callsign[7]   =    0;                                        // end-of-string for call-sign
+     MAV->squawk        =    0;                                        // what shall we put there for OGN ?
+     MAV->tslc          =    1;                                        // 1sec for now but should be more precise
+     const static uint8_t EmitterType[16] =                            // conversion table from OGN aircraft-type
+     { 0,  9,  2,  7,     // unknown,          glider,           towplane,       helicopter
+      11,  3,  9, 11,     // parachute,        drop plane,       hang-glider,    para-glider
+       2,  3, 15, 10,     // powered aircraft, jet aircraft,     UFO,            balloon
+      10, 14,  2, 19  };  // airship,          UAV,              ground vehiele, fixed object
+     MAV->emiter_type   =    EmitterType[Position.AcftType];           // convert from the OGN
+   }
 
    static const char *getAprsIcon(uint8_t AcftType)
    { static const char *AprsIcon[16] = // Icons for various FLARM acftType's
