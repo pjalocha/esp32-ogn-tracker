@@ -339,17 +339,20 @@ void OLED_DrawSystem(u8g2_t *OLED)
   Len=0;
 #ifdef WITH_BMP180
   Len+=Format_String(Line+Len, "BMP180 0x");
+  Len+=Format_Hex(Line+Len, Baro.ADDR);
 #endif
 #ifdef WITH_BMP280
   Len+=Format_String(Line+Len, "BMP280 0x");
+  Len+=Format_Hex(Line+Len, Baro.ADDR);
 #endif
 #ifdef WITH_BME280
   Len+=Format_String(Line+Len, "BME280 0x");
+  Len+=Format_Hex(Line+Len, Baro.ADDR);
 #endif
 #ifdef WITH_MS5607
   Len+=Format_String(Line+Len, "MS5607 0x");
-#endif
   Len+=Format_Hex(Line+Len, Baro.ADDR);
+#endif
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 36, Line);
 
@@ -571,7 +574,7 @@ void vTaskCTRL(void* pvParameters)
 
     LED_TimerCheck(1);                                // update the LED flashes
 #ifdef WITH_BEEPER
-    Play_TimerCheck(1);                               // read the button(s)
+    Play_TimerCheck();                                // update the LED flashes
 #endif
     bool PageChange=0;
     int32_t PressRelease=Button_TimerCheck();

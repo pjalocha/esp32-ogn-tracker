@@ -65,6 +65,9 @@ static void SetRxChannel(uint8_t RxChan=RX_Channel)
 
 static uint8_t ReceivePacket(void)                              // see if a packet has arrived
 { if(!TRX.DIO0_isOn()) return 0;                                // DIO0 line HIGH signals a new packet has arrived
+#ifdef WITH_LED_RX
+  LED_RX_Flash(20);
+#endif
   uint8_t RxRSSI = TRX.ReadRSSI();                              // signal strength for the received packet
   RX_Random = (RX_Random<<1) | (RxRSSI&1);                      // use the lowest bit to add entropy
 
@@ -108,6 +111,9 @@ static uint8_t Transmit(uint8_t TxChan, const uint8_t *PacketByte, uint8_t Thres
       if(RxRSSI>=Thresh) break; }
     if(MaxWait==0) return 0; }
 
+#ifdef WITH_LED_TX
+  LED_TX_Flash(20);
+#endif
   TRX.WriteMode(RF_OPMODE_STANDBY);                              // switch to standby
   // vTaskPrioritySet(0, tskIDLE_PRIORITY+2);
   vTaskDelay(1);
@@ -144,7 +150,7 @@ static void TimeSlot(uint8_t TxChan, uint32_t SlotLen, const uint8_t *PacketByte
   ReceiveUntil(End);                                                       // listen till the end of the time-slot
 }
 
-static void SetFreqPlan(void)
+static void SetFreqPlan(void)                                // set the RF TRX according to the selected frequency hopping plan
 { TRX.setBaseFrequency(RF_FreqPlan.BaseFreq);                // set the base frequency (recalculate to RFM69 internal synth. units)
   TRX.setChannelSpacing(RF_FreqPlan.ChanSepar);              // set the channel separation
   TRX.setFrequencyCorrection(Parameters.RFchipFreqCorr);     // set the fine correction (to counter the Xtal error)
@@ -155,10 +161,24 @@ static uint8_t StartRFchip(void)
   vTaskDelay(10);                                            // wait 10ms
   TRX.RESET(0);                                              // RESET released
   vTaskDelay(10);                                            // wait 10ms
-  SetFreqPlan();                                             // set TRX base frequency and channel separation after the frequency hopp$
+  SetFreqPlan();                                             // set TRX base frequency and channel separation after the frequency hopping plan
   TRX.Configure(0, OGN_SYNC);                                // setup RF chip parameters and set to channel #0
   TRX.WriteMode(RF_OPMODE_STANDBY);                          // set RF chip mode to STANDBY
-  return TRX.ReadVersion(); }                                // read the RF chip version and return it
+  uint8_t Version = TRX.ReadVersion();
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "StartRFchip() v");
+  Format_Hex(CONS_UART_Write, Version);
+  CONS_UART_Write(' ');
+  Format_UnsDec(CONS_UART_Write, RF_FreqPlan.BaseFreq, 4, 3);
+  CONS_UART_Write('+');
+  Format_UnsDec(CONS_UART_Write, (uint16_t)RF_FreqPlan.Channels, 2);
+  CONS_UART_Write('x');
+  Format_UnsDec(CONS_UART_Write, RF_FreqPlan.ChanSepar, 4, 3);
+  Format_String(CONS_UART_Write, "kHz\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
+  return Version; }                                          // read the RF chip version and return it
 
 extern "C"
  void vTaskRF(void* pvParameters)

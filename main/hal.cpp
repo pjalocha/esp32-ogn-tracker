@@ -186,6 +186,7 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 #define PIN_LED_TX   GPIO_NUM_15
 #endif
 
+// #define PIN_LED_TX   GPIO_NUM_??
 // #define PIN_LED_RX   GPIO_NUM_??
 
 #if defined(WITH_HELTEC) || defined(WITH_TTGO)
@@ -258,13 +259,13 @@ GPIO   HELTEC      TTGO       JACEK      T-Beam      FollowMe   Restrictions
 #define PIN_I2C_SDA GPIO_NUM_4    // SDA pin
 #define OLED_I2C_ADDR 0x3C        // I2C address of the OLED display
 #define PIN_OLED_RST GPIO_NUM_16  // OLED RESET: low-active
-#endif
+#endif // HELTEC || TTGO
 
 #ifdef WITH_TBEAM                 // T-Beam
 #define PIN_I2C_SCL GPIO_NUM_22   // SCL pin => this way the pin pattern fits the BMP280 module
 #define PIN_I2C_SDA GPIO_NUM_21   // SDA pin
 #define OLED_I2C_ADDR 0x3C        // I2C address of the OLED display
-#endif
+#endif // TBEAM
 
 #ifdef WITH_FollowMe              //
 #define PIN_I2C_SCL GPIO_NUM_22   // SCL pin
@@ -277,21 +278,23 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 
 #ifdef WITH_TBEAM
 #define PIN_BEEPER    GPIO_NUM_4
-#endif
+#endif // TBEAM
 
 #if defined(WITH_HELTEC) || defined(WITH_TTGO)
 #define PIN_BEEPER    GPIO_NUM_17
-#endif
+#endif // HELTEC || TTGO
 
 #if !defined(WITH_OLED) && !defined(WITH_U8G2) && !defined(WITH_BMP180) && !defined(WITH_BMP280) && !defined(WITH_BME280)
 #undef PIN_I2C_SCL
 #undef PIN_I2C_SDA
 #endif
 
+#ifdef WITH_FollowMe
 #define PIN_SD_MISO   GPIO_NUM_12 // SD card in simple SPI mode, using HSPI IOMUX pins
 #define PIN_SD_MOSI   GPIO_NUM_13
 #define PIN_SD_SCK    GPIO_NUM_14
 #define PIN_SD_CS     GPIO_NUM_15
+#endif // FollowMe
 
 #ifdef WITH_FollowMe
 #define PIN_BUTTON    GPIO_NUM_39
@@ -640,7 +643,7 @@ void RFM_TransferBlock(uint8_t *Data, uint8_t Len)
   Trans.tx_buffer = Data;
   Trans.rx_buffer = Data;
   Trans.length = 8*Len;
-  esp_err_t ret = spi_device_transmit(RFM_SPI, &Trans); }
+  esp_err_t ret = spi_device_polling_transmit(RFM_SPI, &Trans); }
 
 //--------------------------------------------------------------------------------------------------------
 // BEEPER
@@ -1213,7 +1216,8 @@ void IO_Configuration(void)
     quadwp_io_num   : -1,
     quadhd_io_num   : -1,
     max_transfer_sz : 64,
-    flags           : SPICOMMON_BUSFLAG_MASTER | SPICOMMON_BUSFLAG_SCLK | SPICOMMON_BUSFLAG_MISO | SPICOMMON_BUSFLAG_MOSI
+    flags           : SPICOMMON_BUSFLAG_MASTER | SPICOMMON_BUSFLAG_SCLK | SPICOMMON_BUSFLAG_MISO | SPICOMMON_BUSFLAG_MOSI,
+    intr_flags      : 0 // ESP_INTR_FLAG_SHARED  ESP_INTR_FLAG_INTRDISABLED
   };
   spi_device_interface_config_t DevCfg =
   { command_bits     : 0,
@@ -1238,6 +1242,7 @@ void IO_Configuration(void)
   gpio_set_direction(PIN_PERIPH_RST, GPIO_MODE_OUTPUT);
   gpio_set_level(PIN_PERIPH_RST, 1);
 #endif
+
 #ifdef PIN_GPS_PPS
   gpio_set_direction(PIN_GPS_PPS, GPIO_MODE_INPUT);
 #endif
