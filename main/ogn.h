@@ -985,7 +985,8 @@ class GPS_Position
      return TimeDiff; } // [0.01s]
 
    void Write(MAV_GPS_RAW_INT *MAV) const
-   { MAV->time_usec = (int64_t)1000000*getUnixTime()+10000*FracSec;
+//   { MAV->time_usec = (int64_t)1000000*getUnixTime()+10000*FracSec;
+   { MAV->time_usec = getUnixTime_ms()*1000; // (int64_t)1000000*getUnixTime()+10000*FracSec;
      MAV->lat = ((int64_t)50*Latitude+1)/3;
      MAV->lon = ((int64_t)50*Longitude+1)/3;
      MAV->alt = 100*Altitude;
@@ -1317,6 +1318,10 @@ class GPS_Position
   { uint32_t Time=Time_ms/1000;
     setUnixTime(Time);
     FracSec = (Time_ms-(uint64_t)Time*1000)/10; }
+
+  uint64_t getUnixTime_ms(void) const
+  { return (uint64_t)getUnixTime()*1000 + (uint32_t)FracSec*10; }
+
 
   private:
 
