@@ -410,6 +410,10 @@ void vTaskPROC(void* pvParameters)
       PosPacket.Packet.HeaderWord=0;
       PosPacket.Packet.Header.Address    = Parameters.Address;         // set address
       PosPacket.Packet.Header.AddrType   = Parameters.AddrType;        // address-type
+#ifdef WITH_ENCRYPT
+      if(Parameters.Encrypt)                                           // if position encryption is requested
+      { PosPacket.Packet.Header.Encrypted = 1; }                       // then set the flg in the header
+#endif
       PosPacket.Packet.calcAddrParity();                               // parity of (part of) the header
       if(BestResid==0) Position->Encode(PosPacket.Packet);             // encode position/altitude/speed/etc. from GPS position
                   else Position->Encode(PosPacket.Packet, BestResid);
@@ -420,7 +424,13 @@ void vTaskPROC(void* pvParameters)
 //         xSemaphoreGive(CONS_Mutex); }
       OGN_TxPacket<OGN_Packet> *TxPacket = RF_TxFIFO.getWrite();
       TxPacket->Packet = PosPacket.Packet;                             // copy the position packet to the TxFIFO
-      TxPacket->Packet.Whiten(); TxPacket->calcFEC();                  // whiten and calculate FEC code
+#ifdef WITH_ENCRYPT
+      if(Parameters.Encrypt) TxPacket->Packet.Encrypt(Parameters.EncryptKey); // if encryption is requested then encrypt
+                        else TxPacket->Packet.Whiten();                       // otherwise only whiten
+#else
+      TxPacket->Packet.Whiten();
+#endif
+      TxPacket->calcFEC();                  // whiten and calculate FEC code
 #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60);
