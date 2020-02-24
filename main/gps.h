@@ -9,6 +9,8 @@
 
 const  uint8_t GPS_PosPipeSize         = 4; // number of GPS positions held in a pipe
 
+// extern uint8_t GPS_PowerMode;               // 0=shutdown, 1=reduced, 2=normal
+
 extern          uint32_t GPS_FatTime;       // [2 sec] UTC time in FAT format (for FatFS)
 extern           int32_t GPS_Altitude;      // [0.1m] altitude (height above Geoid)
 extern           int32_t GPS_Latitude;      // [0.0001/60 deg]
@@ -16,7 +18,9 @@ extern           int32_t GPS_Longitude;     // [0.0001/60 deg]
 extern           int16_t GPS_GeoidSepar;    // [0.1m]
 extern          uint16_t GPS_LatCosine;     // [1.0/(1<<12)] Latitude Cosine for distance calculations
 extern          uint32_t GPS_TimeSinceLock; // [sec] time since GPS has a valid lock
+extern          uint32_t GPS_Random;        // random number produced from the GPS data
 extern          uint16_t GPS_PosPeriod;     // [0.01sec] how often (which period) the GPS/MAV is sending the positions
+extern          uint16_t GPS_SatSNR;        // [0.25dB] average SNR for satellites being used for navigation
 
 typedef union
          { uint8_t  Flags;
@@ -26,8 +30,8 @@ typedef union
              bool        MAV:1; // got at least one valid MAV message
              bool        PPS:1; // got at least one PPS signal
              bool BaudConfig:1; // baudrate is configured
-             bool ModeConfig:1; // mode is configured
-             bool           :1; //
+             bool ModeConfig:1; // navigation mode is configured
+             bool RateConfig:1; // navigation rate is configured
              bool           :1; //
            } ;
          } Status;

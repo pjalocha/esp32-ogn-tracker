@@ -11,7 +11,7 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
 
  class NMEA_RxMsg             // receiver for the NMEA sentences
 { public:
-   static const uint8_t MaxLen=96;   // maximum length
+   static const uint8_t MaxLen=104;  // maximum length
    static const uint8_t MaxParms=24; // maximum number of parameters (commas)
    uint8_t Data[MaxLen];             // the message itself
    uint8_t Len;                      // number of bytes
@@ -141,7 +141,7 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
        if(Data[4]!='G') return 0;
        return Data[5]=='A'; }
 
-   uint8_t isGPGSA(void) const                   // GPS satellite data
+   uint8_t isGPGSA(void) const                   //
      { if(!isGP()) return 0;
        if(Data[3]!='G') return 0;
        if(Data[4]!='S') return 0;
@@ -158,6 +158,24 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
        if(Data[3]!='G') return 0;
        if(Data[4]!='S') return 0;
        return Data[5]=='A'; }
+
+   uint8_t isGxGSV(void) const                   // GPS satellite data
+     { if(!isGx()) return 0;
+       if(Data[3]!='G') return 0;
+       if(Data[4]!='S') return 0;
+       return Data[5]=='V'; }
+
+   uint8_t isGPGSV(void) const                   // GPS satellite data
+     { if(!isGP()) return 0;
+       if(Data[3]!='G') return 0;
+       if(Data[4]!='S') return 0;
+       return Data[5]=='V'; }
+
+   uint8_t isGNGSV(void) const                   // GPS satellite data
+     { if(!isGN()) return 0;
+       if(Data[3]!='G') return 0;
+       if(Data[4]!='S') return 0;
+       return Data[5]=='V'; }
 
    uint8_t isGPTXT(void) const                   // GPS satellite data
      { if(!isGP()) return 0;

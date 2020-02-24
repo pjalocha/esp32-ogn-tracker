@@ -69,6 +69,22 @@ void Format_Hex( void (*Output)(char), uint32_t Word )
 { Format_Hex(Output, (uint8_t)(Word>>24)); Format_Hex(Output, (uint8_t)(Word>>16));
   Format_Hex(Output, (uint8_t)(Word>>8));  Format_Hex(Output, (uint8_t)Word); }
 
+void Format_MAC( void (*Output)(char), uint8_t *MAC, uint8_t Len)
+{ for(uint8_t Idx=0; Idx<Len; Idx++)
+  { if(Idx) (*Output)(':');
+    Format_Hex(Output, MAC[Idx]); }
+}
+
+uint8_t Format_HHcMMcSS(char *Out, uint32_t Time)
+{ uint32_t DayTime=Time%86400;
+  uint32_t Hour=DayTime/3600; DayTime-=Hour*3600;
+  uint32_t Min=DayTime/60; DayTime-=Min*60;
+  uint32_t Sec=DayTime;
+  uint32_t HHMMSS = 1000000*Hour + 1000*Min + Sec;
+  uint8_t Len=Format_UnsDec(Out, HHMMSS, 8);
+  Out[2]=':'; Out[5]=':';
+  return Len; }
+
 uint8_t Format_HHMMSS(char *Out, uint32_t Time)
 { uint32_t DayTime=Time%86400;
   uint32_t Hour=DayTime/3600; DayTime-=Hour*3600;
@@ -76,6 +92,14 @@ uint8_t Format_HHMMSS(char *Out, uint32_t Time)
   uint32_t Sec=DayTime;
   uint32_t HHMMSS = 10000*Hour + 100*Min + Sec;
   return Format_UnsDec(Out, HHMMSS, 6); }
+
+void Format_HHMMSS(void (*Output)(char), uint32_t Time)
+{ uint32_t DayTime=Time%86400;
+  uint32_t Hour=DayTime/3600; DayTime-=Hour*3600;
+  uint32_t Min=DayTime/60; DayTime-=Min*60;
+  uint32_t Sec=DayTime;
+  uint32_t HHMMSS = 10000*Hour + 100*Min + Sec;
+  Format_UnsDec(Output, HHMMSS, 6); }
 
 void Format_UnsDec( void (*Output)(char), uint16_t Value, uint8_t MinDigits, uint8_t DecPoint)
 { uint16_t Base; uint8_t Pos;

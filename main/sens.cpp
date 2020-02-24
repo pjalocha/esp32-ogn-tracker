@@ -6,12 +6,29 @@
 
 #include "parameters.h"
 
+#include "proc.h"
 #include "ctrl.h"
 #include "gps.h"
 
 // #define DEBUG_PRINT
 
 #if defined(WITH_BMP180) || defined(WITH_BMP280) || defined(WITH_MS5607) || defined(WITH_BME280)
+
+#ifdef WITH_BMP180
+#include "bmp180.h"
+#endif
+
+#ifdef WITH_BMP280
+#include "bmp280.h"
+#endif
+
+#ifdef WITH_BME280
+#include "bme280.h"
+#endif
+
+#ifdef WITH_MS5607
+#include "ms5607.h"
+#endif
 
 #include "atmosphere.h"
 #include "slope.h"
@@ -191,7 +208,9 @@ static void ProcBaro(void)
         PosPtr->Temperature = Baro.Temperature;                      // and temperature in the GPS record
 #ifdef WITH_BME280
         if(Baro.hasHumidity())
-          PosPtr->Humidity    = Baro.Humidity;
+        { PosPtr->Humidity = Baro.Humidity;
+          // PosPtr->hasHum=1;
+        }
 #endif
         PosPtr->hasBaro=1; }                                         // tick "hasBaro" flag
     }
@@ -218,7 +237,7 @@ static void ProcBaro(void)
       Line[Len++]=','; }
 #endif
     Len+=NMEA_AppendCheckCRNL(Line, Len);
-    // if(CONS_UART_Free()>=128)
+    if(Parameters.Verbose)
     { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_String(CONS_UART_Write, Line, 0, Len);                       // send NMEA sentence to the console (UART1)
       xSemaphoreGive(CONS_Mutex); }
@@ -236,7 +255,25 @@ static void ProcBaro(void)
     Len+=Format_String(Line+Len, "m,");                              // normally f for feet, but metres and m works with XcSoar
     Len+=Format_String(Line+Len, "3");                               // 1 no fix, 2 - 2D, 3 - 3D; assume 3D for now
     Len+=NMEA_AppendCheckCRNL(Line, Len);
-    // if(CONS_UART_Free()>=128)
+    if(Parameters.Verbose)
+    { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, Line, 0, Len);                           // send NMEA sentence to the console (UART1)
+      xSemaphoreGive(CONS_Mutex); }
+
+    Len=0;
+    Len+=Format_String(Line+Len, "$LK8EX1,");
+    Len+=Format_UnsDec(Line+Len, (uint32_t)(Pressure+2)>>2);         // [Pa] pressure
+    Line[Len++]=',';
+    Len+=Format_SignDec(Line+Len, (StdAltitude+5)/10);               // [m] standard altitude (calc. from pressure)
+    Line[Len++]=',';
+    Len+=Format_SignDec(Line+Len, ClimbRate);                        // [cm/s] climb rate
+    Line[Len++]=',';
+    Len+=Format_SignDec(Line+Len, (Baro.Temperature+5)/10);          // [degC] temperature
+    Line[Len++]=',';
+    Len+=Format_UnsDec(Line+Len, (BatteryVoltage+128)>>8, 4, 3);     // [mV] Battery voltage
+    // Len+=Format_String(Line+Len, "999");                          // [%] battery level
+    Len+=NMEA_AppendCheckCRNL(Line, Len);
+    if(Parameters.Verbose)
     { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_String(CONS_UART_Write, Line, 0, Len);                           // send NMEA sentence to the console (UART1)
       xSemaphoreGive(CONS_Mutex); }
@@ -299,10 +336,9 @@ void vTaskSENS(void* pvParameters)
 
   while(1)
   {
-    if(Button_SleepRequest)
-    { vTaskDelay(1000); }
 #if defined(WITH_BMP180) || defined(WITH_BMP280) || defined(WITH_MS5607) || defined(WITH_BME280)
-    ProcBaro();
+    if(PowerMode) ProcBaro();
+             else vTaskDelay(100);
 #else
     vTaskDelay(1000);
 #endif

@@ -40,13 +40,13 @@ class OGN2_Packet          // Packet structure for the OGN tracker
      unsigned int Relay      : 1; // 0 = direct packet, 1 = relayed packet
      unsigned int Parity     : 1; // parity takes into account bits 0..27 thus only the 28 lowest bits
      unsigned int NonPos     : 1; // 0 = position packet, 1 = other information like status
-     unsigned int Auth       : 2; // Authentication: 00 = no auth. 01 = auth. this packet, 10/11 = auth response
+     // unsigned int Auth       : 2; // Authentication: 00 = no auth. 01 = auth. this packet, 10/11 = auth response
                                   // Auth:NonPos: 000 = position, 010 = position, to be followed by crypto-response,
                                   //              101 = response #0, 111 = response #1
                                   //              001 = non-position: status, info, etc.
                                   //              100 = ???, 110 = ???, 011 = ???
-     // unsigned int NonOGN     : 1; // 0 = OGN packet, 1 = other systems, like MAVlink
-     // unsigned int Encrypted  : 1; // packet is encrypted
+     unsigned int NonOGN     : 1; // 0 = OGN packet, 1 = other systems, like MAVlink
+     unsigned int Encrypted  : 1; // packet is encrypted
      unsigned int Emergency  : 1; // aircraft in emergency (not used for now)
    } Header ;
 
@@ -89,7 +89,8 @@ class OGN2_Packet          // Packet structure for the OGN tracker
 
      unsigned int Pulse     : 8; // [bpm]               // pilot: heart pulse rate
      unsigned int Oxygen    : 7; // [%]                 // pilot: oxygen level in the blood
-     unsigned int FEScurr   : 5; // [A]                 // 
+     // unsigned int FEScurr   : 5; // [A]                 // 
+     unsigned int SatSNR    : 5; // [dB]                // average SNR of GPS signals
      unsigned int RxRate    : 4; // [/min]              // log2 of received packet rate
      unsigned int Time      : 6; // [sec]               // same as in the position packet
      unsigned int FixQuality: 2;
@@ -115,10 +116,10 @@ class OGN2_Packet          // Packet structure for the OGN tracker
    uint8_t  *Byte(void) const { return (uint8_t  *)&HeaderWord; } // packet as bytes
    uint32_t *Word(void) const { return (uint32_t *)&HeaderWord; } // packet as words
 
-   static const uint8_t InfoParmNum = 12; // [int]  number of info-parameters and their names
+   static const uint8_t InfoParmNum = 14; // [int]  number of info-parameters and their names
    static const char *InfoParmName(uint8_t Idx) { static const char *Name[InfoParmNum] =
                                                   { "Pilot", "Manuf", "Model", "Type", "SN", "Reg", "ID", "Class",
-                                                    "Task" , "Base" , "ICE"  , "PilotID" } ;
+                                                    "Task" , "Base" , "ICE"  , "PilotID", "Hard", "Soft" } ;
                                                   return Idx<InfoParmNum ? Name[Idx]:0; }
 
    void Dump(void) const

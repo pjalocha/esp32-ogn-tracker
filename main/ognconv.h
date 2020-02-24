@@ -73,7 +73,13 @@ void TEA_Decrypt (uint32_t* Data, const uint32_t *Key, int Loops);
 void TEA_Encrypt_Key0 (uint32_t* Data, int Loops);
 void TEA_Decrypt_Key0 (uint32_t* Data, int Loops);
 
+void XXTEA_Encrypt(uint32_t *Data, uint8_t Words, const uint32_t Key[4], uint8_t Loops);
+void XXTEA_Decrypt(uint32_t *Data, uint8_t Words, const uint32_t Key[4], uint8_t Loops);
+
 void XorShift32(uint32_t &Seed);      // simple random number generator
 void xorshift64(uint64_t &Seed);
+
+uint8_t EncodeAscii85(    char *Ascii, uint32_t    Word );  // Encode 32-bit Word into 5-char Ascii-85 string
+uint8_t DecodeAscii85(uint32_t &Word,  const char *Ascii);  // Decode 5-char Ascii-85 to 32-bit Word
 
 #endif // __OGNCONV_H__

@@ -101,6 +101,12 @@ class UBX_NAV_TIMEUTC     // 0x01 0x21
    uint8_t  valid;        // bits: 0:ToW, 1:WN, 2:UTC
 } ;
 
+class UBX_RXM_PMREQ       // 0x02 0x41
+{ public:
+   uint32_t duration;     // [ms]
+   uint32_t flags;        // bit #1 = enter backup mode
+} ;
+
 class UBX_CFG_CFG
 { public:
    uint32_t clearMask;

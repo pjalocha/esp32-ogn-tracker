@@ -6,12 +6,14 @@
 #include <unistd.h>
 
 #include "esp_system.h"
+// #include "esp_sleep.h"
 
 #include "hal.h"
 
-#include "rf.h"
 #include "sens.h"
+#include "rf.h"
 #include "ctrl.h"
+#include "proc.h"
 #include "log.h"
 
 #include "gps.h"
@@ -19,9 +21,16 @@
 #include "timesync.h"
 #include "format.h"
 
+#include "disp_oled.h"
+#include "disp_lcd.h"
+
+// #include "ymodem.h"
+
 // #define DEBUG_PRINT
 
 static char Line[128];
+
+FIFO<uint8_t, 8> KeyBuffer;
 
 // ========================================================================================================================
 
@@ -53,338 +62,6 @@ void PrintTasks(void (*CONS_UART_Write)(char))
 
 // ========================================================================================================================
 
-#ifdef WITH_OLED
-int OLED_DisplayStatus(uint32_t Time, uint8_t LineIdx=0)
-{ Format_String(Line   , "OGN Tx/Rx      ");
-  Format_HHMMSS(Line+10, Time);
-  OLED_PutLine(LineIdx++, Line);
-  Parameters.Print(Line);
-  OLED_PutLine(LineIdx++, Line);
-  return 0; }
-
-int OLED_DisplayPosition(GPS_Position *GPS=0, uint8_t LineIdx=2)
-{ if(GPS && GPS->isValid())
-  { Line[0]=' ';
-    Format_SignDec(Line+1,  GPS->Latitude /60, 6, 4); Line[9]=' ';
-    Format_UnsDec (Line+10, GPS->Altitude /10, 5, 0); Line[15]='m';
-    OLED_PutLine(LineIdx  , Line);
-    Format_SignDec(Line,    GPS->Longitude/60, 7, 4);
-    Format_SignDec(Line+10, GPS->ClimbRate,    4, 1);
-    OLED_PutLine(LineIdx+1, Line);
-    Format_UnsDec (Line   , GPS->Speed, 4, 1); Format_String(Line+5, "m/s  ");
-    Format_UnsDec (Line+10, GPS->Heading, 4, 1); Line[15]='^';
-    OLED_PutLine(LineIdx+2, Line);
-    Format_String(Line, "0D/00sat DOP00.0");
-    Line[0]+=GPS->FixMode; Format_UnsDec(Line+3, GPS->Satellites, 2);
-    Format_UnsDec(Line+12, (uint16_t)GPS->HDOP, 3, 1);
-    OLED_PutLine(LineIdx+3, Line);
-  }
-  else { OLED_PutLine(LineIdx, 0); OLED_PutLine(LineIdx+1, 0); OLED_PutLine(LineIdx+2, 0); OLED_PutLine(LineIdx+3, 0); }
-  if(GPS && GPS->isDateValid())
-  { Format_UnsDec (Line   , (uint16_t)GPS->Day,   2, 0); Line[2]='.';
-    Format_UnsDec (Line+ 3, (uint16_t)GPS->Month, 2, 0); Line[5]='.';
-    Format_UnsDec (Line+ 6, (uint16_t)GPS->Year , 2, 0); Line[8]=' '; Line[9]=' '; }
-  else Format_String(Line, "          ");
-  if(GPS && GPS->isTimeValid())
-  { Format_UnsDec (Line+10, (uint16_t)GPS->Hour,  2, 0);
-    Format_UnsDec (Line+12, (uint16_t)GPS->Min,   2, 0);
-    Format_UnsDec (Line+14, (uint16_t)GPS->Sec,   2, 0);
-  } else Line[10]=0;
-  OLED_PutLine(LineIdx+4, Line);
-  Line[0]=0;
-  if(GPS && GPS->hasBaro)
-  { Format_String(Line   , "0000.0hPa 00000m");
-    Format_UnsDec(Line   , GPS->Pressure/40, 5, 1);
-    Format_UnsDec(Line+10, GPS->StdAltitude/10, 5, 0); }
-  OLED_PutLine(LineIdx+5, Line);
-  return 0; }
-#endif
-
-#ifdef WITH_U8G2
-
-void OLED_PutLine(u8g2_t *OLED, uint8_t LineIdx, const char *Line)
-{ if(Line==0) return;
-#ifdef DEBUG_PRINT
-  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-  Format_String(CONS_UART_Write, "OLED_PutLine( ,");
-  Format_UnsDec(CONS_UART_Write, (uint16_t)LineIdx);
-  CONS_UART_Write(',');
-  Format_String(CONS_UART_Write, Line);
-  Format_String(CONS_UART_Write, ")\n");
-  xSemaphoreGive(CONS_Mutex);
-#endif
-  // u8g2_SetFont(OLED, u8g2_font_5x8_tr);
-  u8g2_SetFont(OLED, u8g2_font_amstrad_cpc_extended_8r);
-  u8g2_DrawStr(OLED, 0, (LineIdx+1)*8, Line);
-}
-
-void OLED_DrawStatus(u8g2_t *OLED, uint32_t Time, uint8_t LineIdx=0)
-{ Format_String(Line   , "OGN Tx/Rx      ");
-  Format_HHMMSS(Line+10, Time); Line[16]=0;
-  OLED_PutLine(OLED, LineIdx++, Line);
-  Parameters.Print(Line); Line[16]=0;
-  OLED_PutLine(OLED, LineIdx++, Line); }
-
-void OLED_DrawPosition(u8g2_t *OLED, GPS_Position *GPS=0, uint8_t LineIdx=2)
-{ if(GPS && GPS->isValid())
-  { Line[0]=' ';
-    Format_SignDec(Line+1,  GPS->Latitude /60, 6, 4); Line[9]=' ';
-    Format_UnsDec (Line+10, GPS->Altitude /10, 5, 0); Line[15]='m';
-    OLED_PutLine(OLED, LineIdx  , Line);
-    Format_SignDec(Line,    GPS->Longitude/60, 7, 4);
-    Format_SignDec(Line+10, GPS->ClimbRate,    4, 1);
-    OLED_PutLine(OLED, LineIdx+1, Line);
-    Format_UnsDec (Line   , GPS->Speed, 4, 1); Format_String(Line+5, "m/s  ");
-    Format_UnsDec (Line+10, GPS->Heading, 4, 1); Line[15]='^';
-    OLED_PutLine(OLED, LineIdx+2, Line);
-    Format_String(Line, "0D/00sat DOP00.0");
-    Line[0]+=GPS->FixMode; Format_UnsDec(Line+3, GPS->Satellites, 2);
-    Format_UnsDec(Line+12, (uint16_t)GPS->HDOP, 3, 1);
-    OLED_PutLine(OLED, LineIdx+3, Line);
-  }
-  // else { OLED_PutLine(OLED, LineIdx, 0); OLED_PutLine(OLED, LineIdx+1, 0); OLED_PutLine(LineIdx+2, 0); OLED_PutLine(LineIdx+3, 0); }
-  if(GPS && GPS->isDateValid())
-  { Format_UnsDec (Line   , (uint16_t)GPS->Day,   2, 0); Line[2]='.';
-    Format_UnsDec (Line+ 3, (uint16_t)GPS->Month, 2, 0); Line[5]='.';
-    Format_UnsDec (Line+ 6, (uint16_t)GPS->Year , 2, 0); Line[8]=' '; Line[9]=' '; }
-  else Format_String(Line, "          ");
-  if(GPS && GPS->isTimeValid())
-  { Format_UnsDec (Line+10, (uint16_t)GPS->Hour,  2, 0);
-    Format_UnsDec (Line+12, (uint16_t)GPS->Min,   2, 0);
-    Format_UnsDec (Line+14, (uint16_t)GPS->Sec,   2, 0);
-  } else Line[10]=0;
-  OLED_PutLine(OLED, LineIdx+4, Line);
-  Line[0]=0;
-  if(GPS && GPS->hasBaro)
-  { Format_String(Line   , "0000.0hPa 00000m");
-    Format_UnsDec(Line   , GPS->Pressure/40, 5, 1);
-    Format_UnsDec(Line+10, GPS->StdAltitude/10, 5, 0); }
-  OLED_PutLine(OLED, LineIdx+5, Line);
-}
-
-void OLED_DrawGPS(u8g2_t *OLED, GPS_Position *GPS=0)  // GPS time, position, altitude
-{ // u8g2_SetFont(OLED, u8g2_font_ncenB14_tr);
-  u8g2_SetFont(OLED, u8g2_font_7x13_tf);              // 5 lines, 12 pixels/line
-  uint8_t Len=0;
-  Len+=Format_String(Line+Len, "GPS ");
-  if(GPS && GPS->isValid())
-  { Line[Len++]='0'+GPS->FixMode; Line[Len++]='D'; Line[Len++]='/';
-    Len+=Format_UnsDec(Line+Len, GPS->Satellites, 1);
-    Len+=Format_String(Line+Len, "sat DOP");
-    Len+=Format_UnsDec(Line+Len, (uint16_t)GPS->HDOP, 2, 1); }
-  else
-  { Len+=Format_String(Line+Len, "(no lock)"); }
-  Line[Len]=0;
-  u8g2_DrawStr(OLED, 0, 12, Line);
-  if(GPS && GPS->isDateValid())
-  { Format_UnsDec (Line   , (uint16_t)GPS->Day,   2, 0); Line[2]='.';
-    Format_UnsDec (Line+ 3, (uint16_t)GPS->Month, 2, 0); Line[5]='.';
-    Format_UnsDec (Line+ 6, (uint16_t)GPS->Year , 2, 0); Line[8]=' ';
-  } else Format_String(Line, "  .  .   ");
-  if(GPS && GPS->isTimeValid())
-  { Format_UnsDec (Line+ 9, (uint16_t)GPS->Hour,  2, 0); Line[11]=':';
-    Format_UnsDec (Line+12, (uint16_t)GPS->Min,   2, 0); Line[14]=':';
-    Format_UnsDec (Line+15, (uint16_t)GPS->Sec,   2, 0);
-  } else Format_String(Line+9, "  :  :  ");
-  Line[17]=0;
-  u8g2_DrawStr(OLED, 0, 24, Line);
-  Len=0;
-  Len+=Format_String(Line+Len, "Lat:  ");
-  if(GPS && GPS->isValid())
-  { Len+=Format_SignDec(Line+Len,  GPS->Latitude /6, 7, 5);
-    Line[Len++]=0xB0; }
-  Line[Len]=0;
-  u8g2_DrawStr(OLED, 0, 36, Line);
-  Len=0;
-  Len+=Format_String(Line+Len, "Lon: ");
-  if(GPS && GPS->isValid())
-  { Len+=Format_SignDec(Line+Len,  GPS->Longitude /6, 8, 5);
-    Line[Len++]=0xB0; }
-  Line[Len]=0;
-  u8g2_DrawStr(OLED, 0, 48, Line);
-  Len=0;
-  Len+=Format_String(Line+Len, "Alt: ");
-  if(GPS && GPS->isValid())
-  { Len+=Format_SignDec(Line+Len,  GPS->Altitude, 4, 1);
-    Line[Len++]='m'; }
-  Line[Len]=0;
-  u8g2_DrawStr(OLED, 0, 60, Line);
-}
-
-void OLED_DrawRF(u8g2_t *OLED)                      // RF
-{ u8g2_SetFont(OLED, u8g2_font_7x13_tf);            // 5 lines. 12 pixels/line
-  uint8_t Len=0;
-#ifdef WITH_RFM69
-  Len+=Format_String(Line+Len, "RFM69");            // Type of RF chip used
-  if(isTxTypeHW()) Line[Len++]='H';
-  Line[Len++]='W';
-#endif
-#ifdef WITH_RFM95
-  Len+=Format_String(Line+Len, "RFM95");
-#endif
-#ifdef WITH_SX1272
-  Len+=Format_String(Line+Len, "SX1272");
-#endif
-  Line[Len++]=':';
-  Len+=Format_SignDec(Line+Len, (int16_t)Parameters.getTxPower());        // Tx power
-  Len+=Format_String(Line+Len, "dBm");
-  Line[Len++]=' ';
-  Len+=Format_SignDec(Line+Len, (int32_t)Parameters.RFchipFreqCorr, 2, 1); // frequency correction
-  Len+=Format_String(Line+Len, "ppm");
-  Line[Len]=0;
-  u8g2_DrawStr(OLED, 0, 12, Line);
-  Len=0;
-  Len+=Format_String(Line+Len, "Rx:");                                     //
-  Len+=Format_SignDec(Line+Len, -5*TRX.averRSSI, 2, 1);                    // noise level seen by the receiver
-  Len+=Format_String(Line+Len, "dBm ");
-  Len+=Format_UnsDec(Line+Len, RX_OGN_Count64);                            // received packet/min
-  Len+=Format_String(Line+Len, "/min");
-  Line[Len]=0;
-  u8g2_DrawStr(OLED, 0, 24, Line);
-  Len=0;
-  Len+=Format_SignDec(Line+Len, (int16_t)TRX.chipTemp);                    // RF chip internal temperature (not calibrated)
-  // Line[Len++]=0xB0;
-  // Line[Len++]='C';
-  Len+=Format_String(Line+Len, "\260C    RxFIFO:");
-  Len+=Format_UnsDec(Line+Len, RF_RxFIFO.Full());                                    // how many packets wait in the RX queue
-  Line[Len]=0;
-  u8g2_DrawStr(OLED, 0, 36, Line);
-  // u8g2_DrawStr(OLED, 0, 48, RF_FreqPlan.getPlanName());
-  Len=0;
-  Len+=Format_String(Line+Len, RF_FreqPlan.getPlanName());                 // name of the frequency plan
-  Line[Len++]=' ';
-  Len+=Format_UnsDec(Line+Len, (uint16_t)(RF_FreqPlan.getCenterFreq()/100000), 3, 1); // center frequency
-  Len+=Format_String(Line+Len, "MHz");
-  Line[Len]=0;
-  u8g2_DrawStr(OLED, 0, 48, Line);
-
-}
-
-void OLED_DrawBaro(u8g2_t *OLED, GPS_Position *GPS=0)
-{ u8g2_SetFont(OLED, u8g2_font_7x13_tf);              // 5 lines, 12 pixels/line
-  uint8_t Len=0;
-#ifdef WITH_BMP180
-  Len+=Format_String(Line+Len, "BMP180 ");
-#endif
-#ifdef WITH_BMP280
-  Len+=Format_String(Line+Len, "BMP280 ");
-#endif
-#ifdef WITH_BME280
-  Len+=Format_String(Line+Len, "BME280 ");
-#endif
-#ifdef WITH_MS5607
-  Len+=Format_String(Line+Len, "MS5607 ");
-#endif
-  Len+=Format_UnsDec(Line+Len, GPS->Pressure/4, 5, 2);
-  Len+=Format_String(Line+Len, "Pa");
-  Line[Len]=0;
-  u8g2_DrawStr(OLED, 0, 12, Line);
-  Len=0;
-  Len+=Format_UnsDec(Line+Len, GPS->StdAltitude, 5, 1);
-  Len+=Format_String(Line+Len, "m ");
-  Len+=Format_SignDec(Line+Len, GPS->ClimbRate, 2, 1);
-  Len+=Format_String(Line+Len, "m/s");
-  Line[Len]=0;
-  u8g2_DrawStr(OLED, 0, 24, Line);
-  Len=0;
-  Len+=Format_SignDec(Line+Len, GPS->Temperature, 2, 1);
-  Line[Len++]=0xB0;
-  Line[Len++]='C';
-  Line[Len++]=' ';
-  Len+=Format_SignDec(Line+Len, GPS->Humidity, 2, 1);
-  Line[Len++]='%';
-  Line[Len]=0;
-  u8g2_DrawStr(OLED, 0, 36, Line);
-}
-
-void OLED_DrawSystem(u8g2_t *OLED)
-{
-  u8g2_SetFont(OLED, u8g2_font_7x13_tf);              // 5 lines, 12 pixels/line
-  uint8_t Len=0;
-  Len+=Format_String(Line+Len, "GPS ");
-#ifdef WITH_GPS_UBX
-  Len+=Format_String(Line+Len, "UBX ");
-#endif
-#ifdef WITH_GPS_MTK
-  Len+=Format_String(Line+Len, "MTK ");
-#endif
-#ifdef WITH_GPS_SRF
-  Len+=Format_String(Line+Len, "SRF ");
-#endif
-  Len+=Format_UnsDec(Line+Len, GPS_getBaudRate(), 1);
-  Len+=Format_String(Line+Len, "bps");
-  Line[Len]=0;
-  u8g2_DrawStr(OLED, 0, 12, Line);
-
-  Len=0;
-#ifdef WITH_RFM69
-  Len+=Format_String(Line+Len, "RFM69 v");            // Type of RF chip used
-  if(isTxTypeHW()) Line[Len++]='H';
-  Line[Len++]='W';
-#endif
-#ifdef WITH_RFM95
-  Len+=Format_String(Line+Len, "RFM95 v");
-#endif
-#ifdef WITH_SX1272
-  Len+=Format_String(Line+Len, "SX1272 v");
-#endif
-  Len+=Format_Hex(Line+Len, TRX.chipVer);
-  Line[Len++]=' ';
-  Len+=Format_SignDec(Line+Len, (int16_t)TRX.chipTemp);
-  Line[Len++]=0xB0;
-  Line[Len++]='C';
-  Line[Len]=0;
-  u8g2_DrawStr(OLED, 0, 24, Line);
-
-  Len=0;
-#ifdef WITH_BMP180
-  Len+=Format_String(Line+Len, "BMP180 0x");
-  Len+=Format_Hex(Line+Len, Baro.ADDR);
-#endif
-#ifdef WITH_BMP280
-  Len+=Format_String(Line+Len, "BMP280 0x");
-  Len+=Format_Hex(Line+Len, Baro.ADDR);
-#endif
-#ifdef WITH_BME280
-  Len+=Format_String(Line+Len, "BME280 0x");
-  Len+=Format_Hex(Line+Len, Baro.ADDR);
-#endif
-#ifdef WITH_MS5607
-  Len+=Format_String(Line+Len, "MS5607 0x");
-  Len+=Format_Hex(Line+Len, Baro.ADDR);
-#endif
-  Line[Len]=0;
-  u8g2_DrawStr(OLED, 0, 36, Line);
-
-#ifdef WITH_SD
-  Len=0;
-  Len += Format_String(Line+Len, "SD ");
-  if(SD_isMounted())
-  { Len+=Format_UnsDec(Line+Len, (uint32_t)SD_getSectors());
-    Line[Len++]='x';
-    Len+=Format_UnsDec(Line+Len, (uint32_t)SD_getSectorSize()*5/512, 2, 1);
-    Len+=Format_String(Line+Len, "KB"); }
-  else
-  { Len+=Format_String(Line+Len, "none"); }
-  Line[Len]=0;
-  u8g2_DrawStr(OLED, 0, 60, Line);
-
-#endif
-
-}
-
-void OLED_DrawID(u8g2_t *OLED)
-{ u8g2_SetFont(OLED, u8g2_font_9x15_tr);
-  strcpy(Line, "ID: "); Parameters.Print(Line+4); Line[14]=0;
-  u8g2_DrawStr(OLED, 0, 20, Line);
-  u8g2_SetFont(OLED, u8g2_font_10x20_tr);
-#ifdef WITH_FollowMe
-  u8g2_DrawStr(OLED,  8, 40, "FollowMe868");
-  u8g2_DrawStr(OLED, 16, 60, "by AVIONIX");
-#endif
-}
-
-#endif
 
 // ========================================================================================================================
 
@@ -455,6 +132,21 @@ static void ProcessNMEA(void)     // process a valid NMEA that got to the consol
 #ifdef WITH_LOG
   if(NMEA.isPOGNL()) ListLogFile();
 #endif
+}
+
+static uint8_t Verbose=0;
+static uint32_t VerboseSuspendTime=0;
+const  uint32_t VerboseSuspendTimeout=60;
+
+static void CheckCtrlV(void)
+{ if(VerboseSuspendTime==0) return;
+  uint32_t Time = TimeSync_Time()-VerboseSuspendTime;
+  if(Time>VerboseSuspendTimeout) { Parameters.Verbose=Verbose; VerboseSuspendTime=0; }
+}
+
+static void ProcessCtrlV(void)
+{ if(VerboseSuspendTime) { Parameters.Verbose=Verbose; VerboseSuspendTime=0; return; }
+  Verbose = Parameters.Verbose; VerboseSuspendTime=TimeSync_Time(); Parameters.Verbose=0;
 }
 
 static void ProcessCtrlC(void)                                  // print system state to the console
@@ -532,13 +224,107 @@ static void ProcessCtrlL(void)                                    // print syste
 #endif
 }
 
+void SleepIn(void)
+{ xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "Sleep-in\n");
+  xSemaphoreGive(CONS_Mutex);
+
+#ifdef WITH_GPS_UBX
+#ifdef WITH_GPA_ENA
+  GPS_DISABLE();
+#endif
+  UBX_RXM_PMREQ PMREQ;
+  PMREQ.duration = 0;
+  PMREQ.flags = 0x01;
+  UBX_RxMsg::Send(0x02, 0x41, GPS_UART_Write, (uint8_t *)(&PMREQ), sizeof(PMREQ));
+#endif
+
+#ifdef WITH_GPS_MTK
+#ifdef WITH_GPA_ENA
+  GPS_DISABLE();
+  Format_String(GPS_UART_Write, "$PMTK225,4*2F\r\n"); // backup mode: 7uA
+#else
+  Format_String(GPS_UART_Write, "$PMTK161,0*28\r\n"); // standby mode: 1mA
+#endif
+#endif
+
+#ifdef WITH_OLED
+  OLED_DisplayON(0);
+#endif
+
+#ifdef WITH_U8G2_OLED
+  u8g2_SetPowerSave(&U8G2_OLED, 1);
+#endif
+
+#if defined(WITH_ST7789) || defined(WITH_ILI9341)
+  LCD_SetBacklightLevel(0);
+#endif
+
+  PowerMode=0;
+  vTaskDelay(1000); }
+
+void SleepOut(void)
+{
+#ifdef WITH_GPS_ENABLE
+  GPS_DISABLE();
+#endif
+  PowerMode=2;
+#if defined(WITH_ST7789) || defined(WITH_ILI9341)
+  LCD_SetBacklightLevel(6);
+#endif
+#ifdef WITH_U8G2_OLED
+  u8g2_SetPowerSave(&U8G2_OLED, 0);
+#endif
+#ifdef WITH_OLED
+  OLED_DisplayON(1);
+#endif
+
+#ifdef WITH_GPS_UBX
+#ifdef WITH_GPS_ENABLE
+  GPS_ENABLE();
+#endif
+  Format_String(GPS_UART_Write, "\n");
+#endif
+
+#ifdef WITH_GPS_MTK
+#ifdef WITH_GPS_ENABLE
+  GPS_ENABLE();
+#else
+  Format_String(GPS_UART_Write, "$PMTK161,1*29\r\n");
+#endif
+#endif
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "Sleep-out\n");
+  xSemaphoreGive(CONS_Mutex); }
+
+#ifdef WITH_SLEEP
+static TickType_t LowBatt_Time=0;
+
+static void LowBatt_Watch(void)                                     // check battery voltage
+{ uint16_t BattVolt = BatteryVoltage>>8;                            // [mV]
+  if(BattVolt>=3250 || BattVolt<=700 ) { LowBatt_Time=0; return; }
+   int16_t BattRate = (BatteryVoltageRate+128)>>8;                  // [mv/sec]
+  if(BattRate>0) { LowBatt_Time=0; return; }
+  TickType_t Now=xTaskGetTickCount();
+  if(LowBatt_Time==0) { LowBatt_Time=Now; return; }
+  Now-=LowBatt_Time;
+  if(Now>=30000)                                                    // if low battery and voltage dropping persists for 30sec
+  { SleepIn();                                                      //
+    Sleep();                                                        // enter sleep
+    SleepOut();                                                     // wake up
+    LowBatt_Time=0; }                                               // reset time counter
+}
+#endif
+
 static void ProcessInput(void)
 { for( ; ; )
   { uint8_t Byte; int Err=CONS_UART_Read(Byte); if(Err<=0) break; // get byte from console, if none: exit the loop
 #ifndef WITH_GPS_UBX_PASS
-    if(Byte==0x03) ProcessCtrlC();                                // if Ctrl-C received
-    if(Byte==0x0C) ProcessCtrlL();                                // if Ctrl-C received
+    if(Byte==0x03) ProcessCtrlC();                                // if Ctrl-C received: print parameters
+    if(Byte==0x0C) ProcessCtrlL();                                // if Ctrl-L received: list log files
+    if(Byte==0x16) ProcessCtrlV();                                // if Ctrl-L received: suspend (verbose) printout
     if(Byte==0x18) esp_restart() ;                                // if Ctrl-X received then restart
+    // if(Byte==0x19) Shutdown();                                    // if Ctrl-Y receiver: shutdown
 #endif
     NMEA.ProcessByte(Byte);                                       // pass the byte through the NMEA processor
     if(NMEA.isComplete())                                         // if complete NMEA:
@@ -560,56 +346,164 @@ static void ProcessInput(void)
 
 // ========================================================================================================================
 
-const uint8_t OLED_Pages = 6;
-static uint8_t OLED_Page = 1;
-
 extern "C"
 void vTaskCTRL(void* pvParameters)
-{ uint32_t PrevTime=0;
+{
+  uint32_t PrevTime=0;
   GPS_Position *PrevGPS=0;
-  for( ; ; )
+  for( ; ; )                                          //
   { ProcessInput();                                   // process console input
-
+#ifdef WITH_SLEEP
+#if defined(WITH_FollowMe) || defined(WITH_TBEAM)
+    LowBatt_Watch();
+#endif
+#endif
     vTaskDelay(1);                                    //
+
+#ifdef WITH_AXP
+    bool PowerOffRequest = AXP.readLongPressIRQ() /* || AXP.readShortPressIRQ() */ ;
+    if(PowerOffRequest)
+    { PowerMode=0;
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, "Power-Off Request\n");
+      xSemaphoreGive(CONS_Mutex);
+      // vTaskDelay(1000);
+      AXP.setLED(4);
+#ifdef WITH_OLED
+      OLED_DisplayON(0);
+#endif
+#ifdef WITH_U8G2_OLED
+      u8g2_SetPowerSave(&U8G2_OLED, 1);
+#endif
+#if defined(WITH_ST7789) || defined(WITH_ILI9341)
+      LCD_SetBacklightLevel(0);
+#endif
+      AXP.setPowerOutput(AXP.OUT_LDO2,  0); // turn off RFM power
+      AXP.setPowerOutput(AXP.OUT_LDO3,  0); // turn off GPS power
+      AXP.setPowerOutput(AXP.OUT_DCDC1, 0);
+      // AXP.setPowerOutput(AXP.OUT_DCDC2, 0);
+      // AXP.setPowerOutput(AXP.OUT_DCDC3, 0);
+      // AXP.setPowerOutput(AXP.OUT_EXTEN, 0);
+      AXP.ShutDown();
+      vTaskDelay(1000);
+// #define PIN_AXP_IRQ GPIO_NUM_35
+//     esp_sleep_enable_ext0_wakeup(PIN_AXP_IRQ, 0); // 1 = High, 0 = Low
+//     esp_deep_sleep_start();
+    }
+    bool ShortPress = AXP.readShortPressIRQ();
+    if(ShortPress)
+    { KeyBuffer.Write(0x04);
+#ifdef DEBUG_PRINT
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, "AXP short-press\n");
+      xSemaphoreGive(CONS_Mutex);
+#endif
+      AXP.clearIRQ(); }
+#endif
 
     LED_TimerCheck(1);                                // update the LED flashes
 #ifdef WITH_BEEPER
     Play_TimerCheck();                                // update the LED flashes
 #endif
-    bool PageChange=0;
-    int32_t PressRelease=Button_TimerCheck();
+
+    int32_t PressRelease=Button_TimerCheck();         // 0 = no change
+// #ifdef DEBUG_PRINT
     if(PressRelease!=0)
     { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-      Format_String(CONS_UART_Write, "PressRelease = ");
+      Format_String(CONS_UART_Write, "Button: ");
       Format_SignDec(CONS_UART_Write, PressRelease);
       Format_String(CONS_UART_Write, "ms\n");
       xSemaphoreGive(CONS_Mutex); }
+// #endif
     if(PressRelease>0)
-    { if(PressRelease<=300)                                            // short button push: switch pages
-      { OLED_Page++; if(OLED_Page>=OLED_Pages) OLED_Page=0;
-        PageChange=1; }
-      else if(PressRelease<=2000)                                      // long button push: some page action
+    { if(PressRelease<=700)                                            // short button push: switch pages
+      { KeyBuffer.Write(0x01); }
+      else if(PressRelease<=3000)                                      // longer button push: some page action
+      { KeyBuffer.Write(0x41); }
+      else                                                             // very long push
       { }
     }
 
     uint32_t Time=TimeSync_Time();
-    GPS_Position *GPS = GPS_getPosition();
     bool TimeChange = Time!=PrevTime;
+    uint32_t Sec = (Time-1)%60;
+    GPS_Position *GPS = GPS_getPosition(Sec);
     bool GPSchange  = GPS!=PrevGPS;
     if( (!TimeChange) && (!GPSchange) ) continue;
     PrevTime=Time; PrevGPS=GPS;
 
-#ifdef WITH_OLED
-    if(Button_SleepRequest)
-    { OLED_DisplayON(0); }
-    else
-    { esp_err_t StatErr=ESP_OK;
-      esp_err_t PosErr=ESP_OK;
-      if(TimeChange)
-      { StatErr = OLED_DisplayStatus(Time, 0); }
-      if(GPSchange)
-      { PosErr = OLED_DisplayPosition(GPS, 2); }
-    }
+    if(TimeChange) CheckCtrlV();
+
+#ifdef DEBUG_PRINT
+    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    if(TimeChange)
+    { Format_String(CONS_UART_Write, "TimeChange: ");
+      // Format_HHMMSS(CONS_UART_Write, Sec);
+      Format_HHMMSS(CONS_UART_Write, Time);
+      Format_String(CONS_UART_Write, "\n"); }
+    if(GPSchange && GPS)
+    { Format_String(CONS_UART_Write, "GPSchange: ");
+      GPS->PrintLine(Line);
+      Format_String(CONS_UART_Write, Line); }
+    xSemaphoreGive(CONS_Mutex);
+#endif
+
+#ifdef WITH_BQ
+#ifdef DEBUG_PRINT
+    if(TimeChange)
+    { uint16_t Batt = BatterySense(2);
+      // uint8_t ID     = BQ.readID();
+      // uint8_t Status = BQ.readStatus();
+      // uint8_t Fault  = BQ.readFault();
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, "BQ24295:");
+      for(uint8_t Reg=0; Reg<=10; Reg++)
+      { uint8_t Val=BQ.readReg(Reg); CONS_UART_Write(' '); Format_Hex(CONS_UART_Write, Val); }
+      // Format_Hex(CONS_UART_Write, ID);
+      // CONS_UART_Write('/');
+      // Format_Hex(CONS_UART_Write, Status);
+      // CONS_UART_Write('/');
+      // Format_Hex(CONS_UART_Write, Fault);
+      Format_String(CONS_UART_Write, " Batt=");
+      Format_UnsDec(CONS_UART_Write, Batt, 4, 3);
+      Format_String(CONS_UART_Write, "V\n");
+      xSemaphoreGive(CONS_Mutex); }
+#endif
+#endif
+
+#ifdef WITH_AXP
+// #ifdef DEBUG_PRINT
+    if(TimeChange)
+    {  uint16_t Batt=AXP.readBatteryVoltage();       // [mV]
+       uint16_t InpCurr=AXP.readBatteryInpCurrent(); // [mA]
+       uint16_t OutCurr=AXP.readBatteryOutCurrent(); // [mA]
+       uint16_t Vbus=AXP.readVbusVoltage();          // [mV]
+       uint16_t VbusCurr=AXP.readVbusCurrent();      // [mA]
+        int16_t Temp=AXP.readTemperature();          // [0.1degC]
+       uint32_t InpCharge=AXP.readBatteryInpCharge();
+       uint32_t OutCharge=AXP.readBatteryOutCharge();
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, "AXP192: Batt=");
+      Format_UnsDec(CONS_UART_Write, Batt, 4, 3);
+      Format_String(CONS_UART_Write, "V, ");
+      Format_UnsDec(CONS_UART_Write, InpCurr, 4, 3);
+      Format_String(CONS_UART_Write, "/");
+      Format_UnsDec(CONS_UART_Write, OutCurr, 4, 3);
+      Format_String(CONS_UART_Write, "A, USB: ");
+      Format_UnsDec(CONS_UART_Write, Vbus, 4, 3);
+      Format_String(CONS_UART_Write, "V, ");
+      Format_UnsDec(CONS_UART_Write, VbusCurr, 4, 3);
+      Format_String(CONS_UART_Write, "A, Charge=");
+      Format_UnsDec(CONS_UART_Write, ((InpCharge<<12)+562)/1125, 2, 1);
+      Format_String(CONS_UART_Write, "-");
+      Format_UnsDec(CONS_UART_Write, ((OutCharge<<12)+562)/1125, 2, 1);
+      Format_String(CONS_UART_Write, "mAh, Temp=");
+      Format_SignDec(CONS_UART_Write, Temp, 2, 1);
+      Format_String(CONS_UART_Write, "degC\n");
+      xSemaphoreGive(CONS_Mutex); }
+// #endif
+#endif
+
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
     if(TimeChange)
@@ -621,26 +515,6 @@ void vTaskCTRL(void* pvParameters)
       Format_SignDec(CONS_UART_Write, PosErr);
       Format_String(CONS_UART_Write, "\n"); }
     xSemaphoreGive(CONS_Mutex);
-#endif
-#endif // WITH_OLED
-
-#ifdef WITH_U8G2
-    if(Button_SleepRequest)
-    { u8g2_SetPowerSave(&U8G2_OLED, 0); }
-    else if(TimeChange || PageChange)
-    { u8g2_ClearBuffer(&U8G2_OLED);
-      switch(OLED_Page)
-      { case 2: OLED_DrawGPS   (&U8G2_OLED, GPS); break;
-        case 3: OLED_DrawRF    (&U8G2_OLED); break;
-        case 4: OLED_DrawBaro  (&U8G2_OLED, GPS); break;
-        case 1: OLED_DrawID    (&U8G2_OLED); break;
-        case 5: OLED_DrawSystem(&U8G2_OLED); break;
-        default:
-        { OLED_DrawStatus(&U8G2_OLED, Time, 0);
-          OLED_DrawPosition(&U8G2_OLED, GPS, 2); }
-      }
-      u8g2_SendBuffer(&U8G2_OLED);
-    }
 #endif
 
 #ifdef DEBUG_PRINT                                      // in debug mode print the parameters and state every 60sec

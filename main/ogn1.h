@@ -85,7 +85,8 @@ class OGN1_Packet          // Packet structure for the OGN tracker
    struct
    { unsigned int Pulse     : 8; // [bpm]               // pilot: heart pulse rate
      unsigned int Oxygen    : 7; // [%]                 // pilot: oxygen level in the blood
-     unsigned int FEScurr   : 5; // [A]                 // FES current
+     unsigned int SatSNR    : 5; // [dB]                // average SNR of GPS signals
+     // unsigned int FEScurr   : 5; // [A]                 // FES current
      unsigned int RxRate    : 4; // [/min]              // log2 of received packet rate
      unsigned int Time      : 6; // [sec]               // same as in the position packet
      unsigned int FixQuality: 2;
@@ -98,7 +99,7 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      unsigned int Satellites: 4; // [ ]
      unsigned int Firmware  : 8; // [ ]                 // firmware version
      unsigned int Hardware  : 8; // [ ]                 // hardware version
-     unsigned int TxPower   : 4; // [dBm]               // RF trancmitter power
+     unsigned int TxPower   : 4; // [dBm]               // RF trancmitter power (offset = 4)
      unsigned int ReportType: 4; // [0]                 // 0 for the status report
      unsigned int Voltage   : 8; // [1/64V] VR          // supply/battery voltage
    } Status;
@@ -138,10 +139,10 @@ class OGN1_Packet          // Packet structure for the OGN tracker
 
    // void recvBytes(const uint8_t *SrcPacket) { memcpy(Byte(), SrcPacket, Bytes); } // load data bytes e.g. from a demodulator
 
-   static const uint8_t InfoParmNum = 12; // [int]  number of info-parameters and their names
+   static const uint8_t InfoParmNum = 14; // [int]  number of info-parameters and their names
    static const char *InfoParmName(uint8_t Idx) { static const char *Name[InfoParmNum] =
                                                   { "Pilot", "Manuf", "Model", "Type", "SN", "Reg", "ID", "Class",
-                                                    "Task" , "Base" , "ICE"  , "PilotID" } ;
+                                                    "Task" , "Base" , "ICE"  , "PilotID", "Hard", "Soft" } ;
                                                   return Idx<InfoParmNum ? Name[Idx]:0; }
 
 #ifndef __AVR__
@@ -226,8 +227,8 @@ class OGN1_Packet          // Packet structure for the OGN tracker
             0.1*DecodeSpeed(), 0.1*DecodeHeading(), 0.1*DecodeClimbRate(), 0.1*DecodeTurnRate() );
      printf("\n");
    }
-
-/*   void Encode(MAV_ADSB_VEHICLE *MAV)
+/*
+   void Encode(MAV_ADSB_VEHICLE *MAV)
    { MAV->ICAO_address = HeaderWord&0x03FFFFFF;
      MAV->lat      = ((int64_t)50*DecodeLatitude()+1)/3;
      MAV->lon      = ((int64_t)50*DecodeLongitude()+1)/3;
@@ -241,7 +242,6 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      MAV->tslc          =    0;
      MAV->emiter_type   =    0; }
 */
-
    void Encode(MAV_ADSB_VEHICLE *MAV)
    { MAV->ICAO_address = Header.Address;
      MAV->lat           = ((int64_t)50*DecodeLatitude()+1)/3;          // convert coordinates to [1e-7deg]
@@ -465,8 +465,8 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      Msg[Len++] = ' ';
      Msg[Len++] = '!';
      Msg[Len++] = 'W';
-     Msg[Len++] = '0'+(Lat+5)/10;
-     Msg[Len++] = '0'+(Lon+5)/10;
+     Msg[Len++] = '0'+Lat/10;
+     Msg[Len++] = '0'+Lon/10;
      Msg[Len++] = '!';
 
      Msg[Len++] = ' '; Msg[Len++] = 'i'; Msg[Len++] = 'd'; Len+=Format_Hex(Msg+Len, ((uint32_t)Position.AcftType<<26) | ((uint32_t)Header.AddrType<<24) | Header.Address);
@@ -726,6 +726,9 @@ class OGN1_Packet          // Packet structure for the OGN tracker
    { return Info.Check == InfoCheck(); }
 
 // --------------------------------------------------------------------------------------------------------------
+
+   void Encrypt (const uint32_t Key[4]) { XXTEA_Encrypt(Data, 4, Key, 8); }              // encrypt with given Key
+   void Decrypt (const uint32_t Key[4]) { XXTEA_Decrypt(Data, 4, Key, 8); }              // decrypt with given Key
 
    void Whiten  (void) { TEA_Encrypt_Key0(Data, 8); TEA_Encrypt_Key0(Data+2, 8); } // whiten the position
    void Dewhiten(void) { TEA_Decrypt_Key0(Data, 8); TEA_Decrypt_Key0(Data+2, 8); } // de-whiten the position

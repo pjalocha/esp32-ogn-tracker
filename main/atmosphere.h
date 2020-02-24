@@ -1,3 +1,6 @@
+#ifndef __ATMOSPHERE_H__
+#define __ATMOSPHERE_H__
+
 #include <math.h>
 #include <stdint.h>
 
@@ -56,3 +59,5 @@ class Atmosphere
 
 
 } ;
+
+#endif // __ATMOSPHERE_H__

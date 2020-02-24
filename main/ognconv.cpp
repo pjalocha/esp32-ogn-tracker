@@ -145,6 +145,9 @@ uint32_t DecodeGray(uint32_t Gray)
   return Gray; }
 
 // ==============================================================================================
+// TEA encryption/decryption
+// Data is 2 x 32-bit word
+// Key  is 4 x 32-bit word
 
 void TEA_Encrypt (uint32_t* Data, const uint32_t *Key, int Loops)
 { uint32_t v0=Data[0], v1=Data[1];                         // set up
@@ -189,6 +192,42 @@ void TEA_Decrypt_Key0 (uint32_t* Data, int Loops)
 }
 
 // ==============================================================================================
+// XXTEA encryption/decryption
+
+static uint32_t XXTEA_MX(uint8_t E, uint32_t Y, uint32_t Z, uint8_t P, uint32_t Sum, const uint32_t Key[4])
+{ return ((((Z>>5) ^ (Y<<2)) + ((Y>>3) ^ (Z<<4))) ^ ((Sum^Y) + (Key[(P&3)^E] ^ Z))); }
+
+void XXTEA_Encrypt(uint32_t *Data, uint8_t Words, const uint32_t Key[4], uint8_t Loops)
+{ const uint32_t Delta = 0x9e3779b9;
+  uint32_t Sum = 0;
+  uint32_t Z = Data[Words-1]; uint32_t Y;
+  for( ; Loops; Loops--)
+  { Sum += Delta;
+    uint8_t E = (Sum>>2)&3;
+    for (uint8_t P=0; P<(Words-1); P++)
+    { Y = Data[P+1];
+      Z = Data[P] += XXTEA_MX(E, Y, Z, P, Sum, Key); }
+    Y = Data[0];
+    Z = Data[Words-1] += XXTEA_MX(E, Y, Z, Words-1, Sum, Key);
+  }
+}
+
+void XXTEA_Decrypt(uint32_t *Data, uint8_t Words, const uint32_t Key[4], uint8_t Loops)
+{ const uint32_t Delta = 0x9e3779b9;
+  uint32_t Sum = Loops*Delta;
+  uint32_t Y = Data[0]; uint32_t Z;
+  for( ; Loops; Loops--)
+  { uint8_t E = (Sum>>2)&3;
+    for (uint8_t P=Words-1; P; P--)
+    { Z = Data[P-1];
+      Y = Data[P] -= XXTEA_MX(E, Y, Z, P, Sum, Key); }
+    Z = Data[Words-1];
+    Y = Data[0] -= XXTEA_MX(E, Y, Z, 0, Sum, Key);
+    Sum -= Delta;
+  }
+}
+
+// ==============================================================================================
 
 void XorShift32(uint32_t &Seed)      // simple random number generator
 { Seed ^= Seed << 13;
@@ -201,6 +240,32 @@ void xorshift64(uint64_t &Seed)
   Seed ^= Seed >> 27; }
 
 // ==============================================================================================
+
+const static unsigned char MapAscii85[86] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~";
+
+const static uint8_t UnmapAscii85[128] =
+{ 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85, 85,
+  85, 62, 85, 63, 64, 65, 66, 85, 67, 68, 69, 70, 85, 71, 85, 85,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 85, 72, 73, 74, 75, 76,
+  77, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 85, 85, 85, 78, 79,
+  80, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 81, 82, 83, 84, 85  };
+
+uint8_t EncodeAscii85(char *Ascii, uint32_t Word)
+{ for( uint8_t Idx=5; Idx; )
+  { uint32_t Div = Word/85;
+    Idx--;
+    Ascii[Idx]=MapAscii85[Word-Div*85];
+    Word=Div; }
+  Ascii[5]=0;
+  return 5; }
+
+uint8_t DecodeAscii85(uint32_t &Word, const char *Ascii)
+{ Word=0;
+  for( uint8_t Idx=0; Idx<5; Idx++)
+  { char Char = Ascii[Idx]; if(Char<=0) return 0;
+    uint8_t Dig = UnmapAscii85[(uint8_t)Char];
+    if(Dig>=85) return 0;
+    Word = Word*85+Dig; }
+  return 5; }
 
 // ==============================================================================================
 

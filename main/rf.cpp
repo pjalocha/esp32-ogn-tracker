@@ -157,16 +157,27 @@ static void SetFreqPlan(void)                                // set the RF TRX a
 }
 
 static uint8_t StartRFchip(void)
-{ TRX.RESET(1);                                              // RESET active
-  vTaskDelay(10);                                            // wait 10ms
+{ TRX.WriteMode(RF_OPMODE_STANDBY);
+  vTaskDelay(1);
+  TRX.RESET(1);                                              // RESET active
+  vTaskDelay(1);                                             // wait 10ms
   TRX.RESET(0);                                              // RESET released
-  vTaskDelay(10);                                            // wait 10ms
+  vTaskDelay(5);                                             // wait 10ms
   SetFreqPlan();                                             // set TRX base frequency and channel separation after the frequency hopping plan
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  TRX.PrintReg(CONS_UART_Write);
+  xSemaphoreGive(CONS_Mutex);
+#endif
+#ifdef WITH_RFM95
+  TRX.WriteDefaultReg();
+#endif
   TRX.Configure(0, OGN_SYNC);                                // setup RF chip parameters and set to channel #0
   TRX.WriteMode(RF_OPMODE_STANDBY);                          // set RF chip mode to STANDBY
   uint8_t Version = TRX.ReadVersion();
 #ifdef DEBUG_PRINT
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  TRX.PrintReg(CONS_UART_Write);
   Format_String(CONS_UART_Write, "StartRFchip() v");
   Format_Hex(CONS_UART_Write, Version);
   CONS_UART_Write(' ');
@@ -196,7 +207,7 @@ extern "C"
   TRX.DIO0_isOn    = RFM_IRQ_isOn;
   TRX.RESET        = RFM_RESET;
 
-  RF_FreqPlan.setPlan(Parameters.FreqPlan);  // 1 = Europe/Africa, 2 = USA/CA, 3 = Australia and South America
+  RF_FreqPlan.setPlan(Parameters.FreqPlan);     // 1 = Europe/Africa, 2 = USA/CA, 3 = Australia and South America
 
   vTaskDelay(5);
 
@@ -204,8 +215,8 @@ extern "C"
   { uint8_t ChipVersion = StartRFchip();
 
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-    Format_String(CONS_UART_Write, "TaskRF: ");
-    CONS_UART_Write('v'); Format_Hex(CONS_UART_Write, ChipVersion);
+    Format_String(CONS_UART_Write, "TaskRF: v");
+    Format_Hex(CONS_UART_Write, ChipVersion);
     CONS_UART_Write('\r'); CONS_UART_Write('\n');
     xSemaphoreGive(CONS_Mutex);
 
@@ -227,9 +238,10 @@ extern "C"
 
   for( ; ; )
   {
-    while(Button_SleepRequest)
-    { TRX.WriteMode(RF_OPMODE_SLEEP);
-      vTaskDelay(100); }
+
+// #ifdef DEBUG_PRINT
+    // RF_Print();
+// #endif
 
     uint32_t RxRssiSum=0; uint16_t RxRssiCount=0;                              // measure the average RSSI for lower frequency
     do
@@ -246,6 +258,14 @@ extern "C"
 
     TRX.WriteMode(RF_OPMODE_STANDBY);                                         // switch to standy
     vTaskDelay(1);
+
+    if(PowerMode==0)
+    { TRX.WriteMode(RF_OPMODE_SLEEP);
+      while(PowerMode==0)
+        vTaskDelay(1);
+      TRX.WriteMode(RF_OPMODE_STANDBY);
+      vTaskDelay(1); }
+
     SetFreqPlan();
 
     TRX.averRSSI=RX_RSSI.getOutput();

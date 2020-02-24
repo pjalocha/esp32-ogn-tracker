@@ -22,8 +22,12 @@
 
 #include "format.h"
 
+#include "ognconv.h"
+
 #include "ogn1.h"    // OGN v1
 #include "ogn2.h"    // OGN v2
+
+#include "atmosphere.h"
 
 // ---------------------------------------------------------------------------------------------------------------------
 
@@ -607,8 +611,9 @@ template<class OGNx_Packet, uint8_t Size=8>
 
    void cleanTime(uint8_t Time)                                                // clean up slots of given Time
    { for(int Idx=0; Idx<Size; Idx++)
-     { if( (Packet[Idx].Rank) && (Packet[Idx].Packet.Position.Time==Time) )
-       { clean(Idx); }
+     { if(Packet[Idx].Rank==0) continue;
+       uint8_t PktTime=Packet[Idx].Packet.Position.Time;
+       if( PktTime==Time || PktTime>=60) clean(Idx);
      }
    }
 
@@ -624,15 +629,15 @@ template<class OGNx_Packet, uint8_t Size=8>
 
    uint8_t Print(char *Out)
    { uint8_t Len=0;
-     for(uint8_t Idx=0; Idx<Size; Idx++)
+     for(uint8_t Idx=0; Idx<Size; Idx++)                                        // loop through the slots
      { uint8_t Rank=Packet[Idx].Rank;
-       Out[Len++]=' '; Len+=Format_Hex(Out+Len, Rank);
-       if(Rank)
-       { Out[Len++]='/'; Len+=Format_Hex(Out+Len, Packet[Idx].Packet.getAddressAndType() );
-         Out[Len++]=':'; Len+=Format_UnsDec(Out+Len, Packet[Idx].Packet.Position.Time, 2 ); }
+       Out[Len++]=' '; Len+=Format_Hex(Out+Len, Rank);                          // print the slot Rank
+       if(Rank)                                                                 // if Rank is none-zero
+       { Out[Len++]='/'; Len+=Format_Hex(Out+Len, Packet[Idx].Packet.getAddressAndType() );   // print address-type and address
+         Out[Len++]=':'; Len+=Format_UnsDec(Out+Len, Packet[Idx].Packet.Position.Time, 2 ); } // [sec] print time
      }
-     Out[Len++]=' '; Len+=Format_Hex(Out+Len, Sum);
-     Out[Len++]='/'; Len+=Format_Hex(Out+Len, LowIdx);
+     Out[Len++]=' '; Len+=Format_Hex(Out+Len, Sum);                             // sum of all Ranks
+     Out[Len++]='/'; Len+=Format_Hex(Out+Len, LowIdx);                          // index of the lowest Rank or a free slot
      Out[Len++]='\n'; Out[Len]=0; return Len; }
 
 } ;
@@ -641,19 +646,23 @@ class GPS_Position
 { public:
 
   union
-  { uint8_t Flags;              // bit #0 = GGA and RMC had same Time
+  { uint8_t Flags;             // bit #0 = GGA and RMC had same Time
     struct
     { bool hasGPS   :1;         // all required GPS information has been supplied (but this is not the GPS lock status)
       bool hasBaro  :1;         // barometric information has beed supplied
+      // bool hasHum   :1;         //
       bool isReady  :1;         // is ready for the following treaement
       bool Sent     :1;         // has been transmitted
       bool hasTime  :1;         // Time has been supplied
       bool hasRMC   :1;         // GxRMC has been supplied
       bool hasGGA   :1;         // GxGGA has been supplied
       bool hasGSA   :1;         // GxGSA has been supplied
-   // bool hasHum   :1;         // 
+      // bool hasGSV   :1;
     } ;
   } ;
+
+   // uint16_t SatSNRsum;          // sum of cSNR from GPGSV
+   // uint8_t SatSNRcount;         // count of satellites from GPGSV
 
    int8_t FixQuality;           // 0 = none, 1 = GPS, 2 = Differential GPS (can be WAAS)
    int8_t FixMode;              // 0 = not set (from GSA) 1 = none, 2 = 2-D, 3 = 3-D
@@ -676,7 +685,7 @@ class GPS_Position
    int16_t GeoidSeparation;     // [0.1 meter] difference between Geoid and Ellipsoid
    int32_t Altitude;            // [0.1 meter] height above Geoid (sea level)
 
-   int32_t Latitude;            // [0.0001/60 deg] about 0.018m accuracy (to convert to u-Blox GPS 1e-7deg units mult by 50/3)
+   int32_t Latitude;            // [0.0001/60 deg] about 0.18m accuracy (to convert to u-Blox GPS 1e-7deg units mult by 50/3)
    int32_t Longitude;           // [0.0001/60 deg]
   uint16_t LatitudeCosine;      // [2^-12] Latitude cosine for distance calculation
 
@@ -684,6 +693,7 @@ class GPS_Position
   uint32_t Pressure;            // [0.25 Pa]   from pressure sensor
    int32_t StdAltitude;         // [0.1 meter] standard pressure altitude (from the pressure sensor and atmosphere calculator)
    int16_t Humidity;            // [0.1%]      relative humidity
+   int16_t Accel;               // [0.1m/s^2]  acceleration along the track
 
   public:
 
@@ -692,11 +702,12 @@ class GPS_Position
    void Clear(void)
    { Flags=0; FixQuality=0; FixMode=0;
      PDOP=0; HDOP=0; VDOP=0;
+     // SatSNRsum=0; SatSNRcount=0;
      setDefaultDate(); setDefaultTime();
      Latitude=0; Longitude=0; LatitudeCosine=3000;
      Altitude=0; GeoidSeparation=0;
      Speed=0; Heading=0; ClimbRate=0; TurnRate=0;
-     Temperature=0; Pressure=0; StdAltitude=0; }
+     Temperature=0; Pressure=0; StdAltitude=0; Humidity=0; }
 
    void setDefaultDate() { Year=00; Month=1; Day=1; } // default Date is 01-JAN-2000
    void setDefaultTime() { Hour=0;  Min=0;   Sec=0; FracSec=0; } // default Time is 00:00:00.00
@@ -779,7 +790,8 @@ class GPS_Position
      printf("FixQuality/Mode=%d/%d: %d satellites DOP/H/V=%3.1f/%3.1f/%3.1f ", FixQuality, FixMode, Satellites, 0.1*PDOP, 0.1*HDOP, 0.1*VDOP);
      printf("FixQuality=%d: %d satellites HDOP=%3.1f ", FixQuality, Satellites, 0.1*HDOP);
      printf("Lat/Lon/Alt = [%+10.6f,%+10.6f]deg %+3.1f(%+3.1f)m LatCosine=%+6.3f ", 0.0001/60*Latitude, 0.0001/60*Longitude, 0.1*Altitude, 0.1*GeoidSeparation, 1.0/(1<<12)*LatitudeCosine);
-     printf("Speed/Heading = %3.1fm/s %05.1fdeg\n", 0.1*Speed, 0.1*Heading);
+     printf("Speed/Heading = %3.1fm/s %05.1fdeg ", 0.1*Speed, 0.1*Heading);
+     printf("Climb = %+5.1fm/s Turn = %+5.1fdeg/sec\n", 0.1*ClimbRate, 0.1*TurnRate);
    }
 
    int Print(char *Out) const
@@ -820,8 +832,8 @@ class GPS_Position
      Out[Len++]='/'; Len+=Format_UnsDec(Out+Len, HDOP, 2, 1);
      Out[Len++]='/'; Len+=Format_UnsDec(Out+Len, VDOP, 2, 1);
      Out[Len++]=' ';
-     Out[Len++]='['; Len+=Format_SignDec(Out+Len, Latitude/60, 6, 4);
-     Out[Len++]=','; Len+=Format_SignDec(Out+Len, Longitude/60, 7, 4);
+     Out[Len++]='['; Len+=Format_SignDec(Out+Len, Latitude/6, 7, 5);
+     Out[Len++]=','; Len+=Format_SignDec(Out+Len, Longitude/6, 8, 5);
      Out[Len++]=']'; Out[Len++]='d'; Out[Len++]='e'; Out[Len++]='g';
      Out[Len++]=' '; Len+=Format_SignDec(Out+Len, Altitude, 4, 1); Out[Len++]='m';
      Out[Len++]='/'; Len+=Format_SignDec(Out+Len, GeoidSeparation, 4, 1); Out[Len++]='m';
@@ -878,6 +890,7 @@ class GPS_Position
      if(RxMsg.isGNRMC()) return ReadRMC(RxMsg);
      if(RxMsg.isGPGSA()) return ReadGSA(RxMsg);
      if(RxMsg.isGNGSA()) return ReadGSA(RxMsg);
+     // if(RxMsg.isGxGSV()) return ReadGSV(RxMsg);
      return 0; }
 
    int8_t ReadNMEA(const char *NMEA)
@@ -885,6 +898,7 @@ class GPS_Position
      Err=ReadGGA(NMEA); if(Err!=(-1)) return Err;
      Err=ReadGSA(NMEA); if(Err!=(-1)) return Err;
      Err=ReadRMC(NMEA); if(Err!=(-1)) return Err;
+     // Err=ReadGSV(NMEA); if(Err!=(-1)) return Err;
      return 0; }
 
    int8_t ReadGGA(NMEA_RxMsg &RxMsg)
@@ -899,8 +913,42 @@ class GPS_Position
      ReadLongitude(*RxMsg.ParmPtr(4), (const char *)RxMsg.ParmPtr(3));                    // Longitude
      ReadAltitude(*RxMsg.ParmPtr(9), (const char *)RxMsg.ParmPtr(8));                     // Altitude
      ReadGeoidSepar(*RxMsg.ParmPtr(11), (const char *)RxMsg.ParmPtr(10));                 // Geoid separation
-     // calcLatitudeCosine();
+     calcLatitudeCosine();
      return 1; }
+
+   uint8_t WriteGGA(char *GGA)
+   { uint8_t Len=0;
+     Len+=Format_String(GGA+Len, "$GPGGA,");
+     Len+=Format_UnsDec(GGA+Len, (uint16_t)Hour, 2);
+     Len+=Format_UnsDec(GGA+Len, (uint16_t)Min, 2);
+     Len+=Format_UnsDec(GGA+Len, (uint16_t)Sec, 2);
+     GGA[Len++]='.';
+     Len+=Format_UnsDec(GGA+Len, (uint16_t)FracSec, 2);
+     GGA[Len++]=',';
+     Len+=Format_Latitude(GGA+Len, Latitude);
+     GGA[Len]=GGA[Len-1]; GGA[Len-1]=','; Len++;
+     GGA[Len++]=',';
+     Len+=Format_Longitude(GGA+Len, Longitude);
+     GGA[Len]=GGA[Len-1]; GGA[Len-1]=','; Len++;
+     GGA[Len++]=',';
+     GGA[Len++]='0'+FixQuality;
+     GGA[Len++]=',';
+     Len+=Format_UnsDec(GGA+Len, (uint16_t)Satellites);
+     GGA[Len++]=',';
+     Len+=Format_UnsDec(GGA+Len, (uint16_t)HDOP, 2, 1);
+     GGA[Len++]=',';
+     Len+=Format_SignDec(GGA+Len, Altitude, 3, 1);
+     GGA[Len++]=',';
+     GGA[Len++]='M';
+     GGA[Len++]=',';
+     Len+=Format_SignDec(GGA+Len, GeoidSeparation, 3, 1);
+     GGA[Len++]=',';
+     GGA[Len++]='M';
+     GGA[Len++]=',';
+     GGA[Len++]=',';
+     Len += NMEA_AppendCheckCRNL(GGA, Len);
+     GGA[Len]=0;
+     return Len; }
 
    int8_t ReadGGA(const char *GGA)
    { if( (memcmp(GGA, "$GPGGA", 6)!=0) && (memcmp(GGA, "$GNGGA", 6)!=0) ) return -1;                                           // check if the right sequence
@@ -915,7 +963,7 @@ class GPS_Position
      ReadLongitude(GGA[Index[4]], GGA+Index[3]);                                          // Longitude
      ReadAltitude(GGA[Index[9]], GGA+Index[8]);                                           // Altitude
      ReadGeoidSepar(GGA[Index[11]], GGA+Index[10]);                                       // Geoid separation
-     // calcLatitudeCosine();
+     calcLatitudeCosine();
      return 1; }
 
    int8_t ReadGSA(NMEA_RxMsg &RxMsg)
@@ -934,7 +982,17 @@ class GPS_Position
      ReadHDOP(GSA+Index[15]);
      ReadVDOP(GSA+Index[16]);
      return 1; }
+/*
+   int8_t ReadGSV(NMEA_RxMsg &RxMsg)
+   { //
+     return 1; }
 
+   int8_t ReadGSV(const char *GSV)
+   { if( (memcmp(GSV, "$GPGSV", 6)!=0) && (memcmp(GSV, "$GNGSV", 6)!=0) ) return -1;      // check if the right sequence
+     uint8_t Index[24]; if(IndexNMEA(Index, GSV)<20) return -2;                           // index parameters and check the sum
+     //
+     return 1; }
+*/
    int ReadRMC(NMEA_RxMsg &RxMsg)
    { if(RxMsg.Parms<12) return -1;                                                        // no less than 12 parameters
      hasGPS = ReadTime((const char *)RxMsg.ParmPtr(0))>0;                                 // read time and check if same as the GGA says
@@ -964,7 +1022,7 @@ class GPS_Position
      else if(TimeDiff>=3000) TimeDiff-=6000;
      return TimeDiff; }                                                                     // [0.01s]
 
-   int16_t calcDifferences(GPS_Position &RefPos) // calculate climb rate and turn rate with an earlier reference position
+   int16_t calcDifferentials(GPS_Position &RefPos) // calculate climb rate and turn rate with an earlier reference position
    { ClimbRate=0; TurnRate=0;
      if(RefPos.FixQuality==0) return 0;
      int16_t TimeDiff = calcTimeDiff(RefPos);
@@ -974,19 +1032,29 @@ class GPS_Position
      ClimbRate = Altitude-RefPos.Altitude;
      if(hasBaro && RefPos.hasBaro && (abs(Altitude-StdAltitude)<2500) )
      { ClimbRate = StdAltitude-RefPos.StdAltitude; }
-     if(TimeDiff==100)
+     Accel = Speed-RefPos.Speed;
+     if(TimeDiff==20)
+     { ClimbRate*=5;
+       TurnRate *=5;
+       Accel    *=5; }
+     else if(TimeDiff==50)
+     { ClimbRate*=2;
+       TurnRate *=2;
+       Accel    *=2; }
+     else if(TimeDiff==100)
      { }
      else if(TimeDiff==200)
      { ClimbRate=(ClimbRate+1)>>1;
-       TurnRate=(TurnRate+1)>>1; }
-     else
+        TurnRate=( TurnRate+1)>>1;
+        Accel   =( Accel   +1)>>1; }
+     else if(TimeDiff!=0)
      { ClimbRate = ((int32_t)ClimbRate*100)/TimeDiff;
-       TurnRate  = ((int32_t)TurnRate *100)/TimeDiff; }
+        TurnRate = ((int32_t) TurnRate*100)/TimeDiff;
+        Accel    = ((int32_t) Accel   *100)/TimeDiff; }
      return TimeDiff; } // [0.01s]
 
    void Write(MAV_GPS_RAW_INT *MAV) const
-//   { MAV->time_usec = (int64_t)1000000*getUnixTime()+10000*FracSec;
-   { MAV->time_usec = getUnixTime_ms()*1000; // (int64_t)1000000*getUnixTime()+10000*FracSec;
+   { MAV->time_usec = (int64_t)1000000*getUnixTime()+10000*FracSec;
      MAV->lat = ((int64_t)50*Latitude+1)/3;
      MAV->lon = ((int64_t)50*Longitude+1)/3;
      MAV->alt = 100*Altitude;
@@ -1080,12 +1148,10 @@ class GPS_Position
      if(hasBaro)
      { Packet.EncodeTemperature(Temperature);
        Packet.Status.Pressure = (Pressure+16)>>5;
-       Packet.EncodeHumidity(Humidity);
-     }
+       Packet.EncodeHumidity(Humidity); }
      else
      { Packet.Status.Pressure = 0;
-       Packet.clrHumidity();
-     }
+       Packet.clrHumidity(); }
    }
 
    // uint8_t getFreqPlan(void) const // get the frequency plan from Lat/Lon: 1 = Europe + Africa, 2 = USA/CAnada, 3 = Australia + South America, 4 = New Zeeland
@@ -1120,12 +1186,37 @@ class GPS_Position
             else Packet.clrBaro();                                            //or no-baro if pressure sensor data not there
    }
 
-   void calcExtrapolation(int32_t &Lat, int32_t &Lon, int32_t &Alt, int16_t &Head, int32_t dTime) const  // extrapolate GPS position by a fraction of a second
+   void Extrapolate(int32_t dTime)                                            // [0.01sec] extrapolate the position by dTime
+   { int16_t dSpeed = ((int32_t)Accel*dTime)/100;
+     Speed += dSpeed/2;
+     int16_t HeadAngle = ((int32_t)Heading<<12)/225;                          // [cordic] heading angle
+     int16_t TurnAngle = (((dTime*TurnRate)/25)<<9)/225;                      // [cordic]
+             HeadAngle += TurnAngle/2;
+     int32_t LatSpeed = ((int32_t)Speed*Icos(HeadAngle)+0x800)>>12;           // [0.1m/s]
+     int32_t LonSpeed = ((int32_t)Speed*Isin(HeadAngle)+0x800)>>12;           // [0.1m/s]
+             HeadAngle += TurnAngle-TurnAngle/2;
+     Speed += dSpeed-dSpeed/2; if(Speed<0) Speed=0;
+     Latitude  += calcLatitudeExtrapolation (dTime, LatSpeed);
+     Longitude += calcLongitudeExtrapolation(dTime, LonSpeed);
+     int32_t dAlt = calcAltitudeExtrapolation(dTime);                         // [0.1m]
+     Altitude += dAlt;                                                        // [0.1m]
+     if(hasBaro)
+     { StdAltitude += dAlt;                                                   // [0.1m]
+       Pressure += 4000*dAlt/Atmosphere::PressureLapseRate(Pressure/4, Temperature); } // [0.25Pa] ([Pa], [0.1degC])
+     Heading += (dTime*TurnRate)/100;                                         // [0.1deg]
+     if(Heading<0) Heading+=3600; else if(Heading>=3600) Heading-=3600;       // [0.1deg]
+     int16_t fTime   = FracSec+dTime;                                         // [0.01sec]
+     while(fTime>=100) { incrTimeDate(); fTime-=100; }
+     while(fTime<   0) { decrTimeDate(); fTime+=100; }
+     FracSec=fTime; }
+
+   // extrapolate GPS position by a fraction of a second
+   void calcExtrapolation(int32_t &Lat, int32_t &Lon, int32_t &Alt, int16_t &Head, int32_t dTime) const // [0.01sec]
    { int16_t HeadAngle = ((int32_t)Heading<<12)/225;                         // []
      int16_t TurnAngle = (((dTime*TurnRate)/25)<<9)/225;                     // []
              HeadAngle += TurnAngle;
-     int32_t LatSpeed = ((int32_t)Speed*Icos(HeadAngle))>>12;                // [0.1m/s]
-     int32_t LonSpeed = ((int32_t)Speed*Isin(HeadAngle))>>12;                // [0.1m/s]
+     int32_t LatSpeed = ((int32_t)Speed*Icos(HeadAngle)+0x800)>>12;                // [0.1m/s]
+     int32_t LonSpeed = ((int32_t)Speed*Isin(HeadAngle)+0x800)>>12;                // [0.1m/s]
      Lat = Latitude  + calcLatitudeExtrapolation (dTime, LatSpeed);
      Lon = Longitude + calcLongitudeExtrapolation(dTime, LonSpeed);
      Alt = Altitude  + calcAltitudeExtrapolation(dTime);
@@ -1135,15 +1226,15 @@ class GPS_Position
    int32_t calcAltitudeExtrapolation(int32_t Time)  const                    // [0.01s]
    { return Time*ClimbRate/100; }                                            // [0.1m]
 
-   int32_t calcLatitudeExtrapolation(int32_t Time, int32_t LatSpeed)  const  // [0.01s]
-   { return (Time*LatSpeed*177)>>15; }                                       // [0.1m]
+   int32_t calcLatitudeExtrapolation(int32_t Time, int32_t LatSpeed)  const  // [0.01s] [0.1m/s]
+   { return (Time*LatSpeed*177+0x4000)>>15; }                                       // [0.1m]
 
    int32_t calcLongitudeExtrapolation(int32_t Time, int32_t LonSpeed)  const // [0.01s]
    { int16_t LatCosine = calcLatCosine(calcLatAngle16(Latitude));
      return calcLongitudeExtrapolation(Time, LonSpeed, LatCosine); }
 
    int32_t calcLongitudeExtrapolation(int32_t Time, int32_t LonSpeed, int16_t LatCosine)  const // [0.01s]
-   { return (((int32_t)Time*LonSpeed*177)>>3)/LatCosine; }
+   { return ((((int32_t)Time*LonSpeed*177+4)>>3))/LatCosine; }
 
    // static int32_t calcLatDistance(int32_t Lat1, int32_t Lat2)             // [m] distance along latitude
    // { return ((int64_t)(Lat2-Lat1)*0x2f684bda+0x80000000)>>32; }
@@ -1173,7 +1264,7 @@ class GPS_Position
    //   // printf("Latitude=%+d, LatAngle=%04X LatCos=%08X\n", Latitude, (uint16_t)LatAngle, LatCos);
    //   return ((int64_t)Dist*LatCos+0x40000000)>>31; }                      // distance corrected by the latitude cosine
 
-   void    calcLatitudeCosine(void)
+   void calcLatitudeCosine(void)
    { int16_t LatAngle =  calcLatAngle16(Latitude);
        LatitudeCosine = calcLatCosine(LatAngle); }
 
@@ -1288,10 +1379,13 @@ class GPS_Position
      // printf("%s => [%d]\n", Seq, Params);
      return Params; }
 
+   uint32_t getDayTime(void) const
+   { return Times60((uint32_t)(Times60((uint16_t)Hour) + Min)) + Sec; } // this appears to save about 100 bytes of code
+     // return (uint32_t)Hour*SecsPerHour + (uint16_t)Min*SecsPerMin + Sec; }              // compared to this line
+
    uint32_t getUnixTime(void) const                         // return the Unix timestamp (tested 2000-2037)
    { uint16_t Days = DaysSinceYear2000() + DaysSimce1jan();
-     return Times60(Times60(Times24((uint32_t)(Days+10957)))) + Times60((uint32_t)(Times60((uint16_t)Hour) + Min)) + Sec; } // this appears to save about 100 bytes of code
-     // return (uint32_t)(Days+10957)*SecsPerDay + (uint32_t)Hour*SecsPerHour + (uint16_t)Min*SecsPerMin + Sec; }              // compared to this line
+     return Times60(Times60(Times24((uint32_t)(Days+10957)))) + getDayTime(); }
 
    uint32_t getFatTime(void) const                          // return timestamp in FAT format
    { uint16_t Date = ((uint16_t)(Year+20)<<9) | ((uint16_t)Month<<5) | Day;
@@ -1318,10 +1412,6 @@ class GPS_Position
   { uint32_t Time=Time_ms/1000;
     setUnixTime(Time);
     FracSec = (Time_ms-(uint64_t)Time*1000)/10; }
-
-  uint64_t getUnixTime_ms(void) const
-  { return (uint64_t)getUnixTime()*1000 + (uint32_t)FracSec*10; }
-
 
   private:
 

@@ -11,14 +11,58 @@
 #include "rf.h"                       // RF task: transmission and reception of radio packets
 #include "gps.h"                      // GPS task: get own time and position, set the GPS baudrate and navigation mode
 
+#include "fifo.h"
+
 #ifdef WITH_FLASHLOG                  // log own track to unused Flash pages (STM32 only)
 #include "flashlog.h"
+#endif
+
+#ifdef WITH_SOUND
+#include "sound.h"
 #endif
 
 #ifdef WITH_LOOKOUT                   // traffic awareness and warnings
 #include "lookout.h"
 LookOut Look;
+#ifdef WITH_SOUND
+const char *Dir[16] = { "N", "NNE", "NE", "NEE", "E", "SEE", "SE", "SSE", "S", "SSW", "SW", "SWW", "W", "NWW", "NW", "NNW" };
+const char *RelDir[8] = { "A", "AR", "R", "BR", "B", "BL", "L", "AL" };
+
+void Sound_TrafficWarn(const LookOut_Target *Tgt)
+{ if(!Tgt) return;
+  uint8_t WarnLevel = Tgt->WarnLevel;
+  // uint16_t DistMargin = Tgt->DistMargin; // [0.5m]
+  uint16_t TimeMargin = Tgt->TimeMargin; // [0.5s]
+  uint16_t HorDist = Tgt->HorDist;       // [0.5]
+  uint16_t Bearing = Tgt->getBearing();  //
+  int16_t RelBearing = Look.getRelBearing(Tgt);
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "Traffic: ");
+  CONS_UART_Write('#');
+  CONS_UART_Write('0'+WarnLevel);
+  CONS_UART_Write(' ');
+  // Format_Hex(CONS_UART_Write, Bearing);
+  // CONS_UART_Write(' ');
+  uint16_t DirIdx = (Bearing+0x800)>>12; DirIdx&=0x0F;
+  Format_String(CONS_UART_Write, Dir[DirIdx]);
+  CONS_UART_Write(' ');
+  uint16_t RelDirIdx = (RelBearing+0x1000)>>13; RelDirIdx&=0x07;
+  Format_String(CONS_UART_Write, RelDir[RelDirIdx]);
+  CONS_UART_Write(' ');
+  Format_UnsDec(CONS_UART_Write, (uint16_t)(HorDist/2));
+  Format_String(CONS_UART_Write, "m ");
+  Format_UnsDec(CONS_UART_Write, (uint16_t)(TimeMargin/2));
+  Format_String(CONS_UART_Write, "s\n");
+  xSemaphoreGive(CONS_Mutex);
+  // SoundMsg("Traffic");
+}
 #endif
+#endif
+
+// static uint16_t PrevBattVolt = 0;     // [mV]
+static Delay<uint16_t, 32> BatteryVoltagePipe;
+uint32_t BatteryVoltage = 0;          // [1/256 mV] low-pass filtered battery voltage
+ int32_t BatteryVoltageRate = 0;      // [1/256 mV/sec] low-pass filtered battery voltage rise/drop rate
 
 static char           Line[128];      // for printing out to the console, etc.
 
@@ -31,12 +75,12 @@ static LDPC_Decoder     Decoder;      // decoder and error corrector for the OGN
 #ifdef WITH_LOG
 
 static int SPIFFSlog(OGN_RxPacket<OGN_Packet> *Packet, uint32_t Time)
-{ OGN_LogPacket<OGN_Packet> *LogPacket = LOG_FIFO.getWrite(); if(LogPacket==0) return -1;
-  LogPacket->Packet = Packet->Packet;
+{ OGN_LogPacket<OGN_Packet> *LogPacket = LOG_FIFO.getWrite(); if(LogPacket==0) return -1; // allocate new packet in the LOG_FIFO
+  LogPacket->Packet = Packet->Packet;                                                     // copy the packet
   LogPacket->Flags=0x80;
   LogPacket->setTime(Time);
   LogPacket->setCheck();
-  LOG_FIFO.Write();
+  LOG_FIFO.Write();                                                                       // finalize the write
   return 1; }
 
 static int SPIFFSlog(OGN_TxPacket<OGN_Packet> *Packet, uint32_t Time)
@@ -52,13 +96,13 @@ static int SPIFFSlog(OGN_TxPacket<OGN_Packet> *Packet, uint32_t Time)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
 
-#ifdef WITH_ESP32
-const uint8_t RelayQueueSize = 32;
-#else
-const uint8_t RelayQueueSize = 16;
-#endif
+// #ifdef WITH_ESP32
+// const uint8_t RelayQueueSize = 32;
+// #else
+// const uint8_t RelayQueueSize = 16;
+// #endif
 
-static OGN_PrioQueue<OGN_Packet, RelayQueueSize> RelayQueue;  // received packets and candidates to be relayed
+OGN_PrioQueue<OGN_Packet, RelayQueueSize> RelayQueue;       // received packets and candidates to be relayed
 
 #ifdef DEBUG_PRINT
 static void PrintRelayQueue(uint8_t Idx)                    // for debug
@@ -78,7 +122,8 @@ static bool GetRelayPacket(OGN_TxPacket<OGN_Packet> *Packet)      // prepare a p
   uint8_t Idx=RelayQueue.getRand(RX_Random);          // get weight-random packet from the relay queue
   if(RelayQueue.Packet[Idx].Rank==0) return 0;        // should not happen ...
   memcpy(Packet->Packet.Byte(), RelayQueue[Idx]->Byte(), OGN_Packet::Bytes); // copy the packet
-  Packet->Packet.Header.Relay=1;                // increment the relay count (in fact we only do single relay)
+  Packet->Packet.Header.Relay=1;                      // increment the relay count (in fact we only do single relay)
+  // Packet->Packet.calcAddrParity();
   Packet->Packet.Whiten(); Packet->calcFEC();         // whiten and calc. the FEC code => packet ready for transmission
   // PrintRelayQueue(Idx);  // for debug
   RelayQueue.decrRank(Idx);                           // reduce the rank of the packet selected for relay
@@ -153,20 +198,60 @@ static void ReadStatus(OGN_Packet &Packet)
 
 #ifdef WITH_ESP32
   // Packet.clrTemperature();
-  uint32_t Battery = BatterySense();                        // [mV]
-  Packet.EncodeVoltage(((Battery*64)+500)/1000);            // [1/64V]
+
+  uint16_t BattVolt = BatterySense();                                        // [mV] measure battery voltage
+  if(BatteryVoltage>0)
+  { // int32_t PrevVolt = BatteryVoltage;
+    int32_t Rate = ((uint32_t)BattVolt<<8) - BatteryVoltage;                 // [1/256 mV]
+    BatteryVoltage += (Rate+32)>>6;                                          // [1/256 mV] low-pass battery voltage measurement
+    uint16_t Volt = (BatteryVoltage+16)>>5;
+    int16_t Diff = Volt-BatteryVoltagePipe.Input(Volt);
+    BatteryVoltageRate = Diff; }
+    // BatteryVoltageRate = BatteryVoltage - PrevVolt; }
+    // int16_t BattVoltDiff = BattVolt - PrevBattVolt;
+    // int32_t Diff = ((int32_t)BattVoltDiff<<8) - BatteryVoltageRate;
+    // BatteryVoltageRate += Diff/256; }
+    // BatteryVoltageRate = (((int32_t)BattVoltDiff<<8) + BatteryVoltageRate*255 + 128)>>8; }
+  else
+  { BatteryVoltage = BattVolt<<8;
+    // PrevBattVolt = BattVolt;
+    BatteryVoltagePipe.Clear(BattVolt<<3);
+    BatteryVoltageRate = 0; }
+  // PrevBattVolt = BattVolt;
+  Packet.EncodeVoltage(((BatteryVoltage>>2)+500)/1000);            // [1/64V] encode into the status packet
+
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "Battery: ");
+  // Format_UnsDec(CONS_UART_Write, BattVolt);
+  // CONS_UART_Write(' ');
+  // Format_UnsDec(CONS_UART_Write, PrevBattVolt);
+  // CONS_UART_Write(' ');
+  // Format_UnsDec(CONS_UART_Write, BatteryVoltage, 2);
+  // CONS_UART_Write(' ');
+  // Format_SignDec(CONS_UART_Write, BatteryVoltageRate, 2);
+  // CONS_UART_Write(' ');
+  Format_UnsDec(CONS_UART_Write, (10*BatteryVoltage+128)>>8, 5, 4);
+  Format_String(CONS_UART_Write, "V ");
+  Format_SignDec(CONS_UART_Write, (600*BatteryVoltageRate+128)>>8, 3, 1);
+  Format_String(CONS_UART_Write, "mV/min\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
 #endif
 
   if(Packet.Status.Pressure==0) Packet.EncodeTemperature(TRX.chipTemp*10); // [0.1degC]
   Packet.Status.RadioNoise = TRX.averRSSI;                         // [-0.5dBm] write radio noise to the status packet
 
-  Packet.Status.TxPower = Parameters.getTxPower()-4;
+  uint8_t TxPower = Parameters.getTxPower()-4;
+  if(TxPower>15) TxPower=15;
+  Packet.Status.TxPower = TxPower;
 
   uint16_t RxRate = RX_OGN_Count64+1;
   uint8_t RxRateLog2=0; RxRate>>=1; while(RxRate) { RxRate>>=1; RxRateLog2++; }
   Packet.Status.RxRate = RxRateLog2;
 
- { uint8_t Len=0;
+  if(Parameters.Verbose)
+  { uint8_t Len=0;
     Len+=Format_String(Line+Len, "$POGNR,");                                 // NMEA report: radio status
     Len+=Format_UnsDec(Line+Len, RF_FreqPlan.Plan);                          // which frequency plan
     Line[Len++]=',';
@@ -201,10 +286,6 @@ static void ReadStatus(OGN_Packet &Packet)
       Format_String(Log_Write, Line, Len);                                     // send the NMEA out to the log file
       xSemaphoreGive(Log_Mutex); }
 #endif
-
-// #ifdef WITH_FollowMe
-//     Format_String(ADSB_UART_Write, "ADS-B UART test\n");
-// #endif
   }
 }
 
@@ -244,10 +325,13 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
   if(DistOK)
   { RxPacket->calcRelayRank(GPS_Altitude/10);                                         // calculate the relay-rank (priority for relay)
     OGN_RxPacket<OGN_Packet> *PrevRxPacket = RelayQueue.addNew(RxPacketIdx);
-    uint8_t Len=RxPacket->WritePOGNT(Line);                                           // print on the console as $POGNT
-    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-    Format_String(CONS_UART_Write, Line, 0, Len);
-    xSemaphoreGive(CONS_Mutex);
+#ifdef WITH_POGNT
+    if(Parameters.Verbose)
+    { uint8_t Len=RxPacket->WritePOGNT(Line);                                           // print on the console as $POGNT
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, Line, 0, Len);
+      xSemaphoreGive(CONS_Mutex); }
+#endif
 //     Len=RxPacket->Packet.WriteAPRS(Line, RxTime);                                     // print on the console as APRS message
 //     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
 //     Format_String(CONS_UART_Write, Line, 0, Len);
@@ -256,9 +340,9 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
     const LookOut_Target *Tgt=Look.ProcessTarget(RxPacket->Packet);                   // process the received target postion
     if(Tgt) Warn=Tgt->WarnLevel;                                                      // remember warning level of this target
 #ifdef WITH_BEEPER
-    if(KNOB_Tick>12) Play(Play_Vol_1 | Play_Oct_2 | (7+2*Warn), 3+16*Warn);           // if Knob>12 => make a beep for every received packet
+    if(KNOB_Tick>12) Play(Play_Vol_1 | Play_Oct_2 | (7+2*Warn), 3+16*Warn);
 #endif
-#else // WITH_LOOKOUT
+#else // if not WITH_LOOKOUT
 #ifdef WITH_BEEPER
     if(KNOB_Tick>12) Play(Play_Vol_1 | Play_Oct_2 | 7, 3);                            // if Knob>12 => make a beep for every received packet
 #endif
@@ -266,7 +350,7 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
 #ifdef WITH_LOG
      bool Signif = PrevRxPacket!=0;
      if(!Signif) Signif=OGN_isSignif(&(RxPacket->Packet), &(PrevRxPacket->Packet));
-     if(Signif) SPIFFSlog(RxPacket, RxTime);
+     if(Signif) SPIFFSlog(RxPacket, RxTime);                                          // log only significant packets
 #endif
 #ifdef WITH_SDLOG
     if(Log_Free()>=128)
@@ -275,22 +359,23 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
       xSemaphoreGive(Log_Mutex); }
 #endif
 #ifdef WITH_PFLAA
-    Len=RxPacket->WritePFLAA(Line, Warn, LatDist, LonDist, RxPacket->Packet.DecodeAltitude()-GPS_Altitude/10); // print on the console
-    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-    Format_String(CONS_UART_Write, Line, 0, Len);
-    xSemaphoreGive(CONS_Mutex);
+    if( Parameters.Verbose    // print PFLAA on the console for received packets
+#ifdef WITH_LOOKOUT
+    && (!Tgt)
+#endif
+    )
+    { uint8_t Len=RxPacket->WritePFLAA(Line, Warn, LatDist, LonDist, RxPacket->Packet.DecodeAltitude()-GPS_Altitude/10);
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, Line, 0, Len);
+      xSemaphoreGive(CONS_Mutex); }
 #endif
 #ifdef WITH_MAVLINK
    MAV_ADSB_VEHICLE MAV_RxReport;
    RxPacket->Packet.Encode(&MAV_RxReport);
    MAV_RxMsg::Send(sizeof(MAV_RxReport), MAV_Seq++, MAV_SysID, MAV_COMP_ID_ADSB, MAV_ID_ADSB_VEHICLE, (const uint8_t *)&MAV_RxReport, GPS_UART_Write);
-#ifdef DEBUG_PRINT
-      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-      Format_String(CONS_UART_Write, "MAV_ADSB_VEHICLE sent. ID=");
-      Format_Hex(CONS_UART_Write, MAV_RxReport.ICAO_address);
-      CONS_UART_Write('\r'); CONS_UART_Write('\n');
-      xSemaphoreGive(CONS_Mutex);
-#endif
+   // xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+   // MAV_RxMsg::Send(sizeof(MAV_RxReport), MAV_Seq++, MAV_SysID, MAV_COMP_ID_ADSB, MAV_ID_ADSB_VEHICLE, (const uint8_t *)&MAV_RxReport, CONS_UART_Write);
+   // xSemaphoreGive(CONS_Mutex);
 #endif
   }
 }
@@ -354,7 +439,7 @@ void vTaskPROC(void* pvParameters)
   { vTaskDelay(1);
 
     RFM_RxPktData *RxPkt = RF_RxFIFO.getRead();                         // check for new received packets
-    if(RxPkt)
+    if(RxPkt)                                                           // if there is a new received packet
     {
 #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -367,11 +452,11 @@ void vTaskPROC(void* pvParameters)
       xSemaphoreGive(CONS_Mutex);
 #endif
       DecodeRxPacket(RxPkt);                                            // decode and process the received packet
-      RF_RxFIFO.Read(); }
+      RF_RxFIFO.Read(); }                                               // remove this packet from the queue
 
     static uint32_t PrevSlotTime=0;                                     // remember previous time slot to detect a change
     uint32_t SlotTime = TimeSync_Time();                                // time slot
-    if(TimeSync_msTime()<300) SlotTime--;                               // lasts up to 0.300sec after the PPS
+    if(TimeSync_msTime()<340) SlotTime--;                               // lasts up to 0.300sec after the PPS
 
     if(SlotTime==PrevSlotTime) continue;                                // stil same time slot, go back to RX processing
     PrevSlotTime=SlotTime;                                              // new slot started
@@ -380,13 +465,13 @@ void vTaskPROC(void* pvParameters)
 #ifdef WITH_MAVLINK
     GPS_Position *Position = GPS_getPosition(BestIdx, BestResid, (SlotTime-1)%60, 0);
 #else
-    GPS_Position *Position = GPS_getPosition(BestIdx, BestResid, SlotTime%60, 0);
+    GPS_Position *Position = GPS_getPosition(BestIdx, BestResid, SlotTime%60, 0); // get GPS position which isReady
 #endif
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-    Format_String(CONS_UART_Write, "getPos() => ");
+    Format_String(CONS_UART_Write, "getPos(");
     Format_UnsDec(CONS_UART_Write, SlotTime%60, 2);
-    CONS_UART_Write(' ');
+    Format_String(CONS_UART_Write, ") => ");
     Format_UnsDec(CONS_UART_Write, (uint16_t)BestIdx);
     CONS_UART_Write(':');
     Format_SignDec(CONS_UART_Write, BestResid, 3, 2);
@@ -395,12 +480,16 @@ void vTaskPROC(void* pvParameters)
 #endif
     // GPS_Position *Position = GPS_getPosition();
     if(Position) Position->EncodeStatus(StatPacket.Packet);             // encode GPS altitude and pressure/temperature/humidity
-    if( Position && Position->isReady && (!Position->Sent) && Position->isReady && Position->isValid() )
+      else { StatPacket.Packet.Status.FixQuality=0; StatPacket.Packet.Status.Satellites=0; } // or lack of the GPS lock
+    { uint8_t SatSNR = (GPS_SatSNR+2)/4;
+      if(SatSNR>8) { SatSNR-=8; if(SatSNR>31) SatSNR=31; }
+              else { SatSNR=0; }
+      StatPacket.Packet.Status.SatSNR = SatSNR; }
+    if( Position && Position->isReady && (!Position->Sent) && Position->isValid() )
     { int16_t AverSpeed=GPS_AverageSpeed();                             // [0.1m/s] average speed, including the vertical speed
       if(Parameters.FreqPlan==0)
         RF_FreqPlan.setPlan(Position->Latitude, Position->Longitude);     // set the frequency plan according to the GPS position
       else RF_FreqPlan.setPlan(Parameters.FreqPlan);
-/*
 #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60);
@@ -409,7 +498,6 @@ void vTaskPROC(void* pvParameters)
       Format_String(CONS_UART_Write, " -> Sent\n");
       xSemaphoreGive(CONS_Mutex);
 #endif
-*/
       PosTime=Position->getUnixTime();
       PosPacket.Packet.HeaderWord=0;
       PosPacket.Packet.Header.Address    = Parameters.Address;         // set address
@@ -420,12 +508,17 @@ void vTaskPROC(void* pvParameters)
 #endif
       PosPacket.Packet.calcAddrParity();                               // parity of (part of) the header
       if(BestResid==0) Position->Encode(PosPacket.Packet);             // encode position/altitude/speed/etc. from GPS position
-                  else Position->Encode(PosPacket.Packet, BestResid);
+      else                                                             // extrapolate the position when if not at an exact UTC second
+      { while(BestResid>=50) BestResid-=100;                           // remove full seconds
+        Position->Encode(PosPacket.Packet, BestResid); }
       PosPacket.Packet.Position.AcftType = Parameters.AcftType;        // aircraft-type
-//       { uint8_t Len=PosPacket.Packet.WriteAPRS(Line, PosTime);           // print on the console as APRS message
-//         xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-//         Format_String(CONS_UART_Write, Line, 0, Len);
-//         xSemaphoreGive(CONS_Mutex); }
+      PosPacket.Packet.Position.Stealth = 0; // Parameters.Stealth;
+#ifdef DEBUG_PRINT
+      { uint8_t Len=PosPacket.Packet.WriteAPRS(Line, PosTime);           // print on the console as APRS message
+        xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+        Format_String(CONS_UART_Write, Line, 0, Len);
+        xSemaphoreGive(CONS_Mutex); }
+#endif
       OGN_TxPacket<OGN_Packet> *TxPacket = RF_TxFIFO.getWrite();
       TxPacket->Packet = PosPacket.Packet;                             // copy the position packet to the TxFIFO
 #ifdef WITH_ENCRYPT
@@ -437,7 +530,7 @@ void vTaskPROC(void* pvParameters)
       TxPacket->calcFEC();                  // whiten and calculate FEC code
 #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-      Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60);
+      Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60, 2);
       CONS_UART_Write('.');
       Format_UnsDec(CONS_UART_Write, TimeSync_msTime(), 3);
       Format_String(CONS_UART_Write, " TxFIFO <- ");
@@ -446,40 +539,28 @@ void vTaskPROC(void* pvParameters)
       xSemaphoreGive(CONS_Mutex);
 #endif
       XorShift32(RX_Random);
-      if( (AverSpeed>10) || ((RX_Random&0x3)==0) )                      // send only some positions if the speed is less than 1m/s
-        RF_TxFIFO.Write();                                              // complete the write into the TxFIFO
+      if( (AverSpeed>10) || ((RX_Random&0x3)==0) )                        // send only some positions if the speed is less than 1m/s
+        RF_TxFIFO.Write();                                                // complete the write into the TxFIFO
       Position->Sent=1;
-// #ifdef WITH_MAVLINK
-//     { MAV_HEARTBEAT MAV_HeartBeat;
-//     // = { custom_mode:0,
-//     //     type:0,
-//     //     autopilot:0,
-//     //     base_mode:0,
-//     //     system_status:4,
-//     //     mavlink_version:1
-//     //   };
-//       MAV_HeartBeat.custom_mode=0;
-//       MAV_HeartBeat.type=0;
-//       MAV_HeartBeat.autopilot=0;
-//       MAV_HeartBeat.base_mode=0;
-//       MAV_HeartBeat.system_status=4;
-//       MAV_HeartBeat.mavlink_version=1;
-//       MAV_RxMsg::Send(sizeof(MAV_HeartBeat), MAV_Seq++, MAV_SysID, MAV_COMP_ID_ADSB, MAV_ID_HEARTBEAT, (const uint8_t *)&MAV_HeartBeat, GPS_UART_Write);
-//     }
-// #endif
 #ifdef WITH_LOOKOUT
-      const LookOut_Target *Tgt=Look.ProcessOwn(PosPacket.Packet);         // process own position, get the most dangerous target
+      const LookOut_Target *Tgt=Look.ProcessOwn(PosPacket.Packet);        // process own position, get the most dangerous target
 #ifdef WITH_PFLAA
-      uint8_t Len=Look.WritePFLAU(Line);
-      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-      Format_String(CONS_UART_Write, Line, 0, Len);
-      xSemaphoreGive(CONS_Mutex);
+      if(Parameters.Verbose)
+      { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+        Look.WritePFLA(CONS_UART_Write);                                  // produce PFLAU and PFLAA for all tracked targets
+        xSemaphoreGive(CONS_Mutex); }
+#else
+      if(Parameters.Verbose)
+      { uint8_t Len=Look.WritePFLAU(Line);                                // $PFLAU, overall status
+        xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+        Format_String(CONS_UART_Write, Line, 0, Len);
+        xSemaphoreGive(CONS_Mutex); }
 #endif // WITH_PFLAA
       uint8_t Warn = 0;
       if(Tgt) Warn = Tgt->WarnLevel;                                       // what is the warning level ?
-      if( (Warn>0) && (AverSpeed>=10) )                                    // if non-zero warning level and we seem to be moving
-      { int16_t RelBearing = Look.getRelBearing(Tgt);                      // relative bearing to the Target
-        int8_t Bearing = (12*(int32_t)RelBearing+0x8000)>>16;              // [-12..+12]
+      if( (Warn>0) /* && (AverSpeed>=10) */ )                                    // if non-zero warning level and we seem to be moving
+      { // int16_t RelBearing = Look.getRelBearing(Tgt);                      // relative bearing to the Target
+        // int8_t Bearing = (12*(int32_t)RelBearing+0x8000)>>16;              // [-12..+12]
 #ifdef WITH_BEEPER                                                         // make the sound according to the level
         if(Warn<=1)
         { if(KNOB_Tick>8)
@@ -498,6 +579,9 @@ void vTaskPROC(void* pvParameters)
         }
 
 #endif // WITH_BEEPER
+#ifdef WITH_SOUND
+        Sound_TrafficWarn(Tgt);
+#endif
       }
 #endif // WITH_LOOKOUT
 #ifdef WITH_FLASHLOG

@@ -23,12 +23,12 @@ class RFM_RxPktData                  // packet received by the RF chip
    void Print(void (*CONS_UART_Write)(char), uint8_t WithData=0) const
    { // uint8_t ManchErr = Count1s(RxPktErr, 26);
      Format_String(CONS_UART_Write, "RxPktData: ");
-     Format_UnsDec(CONS_UART_Write, Time);
+     Format_HHMMSS(CONS_UART_Write, Time);
      CONS_UART_Write('+');
      Format_UnsDec(CONS_UART_Write, msTime, 4, 3);
      CONS_UART_Write(' '); Format_Hex(CONS_UART_Write, Channel);
      CONS_UART_Write('/');
-     Format_SignDec(CONS_UART_Write, (int16_t)(-5*(int16_t)RSSI), 4, 1);
+     Format_SignDec(CONS_UART_Write, (int16_t)(-5*(int16_t)RSSI), 3, 1);
      Format_String(CONS_UART_Write, "dBm\n");
      if(WithData==0) return;
      for(uint8_t Idx=0; Idx<Bytes; Idx++)
@@ -128,17 +128,17 @@ class RFM_RxPktData                  // packet received by the RF chip
 #define RF_IRQ_PllLock        0x1000 //
 #define RF_IRQ_Rssi           0x0800
 #define RF_IRQ_Timeout        0x0400
-//
+#define RF_IRQ_PreambleDetect 0x0200
 #define RF_IRQ_SyncAddrMatch  0x0100
 
-#define RF_IRQ_FifoFull      0x0080 //
-#define RF_IRQ_FifoNotEmpty  0x0040 // at least one byte in the FIFO
-#define RF_IRQ_FifoLevel     0x0020 // more bytes than FifoThreshold
-#define RF_IRQ_FifoOverrun   0x0010 // write this bit to clear the FIFO
-#define RF_IRQ_PacketSent    0x0008 // packet transmission was completed
-#define RF_IRQ_PayloadReady  0x0004
-#define RF_IRQ_CrcOk         0x0002
-#define RF_IRQ_LowBat        0x0001
+#define RF_IRQ_FifoFull       0x0080 //
+#define RF_IRQ_FifoNotEmpty   0x0040 // at least one byte in the FIFO
+#define RF_IRQ_FifoLevel      0x0020 // more bytes than FifoThreshold
+#define RF_IRQ_FifoOverrun    0x0010 // write this bit to clear the FIFO
+#define RF_IRQ_PacketSent     0x0008 // packet transmission was completed
+#define RF_IRQ_PayloadReady   0x0004
+#define RF_IRQ_CrcOk          0x0002
+#define RF_IRQ_LowBat         0x0001
 
 #include "manchester.h"
 
@@ -180,8 +180,30 @@ class RFM_TRX
   uint8_t chipVer;                    // [] version ID read from the RF chip
    int8_t chipTemp;                   // [degC] temperature read from the RF chip
   uint8_t averRSSI;                   // [-0.5dB]
+  uint8_t dummy;
 
-  // private:
+#ifdef WITH_RFM95
+   void WriteDefaultReg(void)
+   { const uint8_t Default[64] = {  0x00, 0x01, 0x1A, 0x0B, 0x00, 0x52, 0xE4, 0xC0, 0x00, 0x0F, 0x19, 0x2B, 0x20, 0x08, 0x02, 0x0A,
+                                    0xFF, 0x00, 0x15, 0x0B, 0x28, 0x0C, 0x12, 0x47, 0x32, 0x3E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40,
+                                    0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x03, 0x93, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
+                                    0x90, 0x40, 0x40, 0x00, 0x00, 0x0F, 0x00, 0x00, 0x00, 0xF5, 0x20, 0x82, 0x00, 0x02, 0x80, 0x40 };
+     WriteBytes(Default+0x01, 0x0F, 0x01);
+     WriteBytes(Default+0x10, 0x10, 0x10);
+     WriteBytes(Default+0x20, 0x10, 0x20);
+     WriteBytes(Default+0x30, 0x10, 0x30);
+     WriteWord(0x0000, 0x40);
+     WriteByte(0x2D, 0x44);
+     WriteByte(0x09, 0x4B);
+     WriteByte(0x84, 0x4D);
+     WriteByte(0x00, 0x5D);
+     WriteByte(0x13, 0x61);
+     WriteByte(0x0E, 0x62);
+     WriteByte(0x5B, 0x63);
+     WriteByte(0xDB, 0x64);
+   }
+#endif
+
    static uint32_t calcSynthFrequency(uint32_t Frequency) { return (((uint64_t)Frequency<<16)+7812)/15625; }
 
   public:
@@ -355,7 +377,7 @@ class RFM_TRX
    { if(SyncTol>7) SyncTol=7;
      if(WriteSize>8) WriteSize=8;
      WriteBytes(SyncData+(8-WriteSize), WriteSize, REG_SYNCVALUE1);        // write the SYNC, skip some initial bytes
-     WriteByte(  0x90 | (WriteSize-1), REG_SYNCCONFIG);                     // write SYNC length [bytes]
+     WriteByte(  0x90 | (WriteSize-1), REG_SYNCCONFIG);                    // write SYNC length [bytes] (or 0xB0 for reversed preamble) => p.92
      WriteWord( 9-WriteSize, REG_PREAMBLEMSB); }                           // write preamble length [bytes] (page 71)
 //              ^ 8 or 9 ?
 #endif
@@ -366,7 +388,7 @@ class RFM_TRX
 
    uint16_t ReadIrqFlags(void) { return ReadWord(REG_IRQFLAGS1); }
 
-   void ClearIrqFlags(void)    { WriteWord(RF_IRQ_FifoOverrun | RF_IRQ_Rssi, REG_IRQFLAGS1); }
+   void ClearIrqFlags(void)    { WriteWord(RF_IRQ_FifoOverrun | RF_IRQ_Rssi | RF_IRQ_PreambleDetect | RF_IRQ_SyncAddrMatch, REG_IRQFLAGS1); }
 
 #ifdef WITH_RFM69
    void WriteTxPower_W(int8_t TxPower=10)       // [dBm] for RFM69W: -18..+13dBm
@@ -401,12 +423,12 @@ class RFM_TRX
 
    void WriteTxPowerMin(void) { WriteTxPower_W(-18); } // set minimal Tx power and setup for reception
 
-   int Configure(int16_t Channel, const uint8_t *Sync)
+   int Configure(int16_t Channel, const uint8_t *Sync, bool PW=0)
    { WriteMode(RF_OPMODE_STANDBY);          // mode = STDBY
      ClearIrqFlags();
      WriteByte(  0x02, REG_DATAMODUL);      // [0x00] Packet mode, FSK, 0x02: BT=0.5, 0x01: BT=1.0, 0x03: BT=0.3
-     WriteWord(0x0140, REG_BITRATEMSB);     // bit rate = 100kbps
-     WriteWord(0x0333, REG_FDEVMSB);        // FSK deviation = +/-50kHz
+     WriteWord(PW?0x0341:0x0140, REG_BITRATEMSB); // bit rate = 100kbps
+     WriteWord(PW?0x013B:0x0333, REG_FDEVMSB);    // FSK deviation = +/-50kHz
      setChannel(Channel);                   // operating channel
      WriteSYNC(8, 7, Sync);                 // SYNC pattern (setup for reception)
      WriteByte(  0x00, REG_PACKETCONFIG1);  // [0x10] Fixed size packet, no DC-free encoding, no CRC, no address filtering
@@ -434,42 +456,95 @@ class RFM_TRX
 #if defined(WITH_RFM95) || defined(WITH_SX1272)
 
    void WriteTxPower(int8_t TxPower=0)
-   { if(TxPower<2) TxPower=2;
-     else if(TxPower>17) TxPower=17;
+   { if(TxPower>17)
+     { if(TxPower>20) TxPower=20;
+       WriteByte(0x87, REG_PADAC);
+       WriteByte(0xF0 | (TxPower-5), REG_PACONFIG); }
+     else // if(TxPower>14)
+     { if(TxPower<2) TxPower=2;
+       WriteByte(0x84, REG_PADAC);
+       WriteByte(0xF0 | (TxPower-2), REG_PACONFIG); }
+     // else
+     // { if(TxPower<0) TxPower=0;
+     //   WriteByte(0x84, REG_PADAC);
+     //   WriteByte(0x70 | (TxPower+1), REG_PACONFIG); }
+
+     // if(TxPower<2) TxPower=2;
+     // else if(TxPower>17) TxPower=17;
      // if(TxPower<=14)
      // { WriteByte(0x70 | TxPower    , REG_PACONFIG);
      // }
      // else
-     { WriteByte(0xF0 | (TxPower-2), REG_PACONFIG);
-     }
+     // { WriteByte(0xF0 | (TxPower-2), REG_PACONFIG); }
    }
 
    void WriteTxPowerMin(void) { WriteTxPower(0); }
 
-   int Configure(int16_t Channel, const uint8_t *Sync)
+   int Configure(int16_t Channel, const uint8_t *Sync, bool PW=0)
    { WriteMode(RF_OPMODE_STANDBY);              // mode: STDBY, modulation: FSK, no LoRa
      // usleep(1000);
      WriteTxPower(0);
-     // ClearIrqFlags();
-     WriteWord(0x0140, REG_BITRATEMSB);         // bit rate = 100kbps (32MHz/100000)
+     ClearIrqFlags();
+     WriteWord(PW?0x0341:0x0140, REG_BITRATEMSB); // bit rate = 100kbps (32MHz/100000) (0x0341 = 38.415kbps)
+     WriteByte(0x00, REG_BITRATEFRAC);          //
      // ReadWord(REG_BITRATEMSB);
-     WriteWord(0x0333, REG_FDEVMSB);            // FSK deviation = +/-50kHz [32MHz/(1<<19)]
+     WriteWord(PW?0x013B:0x0333, REG_FDEVMSB);  // FSK deviation = +/-50kHz [32MHz/(1<<19)] (0x013B = 19.226kHz)
      // ReadWord(REG_FDEVMSB);
      setChannel(Channel);                       // operating channel
      WriteSYNC(8, 7, Sync);                     // SYNC pattern (setup for reception)
-     WriteByte(  0x8A, REG_PREAMBLEDETECT);     // preamble detect: 1 byte, page 92
+     WriteByte(  0x85, REG_PREAMBLEDETECT);     // preamble detect: 1 byte, page 92 (or 0x85 ?)
      WriteByte(  0x00, REG_PACKETCONFIG1);      // Fixed size packet, no DC-free encoding, no CRC, no address filtering
      WriteByte(  0x40, REG_PACKETCONFIG2);      // Packet mode
-     WriteByte(    51, REG_FIFOTHRESH);         // TxStartCondition=FifoNotEmpty, FIFO threshold = 51 bytes
      WriteByte(  2*26, REG_PAYLOADLENGTH);      // Packet size = 26 bytes Manchester encoded into 52 bytes
+     WriteByte(    51, REG_FIFOTHRESH);         // TxStartCondition=FifoNotEmpty, FIFO threshold = 51 bytes
      WriteWord(0x3030, REG_DIOMAPPING1);        // DIO signals: DIO0=00, DIO1=11, DIO2=00, DIO3=00, DIO4=00, DIO5=11, => p.64, 99
-     WriteByte(  0x4A, REG_RXBW);               // +/-100kHz Rx bandwidth => p.27+67
+     WriteByte(  0x02, REG_RXBW);               // +/-125kHz Rx (single-side) bandwidth => p.27,67,83,90
+     WriteByte(  0x02, REG_AFCBW);              // +/-125kHz AFC bandwidth
      WriteByte(  0x49, REG_PARAMP);             // BT=0.5 shaping, 40us ramp up/down
-     WriteByte(  0x07, REG_RSSICONFIG);         // 256 samples for RSSI, p.90
+     WriteByte(  0x0E, REG_RXCONFIG);           // => p.90 (or 0x8E ?)
+     WriteByte(  0x07, REG_RSSICONFIG);         // 256 samples for RSSI, no offset, => p.90,82
+     WriteByte(  0x20, REG_LNA);                // max. LNA gain, => p.89
 
      return 0; }
 
-     uint8_t ReadLowBat(void)  { return ReadByte(REG_LOWBAT ); }
+   uint8_t ReadLowBat(void)  { return ReadByte(REG_LOWBAT ); }
+
+  void PrintReg(void (*CONS_UART_Write)(char))
+  { Format_String(CONS_UART_Write, "RFM95 Mode:");
+    uint8_t RxMode=ReadMode();
+    Format_Hex(CONS_UART_Write, RxMode);
+    CONS_UART_Write(' '); CONS_UART_Write('0'+DIO0_isOn());
+    Format_String(CONS_UART_Write, " IRQ:");
+    Format_Hex(CONS_UART_Write, ReadWord(REG_IRQFLAGS1));
+    Format_String(CONS_UART_Write, " Pre:");
+    Format_Hex(CONS_UART_Write, ReadWord(REG_PREAMBLEMSB));
+    Format_String(CONS_UART_Write, " SYNC:");
+    Format_Hex(CONS_UART_Write, ReadByte(REG_SYNCCONFIG));
+    CONS_UART_Write('/');
+    for(uint8_t Idx=0; Idx<8; Idx++)
+      Format_Hex(CONS_UART_Write, ReadByte(REG_SYNCVALUE1+Idx));
+    Format_String(CONS_UART_Write, " FREQ:");
+    Format_Hex(CONS_UART_Write, ReadByte(REG_FRFMSB));
+    Format_Hex(CONS_UART_Write, ReadByte(REG_FRFMID));
+    Format_Hex(CONS_UART_Write, ReadByte(REG_FRFLSB));
+    Format_String(CONS_UART_Write, " RATE:");
+    Format_Hex(CONS_UART_Write, ReadWord(REG_BITRATEMSB));
+    Format_String(CONS_UART_Write, " FDEV:");
+    Format_Hex(CONS_UART_Write, ReadWord(REG_FDEVMSB));
+    Format_String(CONS_UART_Write, " DIO:");
+    Format_Hex(CONS_UART_Write, ReadWord(REG_DIOMAPPING1));
+    Format_String(CONS_UART_Write, " CFG:");
+    Format_Hex(CONS_UART_Write, ReadByte(REG_PREAMBLEDETECT));
+    Format_Hex(CONS_UART_Write, ReadByte(REG_PACKETCONFIG1));
+    Format_Hex(CONS_UART_Write, ReadByte(REG_PACKETCONFIG2));
+    Format_Hex(CONS_UART_Write, ReadByte(REG_FIFOTHRESH));
+    Format_Hex(CONS_UART_Write, ReadByte(REG_PAYLOADLENGTH));
+    Format_Hex(CONS_UART_Write, ReadByte(REG_RXBW));
+    Format_Hex(CONS_UART_Write, ReadByte(REG_RSSICONFIG));
+    Format_String(CONS_UART_Write, " PA:");
+    Format_Hex(CONS_UART_Write, ReadByte(REG_PARAMP));
+    Format_Hex(CONS_UART_Write, ReadByte(REG_PACONFIG));
+    Format_String(CONS_UART_Write, "\n"); }
 
 #endif
 
