@@ -508,12 +508,12 @@ void vTaskCTRL(void* pvParameters)
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
     if(TimeChange)
     { Format_String(CONS_UART_Write, "TimeChange: ");
-      Format_SignDec(CONS_UART_Write, StatErr);
+      Format_HHMMSS(CONS_UART_Write, Time);
       Format_String(CONS_UART_Write, "\n"); }
-    if(GPSchange)
+    if(GPSchange && GPS)
     { Format_String(CONS_UART_Write, "GPSchange: ");
-      Format_SignDec(CONS_UART_Write, PosErr);
-      Format_String(CONS_UART_Write, "\n"); }
+      GPS->PrintLine(Line);
+      Format_String(CONS_UART_Write, Line); }
     xSemaphoreGive(CONS_Mutex);
 #endif
 

@@ -450,6 +450,42 @@ class RFM_TRX
      WriteByte(  0x00, REG_AFCCTRL);        // [0x00] 0x20 = AfcLowBetaOn=1 -> page 64 -> page 33
      WriteByte(   +10, REG_TESTAFC);        // [0x00] [488Hz] if AfcLowBetaOn
      return 0; }
+
+   void PrintReg(void (*CONS_UART_Write)(char))
+   { Format_String(CONS_UART_Write, "RFM69 Mode:");
+     uint8_t RxMode=ReadMode();
+     Format_Hex(CONS_UART_Write, RxMode);
+     CONS_UART_Write(' '); CONS_UART_Write('0'+DIO0_isOn());
+     Format_String(CONS_UART_Write, " IRQ:");
+     Format_Hex(CONS_UART_Write, ReadWord(REG_IRQFLAGS1));
+     Format_String(CONS_UART_Write, " Pre:");
+     Format_Hex(CONS_UART_Write, ReadWord(REG_PREAMBLEMSB));
+     Format_String(CONS_UART_Write, " SYNC:");
+     Format_Hex(CONS_UART_Write, ReadByte(REG_SYNCCONFIG));
+     CONS_UART_Write('/');
+     for(uint8_t Idx=0; Idx<8; Idx++)
+       Format_Hex(CONS_UART_Write, ReadByte(REG_SYNCVALUE1+Idx));
+     Format_String(CONS_UART_Write, " FREQ:");
+     Format_Hex(CONS_UART_Write, ReadByte(REG_FRFMSB));
+     Format_Hex(CONS_UART_Write, ReadByte(REG_FRFMID));
+     Format_Hex(CONS_UART_Write, ReadByte(REG_FRFLSB));
+     Format_String(CONS_UART_Write, " RATE:");
+     Format_Hex(CONS_UART_Write, ReadWord(REG_BITRATEMSB));
+     Format_String(CONS_UART_Write, " FDEV:");
+     Format_Hex(CONS_UART_Write, ReadWord(REG_FDEVMSB));
+     Format_String(CONS_UART_Write, " DIO:");
+     Format_Hex(CONS_UART_Write, ReadWord(REG_DIOMAPPING1));
+     Format_String(CONS_UART_Write, " CFG:");
+     Format_Hex(CONS_UART_Write, ReadByte(REG_PACKETCONFIG1));
+     Format_Hex(CONS_UART_Write, ReadByte(REG_PACKETCONFIG2));
+     Format_Hex(CONS_UART_Write, ReadByte(REG_FIFOTHRESH));
+     Format_Hex(CONS_UART_Write, ReadByte(REG_PAYLOADLENGTH));
+     Format_Hex(CONS_UART_Write, ReadByte(REG_RXBW));
+     Format_Hex(CONS_UART_Write, ReadByte(REG_RSSICONFIG));
+     Format_String(CONS_UART_Write, " PA:");
+     Format_Hex(CONS_UART_Write, ReadByte(REG_PARAMP));
+     Format_Hex(CONS_UART_Write, ReadByte(REG_PALEVEL));
+     Format_String(CONS_UART_Write, "\n"); }
 #endif
 
 // #ifdef WITH_RFM95

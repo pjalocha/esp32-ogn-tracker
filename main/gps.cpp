@@ -319,6 +319,7 @@ static void GPS_BurstStart(void)                                           // wh
           GPS_Cmd[Len]=0;
           Format_String(GPS_UART_Write, GPS_Cmd, Len, 0); }
 #ifdef DEBUG_PRINT
+        uint8_t Len = strlen(GPS_Cmd);
         xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
         Format_String(CONS_UART_Write, "GPS <- ");
         Format_String(CONS_UART_Write, GPS_Cmd, Len, 0);
