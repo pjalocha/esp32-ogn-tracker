@@ -544,6 +544,12 @@ void LED_PCB_On   (void) { }
 void LED_PCB_Off  (void) { }
 #endif
 
+#ifdef WITH_LED_TX
+void LED_TX_Dir  (void) { gpio_set_direction(PIN_LED_TX, GPIO_MODE_OUTPUT); }
+void LED_TX_On   (void) { gpio_set_level(PIN_LED_TX, 0); }
+void LED_TX_Off  (void) { gpio_set_level(PIN_LED_TX, 1); }
+#endif
+
 #ifdef PIN_BUTTON
 void Button_Dir      (void) { gpio_set_direction(PIN_BUTTON, GPIO_MODE_INPUT); }
 bool Button_isPressed(void) { return !gpio_get_level(PIN_BUTTON); }
@@ -1586,6 +1592,11 @@ void IO_Configuration(void)
   LED_PCB_Dir();
   LED_PCB_Off();
 #endif
+#ifdef WITH_LED_TX
+  LED_TX_Dir();
+  LED_TX_Off();
+#endif
+
 #ifdef PIN_BUTTON
   Button_Dir();
 #endif
