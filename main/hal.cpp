@@ -640,10 +640,9 @@ static void esp_spp_cb(esp_spp_cb_event_t Event, esp_spp_cb_param_t *Param)
     case ESP_SPP_DATA_IND_EVT:                                    // [30] data is sent by the client
 #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-      Param->data_ind.handle, Param->data_ind.data, Param->data_ind.len
       Format_String(CONS_UART_Write, "BT_SPP: [");
       Format_UnsDec(CONS_UART_Write, Param->data_ind.len);
-      ormat_String(CONS_UART_Write, "]\n");
+      Format_String(CONS_UART_Write, "]\n");
       xSemaphoreGive(CONS_Mutex);
 #endif
       break;
