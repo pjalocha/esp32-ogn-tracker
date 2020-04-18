@@ -361,6 +361,10 @@ static void LCD_UpdateSys(bool Redraw=0)
   Len+=Format_String(Line+Len, "MS5607 0x");
   Len+=Format_Hex(Line+Len, Baro.ADDR);
 #endif
+#ifdef WITH_MS5611
+  Len+=Format_String(Line+Len, "MS5611 0x");
+  Len+=Format_Hex(Line+Len, Baro.ADDR);
+#endif
   Line[Len]=0;
   LCD_DrawString(Line, 4, PosY, RGB565_BLACK, RGB565_WHITE);
   PosY+=LCD_FontHeight();

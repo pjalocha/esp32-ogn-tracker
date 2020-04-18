@@ -1,5 +1,5 @@
-#ifndef __MS5607_H__
-#define __MS5607_H__
+#ifndef __MS5611_H__
+#define __MS5611_H__
 
 #include <stdint.h>
 #include <string.h>
@@ -7,10 +7,10 @@
 
 #include "hal.h"
 
-class MS5607
+class MS5611
 { private:
-   static const uint8_t ADDR0         = 0x76; // possible I2C addresses
-   static const uint8_t ADDR1         = 0x77;
+   static const uint8_t ADDR0         = 0x77; // possible I2C addresses
+   static const uint8_t ADDR1         = 0x76;
 
    static const uint8_t CMD_RESET     = 0x1E; // ADC reset command
    static const uint8_t CMD_ADC_READ  = 0x00; // ADC read command
@@ -93,22 +93,22 @@ class MS5607
   void Calculate(void)                             // process temperature and pressure with the calibration constants
   { int32_t dT = RawTemp - ((int32_t)C5<<8);
     int32_t TEMP = 2000 + (((int64_t)dT*C6)>>23);  // [0.01degC]
-    int64_t OFF = ((uint64_t)C2<<17) + (((int64_t)dT*C4)>>6);
-    int64_t SENS = ((uint32_t)C1<<16) + (((int64_t)dT*C3)>>7);
+    int64_t OFF = ((uint64_t)C2<<16) + (((int64_t)dT*C4)>>7);
+    int64_t SENS = ((uint32_t)C1<<15) + (((int64_t)dT*C3)>>8);
     if(TEMP<2000)
     { int32_t dT2 = ((int64_t)dT*dT)>>31;
-      int32_t OFF2 = (61*(TEMP-2000)*(TEMP-2000))>>4;
-      int32_t SENS2 = 2*(TEMP-2000)*(TEMP-2000);
+      int32_t OFF2 = 5 * ((TEMP-2000)*(TEMP-2000)) / 2;
+      int32_t SENS2 = 5 * ((TEMP-2000)*(TEMP-2000)) / 4;
       if(TEMP<(-1500))
-      { OFF2  += 15*(TEMP+1500)*(TEMP+1500);
-        SENS2 += 8*(TEMP+1500)*(TEMP+1500); }
+      { OFF2  += 7 * ((TEMP+1500)*(TEMP+1500));
+        SENS2 += 11 * ((TEMP+1500)*(TEMP+1500)) / 2; }
       TEMP -= dT2;
       OFF  -= OFF2;
       SENS -= SENS2; }
-    Temperature = (TEMP+5)/10;                      // [0.1degC]
+    Temperature = TEMP;                      // [0.1degC]
     Pressure = (((SENS*RawPress)>>21) - OFF)>>13; } // [0.25Pa]
 
 } ;
 
 
-#endif // __MS5607_H__
+#endif // __MS5611_H__

@@ -403,6 +403,9 @@ void OLED_DrawBaro(u8g2_t *OLED, GPS_Position *GPS)
 #ifdef WITH_MS5607
   Len+=Format_String(Line+Len, "MS5607 ");
 #endif
+#ifdef WITH_MS5611
+  Len+=Format_String(Line+Len, "MS5611 ");
+#endif
   if(GPS && GPS->hasBaro)
   { Len+=Format_UnsDec(Line+Len, GPS->Pressure/4, 5, 2);
     Len+=Format_String(Line+Len, "Pa "); }
@@ -582,6 +585,10 @@ void OLED_DrawSystem(u8g2_t *OLED)
 #endif
 #ifdef WITH_MS5607
   Len+=Format_String(Line+Len, "MS5607 0x");
+  Len+=Format_Hex(Line+Len, Baro.ADDR);
+#endif
+#ifdef WITH_MS5611
+  Len+=Format_String(Line+Len, "MS5611 0x");
   Len+=Format_Hex(Line+Len, Baro.ADDR);
 #endif
   Line[Len]=0;

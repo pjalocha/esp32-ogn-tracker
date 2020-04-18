@@ -46,6 +46,7 @@
 // #define WITH_BMP280                        // BMP280 pressure sensor
 #define WITH_BME280                        // BMP280 with humidity (but still works with BMP280)
 // #define WITH_MS5607                        // MS5607 pressure sensor
+// #define WITH_MS5611                        // MS5611 pressure sensor
 
 #define WITH_PFLAA                         // PFLAU and PFLAA for compatibility with XCsoar and LK8000
 // #define WITH_POGNT
