@@ -14,6 +14,11 @@ git clone -b v4.0 --recursive https://github.com/espressif/esp-idf.git
 ```
 then run *install.sh* and *export.sh* so you are ready to run *make* in the project directory.
 
+If you are doing this on a Raspberry PI you may need this trick to install the ESP-IDF
+```
+pip install --upgrade virtualenv==16.7.9
+```
+
 If you want to use the OLED display with the U8g2 library you need to install it from the project directory:
 
 ```
