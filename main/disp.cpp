@@ -25,7 +25,11 @@
 #include "disp_lcd.h"
 
 #ifdef WITH_U8G2_OLED
+#ifdef WITH_U8G2_LISTS
+const uint8_t DISP_Pages = 6+3;
+#else
 const uint8_t DISP_Pages = 6;
+#endif
 static uint8_t DISP_Page = 1;
 #endif
 #if defined(WITH_ST7789) || defined(WITH_ILI9341)
@@ -39,14 +43,16 @@ void vTaskDISP(void* pvParameters)
 {
 #ifdef WITH_U8G2_OLED
   u8g2_ClearBuffer(&U8G2_OLED);
-  OLED_DrawLogo(&U8G2_OLED);
+  OLED_DrawLogo(&U8G2_OLED);                          // draw logo
   u8g2_SendBuffer(&U8G2_OLED);
+  vTaskDelay(5000);                                   // allow 5sec for the user to see the logo
 #endif
 #if defined(WITH_ST7789) || defined(WITH_ILI9341)
   // LCD_Start();
   LCD_LogoPage_Draw();
   LCD_SetBacklightLevel(6);                           // backlight level
 #endif
+
 
   uint32_t PrevTime=0;
   GPS_Position *PrevGPS=0;
@@ -65,19 +71,22 @@ void vTaskDISP(void* pvParameters)
     bool PageChange = 0;
     uint8_t Key = 0;
     KeyBuffer.Read(Key);                                           // read key pressed from the buffer
-    if(Key) PageChange=1;                                          // page-change on any key
+    // if(Key) PageChange=1;                                          // page-change on any key
 
     uint32_t Time=TimeSync_Time();
     bool TimeChange = Time!=PrevTime;                              // did time change = a new second ?
     uint32_t Sec = (Time-1)%60;
     GPS_Position *GPS = GPS_getPosition(Sec);
     bool GPSchange  = GPS!=PrevGPS;                                // did GPS data change = new position ?
-    if(!PageChange)                                                // if no page change was requested
+    if(Key==0)                                                     //
     { if( (!TimeChange) && (!GPSchange) ) continue;
       PrevTime=Time; PrevGPS=GPS; }
 
 #if defined(WITH_U8G2_OLED) || defined(WITH_ST7789) || defined(WITH_ILI9341)
-    if(PageChange) DISP_Page++; if(DISP_Page>=DISP_Pages) DISP_Page=0;
+    if(Key)
+    { if(Key&0x40) { if(DISP_Page==0) DISP_Page=DISP_Pages-1; else DISP_Page--; }
+              else { DISP_Page++; if(DISP_Page>=DISP_Pages) DISP_Page=0; }
+      PageChange=1; }
 #endif
 
 #if defined(WITH_ST7789) || defined(WITH_ILI9341)
@@ -155,9 +164,11 @@ void vTaskDISP(void* pvParameters)
     // else
     if(PageChange || ( GPS?GPSchange:TimeChange) )
     { u8g2_ClearBuffer(&U8G2_OLED);
-      // if(Look.WarnLevel)
-      // { OLED_DrawTrafWarn(&U8G2_OLED, GPS); }
-      // else
+// #ifdef WITH_LOOKOUT
+//       if(Look.WarnLevel)
+//       { OLED_DrawTrafWarn(&U8G2_OLED, GPS); }
+//       else
+// #endif
       { switch(DISP_Page)
         { case 2: OLED_DrawGPS   (&U8G2_OLED, GPS); break;
           case 3: OLED_DrawRF    (&U8G2_OLED); break;
@@ -167,7 +178,11 @@ void vTaskDISP(void* pvParameters)
           // case 6: OLED_DrawRelay (&U8G2_OLED, GPS); break;
           // case 7: OLED_DrawLookout(&U8G2_OLED, GPS); break;
           case 0: OLED_DrawBattery(&U8G2_OLED); break;
-          // case 9: OLED_DrawTrafWarn(&U8G2_OLED, GPS); break;
+#ifdef WITH_U8G2_LISTS
+          case 6: OLED_DrawRelay (&U8G2_OLED, GPS); break;
+          case 7: OLED_DrawLookout(&U8G2_OLED, GPS); break;
+          case 9: OLED_DrawTrafWarn(&U8G2_OLED, GPS); break;
+#endif
           // default:
           // { OLED_DrawStatus(&U8G2_OLED, Time, 0);
           //   OLED_DrawPosition(&U8G2_OLED, GPS, 2); }

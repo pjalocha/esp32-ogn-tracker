@@ -42,12 +42,17 @@ void app_main(void)
     IO_Configuration();                      // initialize the GPIO/UART/I2C/SPI for Radio, GPS, OLED, Baro
 
 #ifdef WITH_SD
-    if(SD_isMounted())
+    if(SD_isMounted())                       // if SD card succesfully mounted at startup
     { Parameters.SaveToFlash=0;
-      if(Parameters.ReadFromFile("/sdcard/TRACKER.CFG")>0)
-      { if(Parameters.SaveToFlash) Parameters.WriteToNVS(); }
+      if(Parameters.ReadFromFile("/sdcard/TRACKER.CFG")>0)    // try to read parameters from the TRACKER.CFG file
+      { if(Parameters.SaveToFlash) Parameters.WriteToNVS(); } // if succesfull and SaveToFlash==1 then save them to flash
+// #ifdef WITH_SPIFFS
+//       SPIFFSlog_CopyToSD();                                   // copy all flash log files to the SD card
+// #endif
     }
 #endif
+
+    CONS_UART_SetBaudrate(Parameters.CONbaud);
 
 #ifdef WITH_BT_SPP
     { int32_t Err=BT_SPP_Init();                // start BT SPP
@@ -63,7 +68,7 @@ void app_main(void)
 
     xTaskCreate(vTaskRF,    "RF",    2048, 0, tskIDLE_PRIORITY+4, 0);
 #ifdef WITH_LOG
-    xTaskCreate(vTaskLOG ,  "LOG",   2560, 0, tskIDLE_PRIORITY+1, 0);
+    xTaskCreate(vTaskLOG ,  "LOG",   4096, 0, tskIDLE_PRIORITY+1, 0);
 #endif
     xTaskCreate(vTaskPROC,  "PROC",  2048, 0, tskIDLE_PRIORITY+3, 0);
     xTaskCreate(vTaskGPS,   "GPS",   2048, 0, tskIDLE_PRIORITY+4, 0);

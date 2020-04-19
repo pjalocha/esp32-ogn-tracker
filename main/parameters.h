@@ -44,9 +44,16 @@ class FlashParameters
     int8_t   RFchipTxPower;  // [dBm] highest bit set => HW module (up to +20dBm Tx power)
     int8_t   RFchipTempCorr; // [degC] correction to the temperature measured in the RF chip
 
-   uint32_t  CONbaud;        // [bps] Console baud rate
+   union
+   { uint32_t Console;
+     struct
+     { uint32_t  CONbaud:24; // [bps] Console baud rate
+       uint8_t   CONprot: 8; // [bit-mask] Console protocol mask: 0=minGPS, 1=allGPS, 2=Baro, 3=UBX, 4=OGN, 5=FLARM, 6=GDL90, 7=
+     } ;
+   } ;
 
     int16_t  PressCorr;      // [0.25Pa] pressure correction for the baro
+
    union
    { uint16_t Flags;
      struct
@@ -179,6 +186,7 @@ class FlashParameters
 
     RFchipTempCorr =         0; // [degC]
     CONbaud        =    DEFAULT_CONbaud; // [bps]
+    CONprot        =      0xFF;
     PressCorr      =         0; // [0.25Pa]
     TimeCorr       =         0; // [sec]
     GeoidSepar     =    10*DEFAULT_GeoidSepar; // [0.1m]
@@ -438,9 +446,12 @@ class FlashParameters
     if(strcmp(Name, "AcftType")==0)
     { uint32_t Type=0; if(Read_Int(Type, Value)<=0) return 0;
       AcftType=Type; return 1; }
-    if(strcmp(Name, "Console")==0)
+    if(strcmp(Name, "CONbaud")==0)
     { uint32_t Baud=0; if(Read_Int(Baud, Value)<=0) return 0;
       CONbaud=Baud; return 1; }
+    if(strcmp(Name, "CONprot")==0)
+    { uint32_t Prot=0; if(Read_Int(Prot, Value)<=0) return 0;
+      CONprot=Prot; return 1; }
     if(strcmp(Name, "TxHW")==0)
     { int32_t HW=1; if(Read_Int(HW, Value)<=0) return 0;
       if(HW) setTxTypeHW(); else clrTxTypeHW(); }
@@ -585,7 +596,8 @@ class FlashParameters
     Write_Hex    (Line, "Address"   ,          Address ,       6); strcat(Line, " # [24-bit]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Hex    (Line, "AddrType"  ,          AddrType,       1); strcat(Line, " #  [2-bit]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Hex    (Line, "AcftType"  ,          AcftType,       1); strcat(Line, " #  [4-bit]\n"); if(fputs(Line, File)==EOF) return EOF;
-    Write_UnsDec (Line, "Console"   ,          CONbaud          ); strcat(Line, " #  [  bps]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_UnsDec (Line, "CONbaud"   ,          CONbaud          ); strcat(Line, " #  [  bps]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_Hex    (Line, "CONprot"   ,          CONprot,        1); strcat(Line, " #  [ mask]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_SignDec(Line, "TxPower"   ,          getTxPower()     ); strcat(Line, " #  [  dBm]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_UnsDec (Line, "TxHW"      ,(uint32_t)isTxTypeHW()     ); strcat(Line, " #  [ bool]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_UnsDec (Line, "FreqPlan"  ,(uint32_t)FreqPlan         ); strcat(Line, " #  [ 0..5]\n"); if(fputs(Line, File)==EOF) return EOF;
@@ -634,7 +646,8 @@ class FlashParameters
     Write_Hex    (Line, "Address"   ,          Address ,       6); strcat(Line, " # [24-bit]\n"); Format_String(Output, Line);
     Write_Hex    (Line, "AddrType"  ,          AddrType,       1); strcat(Line, " #  [2-bit]\n"); Format_String(Output, Line);
     Write_Hex    (Line, "AcftType"  ,          AcftType,       1); strcat(Line, " #  [4-bit]\n"); Format_String(Output, Line);
-    Write_UnsDec (Line, "Console"   ,          CONbaud          ); strcat(Line, " #  [  bps]\n"); Format_String(Output, Line);
+    Write_UnsDec (Line, "CONbaud"   ,          CONbaud          ); strcat(Line, " #  [  bps]\n"); Format_String(Output, Line);
+    Write_Hex    (Line, "CONprot"   ,          CONprot,        1); strcat(Line, " #  [ mask]\n"); Format_String(Output, Line);
     Write_SignDec(Line, "TxPower"   ,          getTxPower()     ); strcat(Line, " #  [  dBm]\n"); Format_String(Output, Line);
     Write_UnsDec (Line, "TxHW"      ,(uint32_t)isTxTypeHW()     ); strcat(Line, " #  [ bool]\n"); Format_String(Output, Line);
     Write_UnsDec (Line, "FreqPlan"  ,(uint32_t)FreqPlan         ); strcat(Line, " #  [ 0..5]\n"); Format_String(Output, Line);
@@ -648,10 +661,10 @@ class FlashParameters
     Write_UnsDec (Line, "NavRate"  ,      (uint32_t)NavRate     ); strcat(Line, " #  [  1,2]\n"); Format_String(Output, Line);
 #ifdef WITH_ENCRYPT
     Write_UnsDec (Line, "Encrypt"   ,          Encrypt          ); strcat(Line, " #  [  1|0]\n"); Format_String(Output, Line);
-    Write_Hex    (Line, "EncryptKey[0]",       EncryptKey[0] , 8); strcat(Line, " # [32-bit]\n"); Format_String(Output, Line);
-    Write_Hex    (Line, "EncryptKey[1]",       EncryptKey[1] , 8); strcat(Line, " # [32-bit]\n"); Format_String(Output, Line);
-    Write_Hex    (Line, "EncryptKey[2]",       EncryptKey[2] , 8); strcat(Line, " # [32-bit]\n"); Format_String(Output, Line);
-    Write_Hex    (Line, "EncryptKey[3]",       EncryptKey[3] , 8); strcat(Line, " # [32-bit]\n"); Format_String(Output, Line);
+    // Write_Hex    (Line, "EncryptKey[0]",       EncryptKey[0] , 8); strcat(Line, " # [32-bit]\n"); Format_String(Output, Line);
+    // Write_Hex    (Line, "EncryptKey[1]",       EncryptKey[1] , 8); strcat(Line, " # [32-bit]\n"); Format_String(Output, Line);
+    // Write_Hex    (Line, "EncryptKey[2]",       EncryptKey[2] , 8); strcat(Line, " # [32-bit]\n"); Format_String(Output, Line);
+    // Write_Hex    (Line, "EncryptKey[3]",       EncryptKey[3] , 8); strcat(Line, " # [32-bit]\n"); Format_String(Output, Line);
 #endif
     Write_UnsDec (Line, "Verbose"  ,      (uint32_t)Verbose     ); strcat(Line, " #  [ 0..3]\n"); Format_String(Output, Line);
     Write_UnsDec (Line, "PPSdelay"  ,(uint32_t)PPSdelay         ); strcat(Line, " #  [   ms]\n"); Format_String(Output, Line);

@@ -368,7 +368,7 @@ static void GPS_BurstComplete(void)                                        // wh
     int32_t Alt    = GPS->Altitude;                                   // [0.1m] thus it appears to give pressure readout lower by a factor of two.
     int32_t Delta1 = StdAlt1-Alt;                                     // [0.1m] Here we check which pressure fits better the GPS altitude
     int32_t Delta2 = StdAlt2-Alt;                                     // [0.1m]
-    if(fabs(Delta1)<fabs(Delta2)) { GPS->StdAltitude=StdAlt1; }       //
+    if( abs(Delta1)< abs(Delta2)) { GPS->StdAltitude=StdAlt1; }       //
            else { GPS->Pressure*=2; GPS->StdAltitude=StdAlt2; }
   }
 #endif
@@ -499,7 +499,7 @@ GPS_Position *GPS_getPosition(uint8_t &BestIdx, int16_t &BestRes, int8_t Sec, in
     int16_t Diff = TargetTime - (Pos->FracSec + (int16_t)Pos->Sec*100);  // difference from the target time
     if(Diff<(-3000)) Diff+=6000;                                         // wrap-around 60 sec
     else if(Diff>=3000) Diff-=6000;
-    if(fabs(Diff)<fabs(BestRes)) { BestRes=Diff; BestIdx=Idx; }          // store the smallest difference from target
+    if(abs(Diff)<abs(BestRes)) { BestRes=Diff; BestIdx=Idx; }          // store the smallest difference from target
   }
   return BestRes==0x7FFF ? 0:Position+BestIdx; }
 

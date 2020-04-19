@@ -29,6 +29,7 @@
 #ifdef WITH_SD
 #include "esp_vfs_fat.h"
 #include "driver/sdmmc_host.h"
+#include "driver/spi_common.h"
 #include "driver/sdspi_host.h"
 #include "sdmmc_cmd.h"
 #endif
@@ -154,6 +155,7 @@ PSRM32 = SDIO ?
 
 */
 /*
+https://randomnerdtutorials.com/esp32-pinout-reference-gpios/
 
 GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    FollowMe   Restrictions
 
@@ -162,17 +164,17 @@ GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    Foll
  2                           SD/MISO    .           LCD/MOSI   LCD/MOSI     LED/DBG    Bootstrap: LOW to enter UART download mode
  3    CONS/RxD    CONS/RxD   CONS/RxD   CONS/RxD    CONS/RxD   CONS/RxD                Console/Program
  4    OLED/SDA    OLED/SDA   ADC/CS                 LCD/BCKL   LCD/BCKL     PERF/RST
- 5    RF/SCK      RF/SCK     RF/SCK     GPS/ANT     RF/SCK     RF/SCK       RF/CS
- 6                                      SD/CLK                              SD/CLK     SD/CLK
- 7                                                                                     SD/DATA0
- 8                                                                                     SD/DATA1
- 9                                                                                     SD/DATA2
-10                                                                                     SD/DATA3
-11                                      DC/CMD                              SD/CMD     SD/CMD
-12    GPS/RxD     GPS/RxD    SD/CS      GPS/RxD                GPS/TxD      SD/MISO    HSPI/MISO JTAG/TDI Bootstrap: select output voltage to power the flash chip
+ 5    RF/SCK      RF/SCK     RF/SCK     GPS/ANT     RF/SCK     RF/SCK       RF/CS                          PWM at boot
+ 6                                      SD/CLK                              SD/CLK     SD/CLK              SPI flash
+ 7                                      SD/DATA0                                       SD/DATA0            SPI flash
+ 8                                      SD/DATA1                                       SD/DATA1            SPI flash
+ 9                                      SD/DATA2                                       SD/DATA2            SPI flash
+10                                      SD/DATA3                                       SD/DATA3            SPI flash
+11                                      SD/CMD                              SD/CMD     SD/CMD              SPI flash
+12    GPS/RxD     GPS/RxD    SD/CS      GPS/RxD                GPS/TxD      SD/MISO    HSPI/MISO JTAG/TDI  Bootstrap: select output voltage to power the flash chip
 13    GPS/Ena     GPS/Ena    SD/SCK     LCD/SCL     LCD/CLK    LCD/CLK      SD/MOSI    HSPI/MOSI JTAG/TCK
-14    RF/RST      RF/RST     Beeper     ?           LED/PCB    .            SD/CLK     HSPI/CLK  JTAG/TMS
-15    OLED/SCL    OLED/SCL   SD/MOSI    GPS/TxD                .            HSPI/CS0   JTAG/TDO
+14    RF/RST      RF/RST     Beeper     ?           LED/PCB    .            SD/CLK     HSPI/CLK  JTAG/TMS  PWM at boot
+15    OLED/SCL    OLED/SCL   SD/MOSI    GPS/TxD                .            HSPI/CS0   JTAG/TDO            PWM at boot
 16    OLED/RST    OLED/RST   RF/IRQ                 GPS/Tx     RAM/CS       GPS/TX     U2_RXD
 17    Beeper      Beeper     RF/RST                 GPS/Rx     Beeper       GPS/RX     U2_TXD
 18    RF/CS       RF/CS      RF/MISO    RF/CS       RF/SCK     RF/CS                   VSPI/CLK
@@ -205,7 +207,7 @@ GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    Foll
 #define PIN_LED_PCB  GPIO_NUM_2   // status LED on the PCB
 #endif
 
-#ifdef WITH_HELTEC
+#if defined(WITH_HELTEC) || defined(WITH_HELTEC_V2)
 #define PIN_LED_PCB  GPIO_NUM_25  // status LED on the PCB: 25, GPIO25 is DAC2
 #endif
 
@@ -243,7 +245,7 @@ GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    Foll
 #define PIN_RFM_MOSI GPIO_NUM_23  // SPI MOSI  (save as LCD)
 #endif // M5_JACEK
 
-#if defined(WITH_HELTEC) || defined(WITH_TTGO)
+#if defined(WITH_HELTEC) || defined(WITH_HELTEC_V2) || defined(WITH_TTGO)
 #define PIN_RFM_RST  GPIO_NUM_14  // Reset
 #define PIN_RFM_IRQ  GPIO_NUM_26  // packet done on receive or transmit
 #define PIN_RFM_SS   GPIO_NUM_18  // SPI chip-select
@@ -284,18 +286,21 @@ GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    Foll
 #define RFM_SPI_SPEED 4000000     // [Hz] 4MHz SPI clock rate for RF chip
 
 #ifdef WITH_ST7789
-#ifdef WITH_TBEAM
+#ifdef WITH_TBEAM                  // old T-Beam
 #define LCD_PIN_MOSI GPIO_NUM_2    // SDA
 #define LCD_PIN_MISO GPIO_NUM_NC   // MISO not connected
 #define LCD_PIN_CLK  GPIO_NUM_13   // SCL
 #endif // TBEAM
-#ifdef WITH_TBEAM_V10
-#define LCD_PIN_MOSI GPIO_NUM_2 // 13   // SDA
+#ifdef WITH_TBEAM_V10              // new T-Beam
+#define LCD_PIN_MOSI GPIO_NUM_14 // 13   // SDA
 #define LCD_PIN_MISO GPIO_NUM_NC   // MISO not connected
-#define LCD_PIN_CLK  GPIO_NUM_13 // 14   // SCL
+#define LCD_PIN_CLK  GPIO_NUM_13	 // 2   // SCL
+// #define LCD_PIN_MOSI GPIO_NUM_2 // 13   // SDA
+// #define LCD_PIN_MISO GPIO_NUM_NC   // MISO not connected
+// #define LCD_PIN_CLK  GPIO_NUM_13 // 14   // SCL
 // #define LCD_PIN_RST  GPIO_NUM_15 // NC  // RST
 #endif // TBEAM v1.0
-#define LCD_SPI_SPEED 26000000     // [Hz]
+#define LCD_SPI_SPEED 10000000     // [Hz]
 #define LCD_SPI_HOST HSPI_HOST     // VSPI_HOST or HSPI_HOST
 #define LCD_SPI_DMA          2     // DMA channel
 #define LCD_SPI_MODE         3     // for ST7789 with CS tied to LOW
@@ -326,6 +331,13 @@ GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    Foll
 // #define PIN_GPS_PPS  GPIO_NUM_37  // for a new HELTEC
 // #define PIN_GPS_ENA  GPIO_NUM_13  // yellow    white
 #endif // HELTEC || TTGO
+
+#if defined(WITH_HELTEC_V2)
+                                  // VK2828U   GN-801   MAVlink
+#define PIN_GPS_TXD  GPIO_NUM_13  // green     green    green
+#define PIN_GPS_RXD  GPIO_NUM_39 // blue      yellow   yellow
+#define PIN_GPS_PPS  GPIO_NUM_38 // white     blue
+#endif
 
 // Note: I had a problem with GPS ENABLE on GPIO13, thus I tied the enable wire to 3.3V for the time being.
 
@@ -372,7 +384,7 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 #define PIN_I2C_SDA GPIO_NUM_21   // SDA pin
 #endif // M5_JACEK
 
-#if defined(WITH_HELTEC) || defined(WITH_TTGO)
+#if defined(WITH_HELTEC) || defined(WITH_HELTEC_V2) || defined(WITH_TTGO)
 #define PIN_I2C_SCL GPIO_NUM_15   // SCL pin
 #define PIN_I2C_SDA GPIO_NUM_4    // SDA pin
 #define OLED_I2C_ADDR 0x3C        // I2C address of the OLED display
@@ -392,9 +404,9 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 // #define PIN_OLED_RST GPIO_NUM_15  // OLED RESET: low-active
 #endif
 
-#if defined(WITH_HELTEC) || defined(WITH_TTGO)
-#define PIN_OLED_RST GPIO_NUM_16  // OLED RESET: low-active
-#endif
+// #if defined(WITH_HELTEC) || defined(WITH_TTGO)
+// #define PIN_OLED_RST GPIO_NUM_16  // OLED RESET: low-active
+// #endif
 
 #ifdef WITH_JACEK
 
@@ -418,7 +430,7 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 #define PIN_BEEPER    GPIO_NUM_25 // same as DAC
 #endif // TBEAM
 
-#if defined(WITH_HELTEC) || defined(WITH_TTGO)
+#if defined(WITH_HELTEC) || defined(WITH_HELTEC_V2) || defined(WITH_TTGO)
 #define PIN_BEEPER    GPIO_NUM_17
 #endif // HELTEC || TTGO
 
@@ -426,10 +438,11 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 
 #define PIN_GPS_ANT   GPIO_NUM_5  // internal(H) or external(L) GPS antenna
 
-// #define PIN_SD_CS     GPIO_NUM_4  // SD card interface in SPI mode
-// #define PIN_SD_SCK    GPIO_NUM_18
-// #define PIN_SD_MISO   GPIO_NUM_19
-// #define PIN_SD_MOSI   GPIO_NUM_23
+#define PIN_SD_CS     GPIO_NUM_11 // SD card interface in SPI mode
+#define PIN_SD_SCK    GPIO_NUM_6
+#define PIN_SD_MISO   GPIO_NUM_7
+#define PIN_SD_MOSI   GPIO_NUM_8
+#define SD_SPI_DMA             2
 
 #define PIN_BEEPER    GPIO_NUM_25 // DAC
 
@@ -468,7 +481,7 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 #define PIN_BUTTON    GPIO_NUM_38
 #endif
 
-#if defined(WITH_TTGO) || defined(WITH_HELTEC)
+#if defined(WITH_TTGO) || defined(WITH_HELTEC) || defined(WITH_HELTEC_V2)
 #define PIN_BUTTON    GPIO_NUM_0
 #endif
 
@@ -640,6 +653,7 @@ static void esp_spp_cb(esp_spp_cb_event_t Event, esp_spp_cb_param_t *Param)
     case ESP_SPP_DATA_IND_EVT:                                    // [30] data is sent by the client
 #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Param->data_ind.handle, Param->data_ind.data, Param->data_ind.len
       Format_String(CONS_UART_Write, "BT_SPP: [");
       Format_UnsDec(CONS_UART_Write, Param->data_ind.len);
       Format_String(CONS_UART_Write, "]\n");
@@ -782,6 +796,8 @@ void CONS_UART_Write (char     Byte)
 int  CONS_UART_Read  (uint8_t &Byte)  { int Ret=getchar(); if(Ret>=0) { Byte=Ret; return 1; } else return Ret; }
 // int  CONS_UART_Free  (void)           { return UART2_Free(); }
 // int  CONS_UART_Full  (void)           { return UART2_Full(); }
+
+void  CONS_UART_SetBaudrate(int BaudRate)  {        uart_set_baudrate(CONS_UART, BaudRate);    }
 
 //--------------------------------------------------------------------------------------------------------
 // ADS-B UART
@@ -1330,9 +1346,19 @@ void U8G2_Init(void)
 
 #ifdef WITH_SD
 
-static sdmmc_host_t Host;
-static sdspi_slot_config_t SlotConfig;
-static esp_vfs_fat_sdmmc_mount_config_t MountConfig =
+static sdmmc_host_t        SD_Host = SDSPI_HOST_DEFAULT();
+// static spi_bus_config_t    SD_BusConfig = {
+//         .mosi_io_num = PIN_SD_MOSI,
+//         .miso_io_num = PIN_SD_MISO,
+//         .sclk_io_num = PIN_SD_SCK,
+//         .quadwp_io_num = -1,
+//         .quadhd_io_num = -1,
+//         .max_transfer_sz = 4000,
+//     } ;
+// static sdspi_device_config_t SD_SlotConfig = SDSPI_DEVICE_CONFIG_DEFAULT();
+static sdspi_slot_config_t SD_SlotConfig;
+
+static esp_vfs_fat_sdmmc_mount_config_t SD_MountConfig =
   { .format_if_mount_failed = false,
     .max_files = 5,
     /* .allocation_unit_size = 16 * 1024 */ };
@@ -1347,21 +1373,22 @@ void SD_Unmount(void)
 { esp_vfs_fat_sdmmc_unmount(); SD_Card=0; }
 
 esp_err_t SD_Mount(void)
-{ esp_err_t Ret = esp_vfs_fat_sdmmc_mount("/sdcard", &Host, &SlotConfig, &MountConfig, &SD_Card); // ESP_OK => good, ESP_FAIL => failed to mound the file system, other => HW not working
+{ esp_err_t Ret = esp_vfs_fat_sdmmc_mount("/sdcard", &SD_Host, &SD_SlotConfig, &SD_MountConfig, &SD_Card); // ESP_OK => good, ESP_FAIL => failed to mound the file system, other => HW not working
   if(Ret!=ESP_OK) SD_Unmount();
   return Ret; } // ESP_OK => all good, ESP_FAIL => failed to mount file system, other => failed to init. the SD card
 
 static esp_err_t SD_Init(void)
 {
-  Host = SDSPI_HOST_DEFAULT();
+  // Host = SDSPI_HOST_DEFAULT();
   // Host.max_freq_khz = SDMMC_FREQ_PROBING;
-
-  SlotConfig = SDSPI_SLOT_CONFIG_DEFAULT();
-  SlotConfig.gpio_miso = PIN_SD_MISO;
-  SlotConfig.gpio_mosi = PIN_SD_MOSI;
-  SlotConfig.gpio_sck  = PIN_SD_SCK;
-  SlotConfig.gpio_cs   = PIN_SD_CS;
-  SlotConfig.dma_channel = SD_SPI_DMA; // otherwise it conflicts with RFM SPI or LCD SPI
+  // esp_err_t Ret = spi_bus_initialize((spi_host_device_t)SD_Host.slot, &SD_BusConfig, SD_SPI_DMA);
+  SD_SlotConfig = SDSPI_SLOT_CONFIG_DEFAULT();
+  SD_SlotConfig.gpio_miso = PIN_SD_MISO;
+  SD_SlotConfig.gpio_mosi = PIN_SD_MOSI;
+  SD_SlotConfig.gpio_sck  = PIN_SD_SCK;
+  SD_SlotConfig.gpio_cs = PIN_SD_CS;
+  // SD_SlotConfig.host_id = (spi_host_device_t)SD_Host.slot;
+  SD_SlotConfig.dma_channel = SD_SPI_DMA; // otherwise it conflicts with RFM SPI or LCD SPI
   return SD_Mount(); } // ESP_OK => all good, ESP_FAIL => failed to mount file system, other => failed to init. the SD card
 
 #endif // WITH_SD
@@ -1588,7 +1615,7 @@ void IO_Configuration(void)
 {
 
 #ifdef PIN_LED_PCB
-  LED_PCB_Dir();
+  LED_PCB_Dir();                    // PCB LED
   LED_PCB_Off();
 #endif
 #ifdef WITH_LED_TX
@@ -1597,11 +1624,11 @@ void IO_Configuration(void)
 #endif
 
 #ifdef PIN_BUTTON
-  Button_Dir();
+  Button_Dir();                     // Push-button
 #endif
 
 #ifdef WITH_JACEK
-  POWER_LDO_Dir();
+  POWER_LDO_Dir();                  // speific power control
   POWER_Dir();
   POWER_LDO_On();
   POWER_On();
@@ -1609,7 +1636,7 @@ void IO_Configuration(void)
 
 #ifdef WITH_M5_JACEK
   GPS_ANT_Dir();
-  GPS_ANT_Sel(1);       // 0 = external entenna
+  GPS_ANT_Sel(1);                   // 0 = external entenna
 #endif
 
 #ifdef PIN_PERIPH_RST
@@ -1689,7 +1716,7 @@ void IO_Configuration(void)
   BQ.checkID();
   // BQ.writeSource(0x05);     // Reg #00
   // BQ.writePowerON(0x2F);    // Reg #01, disable charging
-  BQ.writeChargeCurr(0x00); // Reg #02
+  BQ.writeChargeCurr(0x20); // Reg #02 00 = 512mA, 0x20 = 512+512mA
   BQ.writePreCharge(0x00);  // Reg #03
   BQ.writeChargeVolt(0x9A); // Reg #04
   // BQ.writePowerON(0x3F);    // Reg #01, enable charging
@@ -1803,7 +1830,9 @@ void IO_Configuration(void)
   LCD_WIDTH=240; LCD_HEIGHT=240;
   LCD_TYPE=0;
 #ifdef WITH_TBEAM_V10
-  LCD_PIN_RST = GPIO_NUM_15;
+  LCD_PIN_RST = GPIO_NUM_33;
+  LCD_PIN_DC  = GPIO_NUM_2;
+  LCD_PIN_BCKL = GPIO_NUM_35; // on one baord it is 15
 #endif
   LCD_Init(LCD_SPI_HOST, LCD_SPI_MODE, LCD_SPI_SPEED);
   LCD_Start();

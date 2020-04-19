@@ -97,7 +97,7 @@ void OLED_DrawLogo(u8g2_t *OLED)  // draw logo and hardware options in software
 #ifdef WITH_TTGO
   u8g2_DrawStr(OLED, 0, 16 ,"TTGO");
 #endif
-#ifdef WITH_HELTEC
+#if defined(WITH_HELTEC) || defined(WITH_HELTEC_V2)
   u8g2_DrawStr(OLED, 0, 16 ,"HELTEC");
 #endif
 #if defined(WITH_TBEAM) || defined(WITH_TBEAM_V10)
@@ -301,8 +301,8 @@ void OLED_DrawRF(u8g2_t *OLED)                      // RF
 
 void OLED_DrawRelay(u8g2_t *OLED, GPS_Position *GPS)
 { u8g2_SetFont(OLED, u8g2_font_amstrad_cpc_extended_8r);
-  uint8_t Len=Format_String(Line, "Relay queue :");
-  if(GPS && GPS->Sec>=0) Len+=Format_UnsDec(Line+Len, (uint16_t)(GPS->Sec), 2);
+  uint8_t Len=Format_String(Line, "Relay:");
+  if(GPS && GPS->Sec>=0) { Len+=Format_UnsDec(Line+Len, (uint16_t)(GPS->Sec), 2); Line[Len++]='s'; }
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 24, Line);
   uint8_t LineIdx=1;
@@ -325,7 +325,7 @@ void OLED_DrawRelay(u8g2_t *OLED, GPS_Position *GPS)
 
 void OLED_DrawLookout(u8g2_t *OLED, GPS_Position *GPS)
 { u8g2_SetFont(OLED, u8g2_font_amstrad_cpc_extended_8r);
-  uint8_t Len=Format_String(Line, "Look ");
+  uint8_t Len=Format_String(Line, "=> ");
   if(Look.WarnLevel)
   { const LookOut_Target *Tgt = Look.Target+Look.WorstTgtIdx;
     Len+=Format_Hex(Line+Len, Tgt->ID, 7);
@@ -363,26 +363,26 @@ void OLED_DrawTrafWarn(u8g2_t *OLED, GPS_Position *GPS)
   if(Look.WarnLevel==0) return;
   const LookOut_Target *Tgt = Look.Target+Look.WorstTgtIdx;
   uint8_t Len=0;
-  Len+=Format_Hex(Line+Len, Tgt->ID, 7);
+  Len+=Format_Hex(Line+Len, Tgt->ID, 7);                      // ID of the target
   Line[Len++]='/';
-  Line[Len++]='0'+Tgt->WarnLevel;
+  Line[Len++]='0'+Tgt->WarnLevel;                             // warning level
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 30, Line);
   Len=0;
-  Len+=Format_UnsDec(Line+Len, Tgt->TimeMargin*5, 2, 1);
+  Len+=Format_UnsDec(Line+Len, Tgt->TimeMargin*5, 2, 1);      // time-to-impact
   Line[Len++]='s';
   Line[Len++]=' ';
-  Len+=Format_UnsDec(Line+Len, Tgt->MissDist*5, 2, 1);
+  Len+=Format_UnsDec(Line+Len, Tgt->MissDist*5, 2, 1);        // miss-distance
   Line[Len++]='m';
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 45, Line);
   Len=0;
-  Len+=Format_UnsDec(Line+Len, Tgt->getRelHorSpeed()*5, 2, 1);
+  Len+=Format_UnsDec(Line+Len, Tgt->getRelHorSpeed()*5, 2, 1); // horizontal speed
   Line[Len++]='m';
   Line[Len++]='/';
   Line[Len++]='s';
   Line[Len++]=' ';
-  Len+=Format_UnsDec(Line+Len, Tgt->HorDist*5, 2, 1);
+  Len+=Format_UnsDec(Line+Len, Tgt->HorDist*5, 2, 1);          // horizontal distance
   Line[Len++]='m';
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 60, Line);
@@ -408,8 +408,8 @@ void OLED_DrawBaro(u8g2_t *OLED, GPS_Position *GPS)
 #endif
   if(GPS && GPS->hasBaro)
   { Len+=Format_UnsDec(Line+Len, GPS->Pressure/4, 5, 2);
-    Len+=Format_String(Line+Len, "Pa "); }
-  else Len+=Format_String(Line+Len, "----.--Pa ");
+    Len+=Format_String(Line+Len, "hPa "); }
+  else Len+=Format_String(Line+Len, "----.--hPa ");
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 24, Line);
   Len=0;
@@ -439,8 +439,8 @@ static uint8_t BattCapacity(uint16_t mVolt)
   if(mVolt<=3600) return   0;
   return (mVolt-3600+2)/5; }
 
-void OLED_DrawBattery(u8g2_t *OLED)
-{ uint8_t Cap=BattCapacity(BatteryVoltage>>8);
+void OLED_DrawBattery(u8g2_t *OLED)                    // draw battery status page
+{ uint8_t Cap=BattCapacity(BatteryVoltage>>8);         // est. battery capacity based on the voltage readout
   // u8g2_SetFont(OLED, u8g2_font_battery19_tn);
   // u8g2_DrawGlyph(OLED, 120, 60, '0'+(Cap+10)/20);
 
@@ -455,25 +455,34 @@ void OLED_DrawBattery(u8g2_t *OLED)
   if(Cap>=100) Format_UnsDec(Line, Cap, 3);
   else if(Cap>=10) Format_UnsDec(Line+1, Cap, 2);
   else Line[2]='0'+Cap;
-  u8g2_DrawStr  (OLED, 16, 32, Line);
-  u8g2_DrawFrame(OLED, 12, 20, 42, 14);
-  u8g2_DrawBox  (OLED,  8, 23,  4,  8);
+  u8g2_DrawStr  (OLED, 16, 32, Line);                  // print battery est. capacity
+  u8g2_DrawFrame(OLED, 12, 20, 42, 14);                // draw battery empty box around it
+  u8g2_DrawBox  (OLED,  8, 23,  4,  8);                // and the battery tip
 
   strcpy(Line, " .   V");
-  Format_UnsDec(Line, BatteryVoltage>>8, 4, 3);
+  Format_UnsDec(Line, BatteryVoltage>>8, 4, 3);        // print the battery voltage readout
   u8g2_DrawStr(OLED, 0, 48, Line);
 
-  strcpy(Line, "   . mV/min ");
+  strcpy(Line, "   . mV/min ");                        // print the battery voltage rate
   Format_SignDec(Line, (600*BatteryVoltageRate+128)>>8, 3, 1);
   u8g2_DrawStr(OLED, 0, 60, Line);
 
 #ifdef WITH_BQ
-  // uint8_t Status = BQ.readStatus();
-  // uint8_t State = (Status>>4)&0x03;
-  // const char *StateName[4] = { "Not charging", "Pre-charge", "Fast charge", "Full" } ;
+  uint8_t Fault  = BQ.readFault();                     // read fault register
+  uint8_t ChargeErr = (Fault>>4)&0x3F;                 // charging fault:
+  bool    BattErr = Fault&0x08;                        // Battery OVP
+  bool    OTGerr = Fault&0x40;                         // VBus problem
+  uint8_t NTCerr = Fault&0x03;                         //
+  uint8_t Status = BQ.readStatus();                    // read status register
+  uint8_t State = (Status>>4)&0x03;                    // charging status
+  const char *StateName[4] = { "" /* "Not charging" */ , "Pre-charge", "Charging", "Full" } ;
   // u8g2_SetFont(OLED, u8g2_font_amstrad_cpc_extended_8r);
-  // u8g2_SetFont(OLED, u8g2_font_6x10_tr);
-  // u8g2_DrawStr(OLED, 0, 50, StateName[State]);
+  u8g2_SetFont(OLED, u8g2_font_6x10_tr);
+  if(Fault)
+  { strcpy(Line, "Fault: "); Format_Hex(Line+7, Fault); Line[9]=0;
+    u8g2_DrawStr(OLED, 60, 28, Line); }
+  else
+    u8g2_DrawStr(OLED, 60, 28, StateName[State]);
   // u8g2_DrawStr(OLED, 0, 60, Status&0x04?"Power-is-Good":"Power-is-not-Good");
 
 /* print BQ registers for debug
@@ -490,9 +499,9 @@ void OLED_DrawBattery(u8g2_t *OLED)
 
 void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS)
 { static bool Odd=0;
-  uint8_t Cap=BattCapacity(BatteryVoltage>>8);
-  uint8_t BattLev = (Cap+10)/20;
-  uint8_t Charging = 0;
+  uint8_t Cap = BattCapacity(BatteryVoltage>>8);           // est. battery capacity
+  uint8_t BattLev = (Cap+10)/20;                           // [0..5] convert to display scale
+  uint8_t Charging = 0;                                    // charging or not changing ?
 #ifdef WITH_BQ
   uint8_t Status = BQ.readStatus();
   Charging = (Status>>4)&0x03;
@@ -503,14 +512,18 @@ void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS)
   uint8_t &DispLev = BattLev;
 #endif
   if(BattLev==0 && !Charging && Odd)                // when battery is empty, then flash it at 0.5Hz
-  { }
-  else
+  { }                                               // thus here avoid printing the battery symbol for flashing effect
+  else                                              // print the battery symbol with DispLev
   { u8g2_SetFont(OLED, u8g2_font_battery19_tn);
     u8g2_SetFontDirection(OLED, 3);
-    u8g2_DrawGlyph(OLED, 24, 10, '0'+DispLev);
+    u8g2_DrawGlyph(OLED, 20, 10, '0'+DispLev);
     u8g2_SetFontDirection(OLED, 0); }
   Odd=!Odd;
-
+#ifdef WITH_SD
+  if(SD_isMounted())
+  { u8g2_SetFont(OLED, u8g2_font_twelvedings_t_all);
+    u8g2_DrawGlyph(OLED, 30, 12, 0x73); }
+#endif
   // u8g2_SetFont(OLED, u8g2_font_5x7_tr);
   // u8g2_SetFont(OLED, u8g2_font_5x8_tr);
   static uint8_t Sec=0;
@@ -528,7 +541,7 @@ void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS)
     { Format_UnsDec(Line, (uint16_t)(GPS_SatSNR+2)/4,  2); memcpy(Line+2, "dB ", 3);}
   }
   else Format_String(Line, "--sat");
-  u8g2_DrawStr(OLED, 40, 10, Line);
+  u8g2_DrawStr(OLED, 52, 10, Line);
   Sec++; if(Sec>=3) Sec=0; }
 
 void OLED_DrawSystem(u8g2_t *OLED)
@@ -625,16 +638,25 @@ void OLED_DrawSystem(u8g2_t *OLED)
 
 void OLED_DrawID(u8g2_t *OLED)
 { u8g2_SetFont(OLED, u8g2_font_9x15_tr);
-  strcpy(Line, "ID "); Parameters.Print(Line+3); Line[13]=0;
-  u8g2_DrawStr(OLED, 0, 28, Line);
+  Parameters.Print(Line); Line[10]=0;
+  u8g2_DrawStr(OLED, 26, 28, Line);
   // u8g2_SetFont(OLED, u8g2_font_10x20_tr);
-#ifdef WITH_FollowMe
   u8g2_SetFont(OLED, u8g2_font_7x13_tf);
+  u8g2_DrawStr(OLED, 0, 27, "ID:");
+  if(Parameters.Pilot[0] || Parameters.Reg[0])
+  { strcpy(Line, "Reg: "); strcat(Line, Parameters.Reg);
+    u8g2_DrawStr(OLED, 0, 54, Line);
+    strcpy(Line, "Pilot: "); strcat(Line, Parameters.Pilot);
+    u8g2_DrawStr(OLED, 0, 42, Line); }
+  else
+  {
+#ifdef WITH_FollowMe
   u8g2_DrawStr(OLED, 15, 44, "FollowMe868");
   u8g2_DrawStr(OLED, 20, 56, "by AVIONIX");
 #endif
+  }
   u8g2_SetFont(OLED, u8g2_font_5x8_tr);
-  u8g2_DrawStr(OLED, 96, 62, "v0.0.0");
+  u8g2_DrawStr(OLED, 96, 62, "v0.1.1");
 }
 
 #endif

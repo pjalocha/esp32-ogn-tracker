@@ -261,7 +261,11 @@ void SleepIn(void)
 #endif
 
   PowerMode=0;
-  vTaskDelay(1000); }
+  for(int Idx=0; Idx<1500; Idx++)
+  { LED_TimerCheck(1);
+    vTaskDelay(1); }
+
+}
 
 void SleepOut(void)
 {
@@ -472,7 +476,7 @@ void vTaskCTRL(void* pvParameters)
 #endif
 
 #ifdef WITH_AXP
-// #ifdef DEBUG_PRINT
+#ifdef DEBUG_PRINT
     if(TimeChange)
     {  uint16_t Batt=AXP.readBatteryVoltage();       // [mV]
        uint16_t InpCurr=AXP.readBatteryInpCurrent(); // [mA]
@@ -501,7 +505,7 @@ void vTaskCTRL(void* pvParameters)
       Format_SignDec(CONS_UART_Write, Temp, 2, 1);
       Format_String(CONS_UART_Write, "degC\n");
       xSemaphoreGive(CONS_Mutex); }
-// #endif
+#endif
 #endif
 
 #ifdef DEBUG_PRINT
