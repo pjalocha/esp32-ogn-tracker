@@ -18,7 +18,12 @@ extern BME280   Baro;                       // BMP280 barometer sensor with humi
 
 #ifdef WITH_MS5607
 #include "ms5607.h"
-extern MS5607   Baro;                       // BMP280 barometer sensor
+extern MS5607   Baro;                       // MS5607 barometer sensor
+#endif
+
+#ifdef WITH_MS5611
+#include "ms5611.h"
+extern MS5611   Baro;                       // MS5611 barometer sensor
 #endif
 
 

@@ -12,7 +12,7 @@
 
 // #define DEBUG_PRINT
 
-#if defined(WITH_BMP180) || defined(WITH_BMP280) || defined(WITH_MS5607) || defined(WITH_BME280)
+#if defined(WITH_BMP180) || defined(WITH_BMP280) || defined(WITH_MS5607) || defined(WITH_BME280) || defined(WITH_MS5611)
 
 #ifdef WITH_BMP180
 #include "bmp180.h"
@@ -28,6 +28,10 @@
 
 #ifdef WITH_MS5607
 #include "ms5607.h"
+#endif
+
+#ifdef WITH_MS5611
+#include "ms5611.h"
 #endif
 
 #include "atmosphere.h"
@@ -73,7 +77,11 @@ void VarioSound(int32_t ClimbRate)
 #endif
 
 #ifdef WITH_MS5607
-       MS5607   Baro;                       // BMP280 barometer sensor
+       MS5607   Baro;                       // MS5607 barometer sensor
+#endif
+
+#ifdef WITH_MS5611
+       MS5611   Baro;                       // MS5611 barometer sensor
 #endif
 
 static uint32_t AverPress;                  // [ Pa] summed Pressure over several readouts
@@ -98,7 +106,7 @@ static uint8_t InitBaro()
   if(Err==0) Err=Baro.AcquireRawTemperature();
   if(Err==0) { Baro.CalcTemperature(); AverPress=0; AverCount=0; }
 #endif
-#if defined(WITH_BMP280) || defined(WITH_MS5607) || defined(WITH_BME280)
+#if defined(WITH_BMP280) || defined(WITH_MS5607) || defined(WITH_BME280) || defined(WITH_MS5611)
   if(Err==0) Err=Baro.Acquire();
   if(Err==0) { Baro.Calculate(); }
 #endif
@@ -149,7 +157,7 @@ static void ProcBaro(void)
     xSemaphoreGive(CONS_Mutex);
 #endif
 #endif
-#if defined(WITH_BMP280) || defined(WITH_MS5607) || defined(WITH_BME280)
+#if defined(WITH_BMP280) || defined(WITH_MS5607) || defined(WITH_BME280) || defined(WITH_MS5611)
     // xSemaphoreTake(I2C_Mutex, portMAX_DELAY);
     uint8_t Err=Baro.Acquire();
     // xSemaphoreGive(I2C_Mutex);
@@ -292,7 +300,7 @@ void vTaskSENS(void* pvParameters)
 //   VarioSound(0);
 // #endif
 
-#if defined(WITH_BMP180) || defined(WITH_BMP280) || defined(WITH_MS5607) || defined(WITH_BME280)
+#if defined(WITH_BMP180) || defined(WITH_BMP280) || defined(WITH_MS5607) || defined(WITH_BME280) || defined(WITH_MS5611)
   BaroPipe.Clear  (4*90000);
   BaroNoise.Set(12*16);                // guess the pressure noise level
 
@@ -331,12 +339,18 @@ void vTaskSENS(void* pvParameters)
          else  Format_String(CONS_UART_Write, " ?!");
 #endif
 
+#ifdef WITH_MS5611
+  Format_String(CONS_UART_Write, " MS5611: ");
+  if(Detected) { Format_String(CONS_UART_Write, " @"); Format_Hex(CONS_UART_Write, Detected); }
+         else  Format_String(CONS_UART_Write, " ?!");
+#endif
+
   Format_String(CONS_UART_Write, "\n");
   xSemaphoreGive(CONS_Mutex);
 
   while(1)
   {
-#if defined(WITH_BMP180) || defined(WITH_BMP280) || defined(WITH_MS5607) || defined(WITH_BME280)
+#if defined(WITH_BMP180) || defined(WITH_BMP280) || defined(WITH_MS5607) || defined(WITH_BME280) || defined(WITH_MS5611)
     if(PowerMode) ProcBaro();
              else vTaskDelay(100);
 #else
