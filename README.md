@@ -1,13 +1,29 @@
-# esp32-ogn-tracker
-OGN Tracker implementation on ESP32 devices
+# ESP32 OGN-Tracker
+OGN Tracker implementation on ESP32 devices.
+It works with HELTEC and TTGO boards with sx1276 RF chip for 868/915MHz
+The quickest board to run is the T-Beam from TTGO as it includes GPS, RF chip, battery circuit and holder, optionally as well a small OLED display. Yout to solder BMP280 or BME280 pressure/temperature/humidity sensor.
 
 The initial code is written for and tested on HALTEC LoRa 32 module with sx1276 and 128x64 OLED display.
 Most likely it can be easily ported to other ESP32 devices, as these are very flexible for the I/O assignement.
 If you need to change the pins assigned to various periferials, see the top of the hal.cpp file.
 
-To compile and upload use the standard ESP32 toolchain and esp-idf
+To compile and flash the ESP32 board you need to install the ESP-IDF v4.0, start with:
 
-To wire the UART GPS follow the pins defined in the hal.cpp
+```
+git clone -b v4.0 --recursive https://github.com/espressif/esp-idf.git
+```
+then run *install.sh* and *export.sh* so you are ready to run *make* in the project directory.
+
+If you want to use the OLED display with the U8g2 library you need to install it from the project directory:
+
+```
+mkdir components
+cd components
+git clone https://github.com/olikraus/u8g2.git
+cd ..
+```
+
+For the original HELTEC board you need to wire the UART GPS follow the pins defined in the hal.cpp
 ```
                                   // wire colours for VK2828U GPS
 #define PIN_GPS_TXD  GPIO_NUM_12  // green
