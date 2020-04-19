@@ -105,7 +105,7 @@ class MS5611
       TEMP -= dT2;
       OFF  -= OFF2;
       SENS -= SENS2; }
-    Temperature = TEMP;                      // [0.1degC]
+    Temperature = (TEMP+5)/10;                      // [0.1degC]
     Pressure = (((SENS*RawPress)>>21) - OFF)>>13; } // [0.25Pa]
 
 } ;
