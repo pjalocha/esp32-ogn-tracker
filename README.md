@@ -93,6 +93,41 @@ GPS is already wired and the definition is in the hal.cpp.
 
 ## Wiring I2C (pressure sensors and/or OLED displays)
 
+For devices with an OLED screen the I2C pins are already defined and you should follow these, as there is one common I2C bus in use.
+For devices without we still use the same I/O pins.
+
+### HELTEC v1/2 and similar TTGO boards
+
+```
+#define PIN_I2C_SCL GPIO_NUM_15   // SCL pin
+#define PIN_I2C_SDA GPIO_NUM_4    // SDA pin
+```
+
+### TTGO T-Beam
+```
+#define PIN_I2C_SCL GPIO_NUM_22   // SCL pin => this way the pin pattern fits the BMP280 module
+#define PIN_I2C_SDA GPIO_NUM_21   // SDA pin
+```
+
+I2C pins are arranged such that they are next to GND and 3.3V and fit the pattern of most I2C modules
+so for example to solder a pressure sensor like BMP280 just a 4-pin header is required.
 
 ## Wiring LCD display
 
+A small, cheap LCD 240x240 screen has been tested with the TTGO T-Beam v1.0 boards and the wiring is as follows:
+
+```
+GND GND
+VCC 3.3V
+SDA 14
+SCL 13
+RES 33
+DC   2
+BLK 32
+```
+In this arrangement all signals are on one side of the board except for the VCC line
+
+Note: the SDA/SCL naming suggest this display is interfaced with I2C but actually it is an SPI device with the CS being constantly active.
+
+There is as well an LCD code for the M5 stack, which is already wired to the ESP32 thus no additional wiring is needed.
+There you need however to wire other devices like the RF chip and pressure sensor.
