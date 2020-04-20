@@ -6,3 +6,9 @@
 # in the build directory. This behaviour is entirely configurable,
 # please read the ESP-IDF documents if you need to do this.
 #
+
+#Compile image file(s) into the resulting firmware binary
+COMPONENT_EMBED_FILES := OGN_logo_240x240.jpg
+
+
+

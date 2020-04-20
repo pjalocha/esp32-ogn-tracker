@@ -1832,7 +1832,7 @@ void IO_Configuration(void)
 #ifdef WITH_TBEAM_V10
   LCD_PIN_RST = GPIO_NUM_33;
   LCD_PIN_DC  = GPIO_NUM_2;
-  LCD_PIN_BCKL = GPIO_NUM_35; // on one baord it is 15
+  LCD_PIN_BCKL = GPIO_NUM_32; // on one baord it is 15
 #endif
   LCD_Init(LCD_SPI_HOST, LCD_SPI_MODE, LCD_SPI_SPEED);
   LCD_Start();
