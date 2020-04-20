@@ -67,18 +67,32 @@ $POGNS,AcftType=1,Pilot=YourName
 
 ## Wiring the GPS
 
-For the original HELTEC board you need to wire the UART GPS follow the pins defined in the hal.cpp
+Wiring is fairly flexible, as the ESP32 can easily redefine the I/O signals. You need to avoid pins which are already used: the list normally comes with every ESP32 module. You can choose the pins after their placement on the board, for example such, that all wires are soldered on one side. Wiring for various modules has been chosen but if needed can easily be changed.
+
+### HELTEC v1 and TTGO boards without GPS
+
+For the original HELTEC board and similar TTGO boards without the GPS you need to wire the UART GPS follow the pins defined in the hal.cpp
 ```
                                   // wire colours for VK2828U GPS
 #define PIN_GPS_TXD  GPIO_NUM_12  // green
 #define PIN_GPS_RXD  GPIO_NUM_35  // blue
 #define PIN_GPS_PPS  GPIO_NUM_34  // white
-#define PIN_GPS_ENA  GPIO_NUM_13  // yellow -> well, I had a problem here, thus I tied the enable wire to 3.3V for the time being.
 ```
-Note the yellow wire: put it to 3.3V to start with.
-An attempt to control it from the CPU did not work, to be followed.
 
 Note: I have seen GPSes where red was ground and black was power thus be carefull !
 
-Note: If you use MTK GPS check the definitions in the hal.cpp accordingly if you want higher baud rates on the GPS UART
+Note: If you use an MTK GPS change the definitions in the config.h accordingly.
+
+### HELTEC v2
+
+RXD and PPS need to be relocated because now they are connected to DIO lines of the RF module, thus they were relocated to pins 39 and 38.
+
+### TTGO T-Beam
+
+GPS is already wired and the definition is in the hal.cpp.
+
+## Wiring I2C (pressure sensors and/or OLED displays)
+
+
+## Wiring LCD display
 
