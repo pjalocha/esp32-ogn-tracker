@@ -32,10 +32,10 @@ To get the OGN-Tracker source code from this github repository:
 ```
 cd
 git clone https://github.com/pjalocha/esp32-ogn-tracker.git
-cd ogn32-ogn-tracker
+cd esp32-ogn-tracker
 ```
 
-If you want to use the OLED display with the U8g2 library you need to install it from the project directory:
+If you want to use the OLED display with the U8g2 library you need to install it in *components* in the project directory:
 
 ```
 mkdir components
@@ -53,6 +53,16 @@ To compile and flash the board
 ```
 make
 make flash
+```
+
+To see the console output and thus to check if the ESP32 is alive
+```
+minicom
+```
+For minicom setup use 115200bps /dev/ttyUSB0 serial port and turn hardware and software handshake OFF. It is important, otherwise if you type something it won't be sent to the ESP32.
+Press *Ctrl-C* to list the internal state and parameters. To change parameters, use $POGNS like this:
+```
+$POGNS,AcftType=1,Pilot=YourName
 ```
 
 ## Wiring the GPS
