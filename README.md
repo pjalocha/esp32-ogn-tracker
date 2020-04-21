@@ -114,6 +114,7 @@ so for example to solder a pressure sensor like BMP280 just a 4-pin header is re
 
 ## Wiring LCD display
 
+![240x240 SPI LCD](/images/TrackerLCD.jpg)
 A small, cheap LCD 240x240 screen has been tested with the TTGO T-Beam v1.0 boards and the wiring is as follows:
 
 ```
