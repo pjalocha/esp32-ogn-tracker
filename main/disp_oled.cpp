@@ -130,6 +130,12 @@ void OLED_DrawLogo(u8g2_t *OLED)  // draw logo and hardware options in software
 #ifdef WITH_BME280
   u8g2_DrawStr(OLED, 0, 52 ,"BME280");
 #endif
+#ifdef WITH_MS5607
+  u8g2_DrawStr(OLED, 0, 52 ,"MS5607");
+#endif
+#ifdef WITH_MS5611
+  u8g2_DrawStr(OLED, 0, 52 ,"MS5611");
+#endif
 
 #ifdef WITH_BT_SPP
   u8g2_DrawStr(OLED, 0, 64 ,"BT SPP");
