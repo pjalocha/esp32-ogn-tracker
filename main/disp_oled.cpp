@@ -79,7 +79,7 @@ int OLED_DisplayPosition(GPS_Position *GPS=0, uint8_t LineIdx=2)
 
 #ifdef WITH_U8G2_OLED
 
-void OLED_DrawLogo(u8g2_t *OLED)  // draw logo and hardware options in software
+void OLED_DrawLogo(u8g2_t *OLED, GPS_Position *GPS)  // draw logo and hardware options in software
 {
   u8g2_DrawCircle(OLED, 96, 32, 30, U8G2_DRAW_ALL);
   u8g2_DrawCircle(OLED, 96, 32, 34, U8G2_DRAW_UPPER_RIGHT);
@@ -251,7 +251,7 @@ void OLED_DrawGPS(u8g2_t *OLED, GPS_Position *GPS)  // GPS time, position, altit
   u8g2_DrawStr(OLED, 0, 60, Line);
 }
 
-void OLED_DrawRF(u8g2_t *OLED)                      // RF
+void OLED_DrawRF(u8g2_t *OLED, GPS_Position *GPS) // RF
 { u8g2_SetFont(OLED, u8g2_font_7x13_tf);            // 5 lines. 12 pixels/line
   uint8_t Len=0;
 #ifdef WITH_RFM69
@@ -439,7 +439,7 @@ static uint8_t BattCapacity(uint16_t mVolt)
   if(mVolt<=3600) return   0;
   return (mVolt-3600+2)/5; }
 
-void OLED_DrawBattery(u8g2_t *OLED)                    // draw battery status page
+void OLED_DrawBattery(u8g2_t *OLED, GPS_Position *GPS) // draw battery status page
 { uint8_t Cap=BattCapacity(BatteryVoltage>>8);         // est. battery capacity based on the voltage readout
   // u8g2_SetFont(OLED, u8g2_font_battery19_tn);
   // u8g2_DrawGlyph(OLED, 120, 60, '0'+(Cap+10)/20);
@@ -544,7 +544,7 @@ void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS)
   u8g2_DrawStr(OLED, 52, 10, Line);
   Sec++; if(Sec>=3) Sec=0; }
 
-void OLED_DrawSystem(u8g2_t *OLED)
+void OLED_DrawSystem(u8g2_t *OLED, GPS_Position *GPS)
 {
   u8g2_SetFont(OLED, u8g2_font_7x13_tf);              // 5 lines, 12 pixels/line
   uint8_t Len=0;
@@ -636,7 +636,7 @@ void OLED_DrawSystem(u8g2_t *OLED)
 */
 }
 
-void OLED_DrawID(u8g2_t *OLED)
+void OLED_DrawID(u8g2_t *OLED, GPS_Position *GPS)
 { u8g2_SetFont(OLED, u8g2_font_9x15_tr);
   Parameters.Print(Line); Line[10]=0;
   u8g2_DrawStr(OLED, 26, 28, Line);
