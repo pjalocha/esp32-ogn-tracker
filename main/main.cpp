@@ -9,6 +9,7 @@
 #include "proc.h"                 // GPS/RF process taskk
 #include "gps.h"                  // GPS control data acquisiton
 #include "sens.h"
+#include "imu.h"
 #include "ctrl.h"                 // Control task
 #include "log.h"                  // Data logging task
 #include "knob.h"                 // potentiometer as rotary encoder
@@ -29,7 +30,7 @@ void app_main(void)
     // printf("OGN Tracker on ESP32\n");
 
     CONS_Mutex = xSemaphoreCreateMutex();    // semaphore for sharing the writing to the console
-    // I2C_Mutex  = xSemaphoreCreateMutex();    // semaphore for sharing the I2C bus
+    I2C_Mutex  = xSemaphoreCreateMutex();    // semaphore for sharing the I2C bus
 
     NVS_Init();                              // initialize Non-Volatile-Storage in Flash and read the tracker parameters
 
@@ -74,6 +75,9 @@ void app_main(void)
     xTaskCreate(vTaskGPS,   "GPS",   2048, 0, tskIDLE_PRIORITY+4, 0);
 #if defined(WITH_BMP180) || defined(WITH_BMP280) || defined(WITH_BME280) || defined(WITH_MS5607) || defined(WITH_MS5611)
     xTaskCreate(vTaskSENS,  "SENS",  2048, 0, tskIDLE_PRIORITY+4, 0);
+#endif
+#ifdef WITH_BMX055
+    xTaskCreate(vTaskIMU,   "IMU",   2048, 0, tskIDLE_PRIORITY+4, 0);
 #endif
 #ifdef WITH_KNOB
     xTaskCreate(vTaskKNOB,  "KNOB",  2048, 0, tskIDLE_PRIORITY+3, 0);

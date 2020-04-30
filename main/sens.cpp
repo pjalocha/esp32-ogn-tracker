@@ -97,7 +97,7 @@ static Delay<int32_t, 8>        PressDelay; // 4-second delay for long-term clim
 
 static char Line[96];                       // line to prepare the barometer NMEA sentence
 
-static uint8_t InitBaro()
+static uint8_t InitBaro(void)
 { // xSemaphoreTake(I2C_Mutex, portMAX_DELAY);
   Baro.Bus=BARO_I2C;
   uint8_t Err=Baro.CheckID();

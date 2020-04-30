@@ -48,7 +48,7 @@ extern uint8_t  MAV_Seq;                   // sequence number for MAVlink messag
 // ============================================================================================================
 
 extern SemaphoreHandle_t CONS_Mutex;       // console port Mutex
-// extern SemaphoreHandle_t I2C_Mutex;        // I2C port Mutex (OLED and Baro)
+extern SemaphoreHandle_t I2C_Mutex;        // I2C port Mutex (OLED and Baro)
 
 uint64_t getUniqueID(void);                // get some unique ID of the CPU/chip
 uint32_t getUniqueAddress(void);           // get unique 24-bit address for the transmitted IF

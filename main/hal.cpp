@@ -1281,7 +1281,9 @@ static uint8_t u8g2_esp32_i2c_byte_cb(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int
         break; }
     case U8X8_MSG_BYTE_END_TRANSFER:
       { i2c_master_stop(U8G2_Cmd);
+        xSemaphoreTake(I2C_Mutex, portMAX_DELAY);
         i2c_master_cmd_begin(I2C_BUS, U8G2_Cmd, 10);
+        xSemaphoreGive(I2C_Mutex);
         i2c_cmd_link_delete(U8G2_Cmd);
         break; }
   }
@@ -1907,7 +1909,7 @@ int SPIFFS_Info(size_t &Total, size_t &Used, const char *Label)
 
 // ======================================================================================================
 
-// SemaphoreHandle_t I2C_Mutex;
+SemaphoreHandle_t I2C_Mutex;
 
 uint8_t I2C_Read(uint8_t Bus, uint8_t Addr, uint8_t Reg, uint8_t *Data, uint8_t Len, uint8_t Wait)
 { i2c_cmd_handle_t Cmd = i2c_cmd_link_create();
@@ -1918,7 +1920,9 @@ uint8_t I2C_Read(uint8_t Bus, uint8_t Addr, uint8_t Reg, uint8_t *Data, uint8_t 
   i2c_master_write_byte(Cmd, (Addr<<1) | I2C_MASTER_READ, I2C_MASTER_ACK);
   i2c_master_read(Cmd, Data, Len, I2C_MASTER_LAST_NACK);
   i2c_master_stop(Cmd);
+  xSemaphoreTake(I2C_Mutex, portMAX_DELAY);
   esp_err_t Ret = i2c_master_cmd_begin((i2c_port_t)Bus, Cmd, Wait);
+  xSemaphoreGive(I2C_Mutex);
   i2c_cmd_link_delete(Cmd);
   return Ret; }
 
@@ -1929,7 +1933,9 @@ uint8_t I2C_Write(uint8_t Bus, uint8_t Addr, uint8_t Reg, uint8_t *Data, uint8_t
   i2c_master_write_byte(Cmd, Reg , I2C_MASTER_ACK);
   i2c_master_write(Cmd, Data, Len, I2C_MASTER_NACK);
   i2c_master_stop(Cmd);
+  xSemaphoreTake(I2C_Mutex, portMAX_DELAY);
   esp_err_t Ret = i2c_master_cmd_begin((i2c_port_t)Bus, Cmd, Wait);
+  xSemaphoreGive(I2C_Mutex);
   i2c_cmd_link_delete(Cmd);
   return Ret; }
 

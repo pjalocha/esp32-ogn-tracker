@@ -171,15 +171,15 @@ void vTaskDISP(void* pvParameters)
 // #endif
       { switch(DISP_Page)
         { case 2: OLED_DrawGPS   (&U8G2_OLED, GPS); break;
-          case 3: OLED_DrawRF    (&U8G2_OLED); break;
+          case 3: OLED_DrawRF    (&U8G2_OLED, GPS); break;
           case 4: OLED_DrawBaro  (&U8G2_OLED, GPS); break;
-          case 1: OLED_DrawID    (&U8G2_OLED); break;
-          case 5: OLED_DrawSystem(&U8G2_OLED); break;
+          case 1: OLED_DrawID    (&U8G2_OLED, GPS); break;
+          case 5: OLED_DrawSystem(&U8G2_OLED, GPS); break;
           // case 6: OLED_DrawRelay (&U8G2_OLED, GPS); break;
           // case 7: OLED_DrawLookout(&U8G2_OLED, GPS); break;
-          case 0: OLED_DrawBattery(&U8G2_OLED); break;
+          case 0: OLED_DrawBattery(&U8G2_OLED, GPS); break;
 #ifdef WITH_U8G2_LISTS
-          case 6: OLED_DrawRelay (&U8G2_OLED, GPS); break;
+          case 6: OLED_DrawRelay  (&U8G2_OLED, GPS); break;
           case 7: OLED_DrawLookout(&U8G2_OLED, GPS); break;
           case 9: OLED_DrawTrafWarn(&U8G2_OLED, GPS); break;
 #endif
