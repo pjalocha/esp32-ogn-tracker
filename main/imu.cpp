@@ -22,9 +22,9 @@ static uint8_t InitIMU(void)
 { MAG.Bus=BARO_I2C;
   ACC.Bus=BARO_I2C;
   GYR.Bus=BARO_I2C;
-  uint8_t  Err  = MAG.CheckID(); Err<<=1;
-  if(!Err) Err |= ACC.CheckID(); Err<<=1;
-  if(!Err) Err |= GYR.CheckID();
+  uint8_t  Err  = MAG.CheckID(); // Err<<=1;
+  // if(!Err) Err |= ACC.CheckID(); Err<<=1;
+  // if(!Err) Err |= GYR.CheckID();
   return Err; }
 
 static void ProcIMU(void)
