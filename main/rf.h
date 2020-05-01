@@ -12,8 +12,17 @@
 #include "fifo.h"
 #include "freqplan.h"
 
+#ifdef WITH_FANET
+#include "fanet.h"
+#endif
+
   extern FIFO<RFM_RxPktData, 16> RF_RxFIFO;   // buffer for received packets
   extern FIFO<OGN_TxPacket<OGN_Packet>, 4> RF_TxFIFO;   // buffer for transmitted packets
+
+#ifdef WITH_FANET
+  extern FIFO<FANET_RxPacket, 8> FNT_RxFIFO;
+  extern FIFO<FANET_Packet, 4> FNT_TxFIFO;
+#endif
 
   extern uint8_t RX_OGN_Packets;              // [packets] counts received packets
   // extern uint8_t   RX_AverRSSI;              // [-0.5dBm] average RSSI

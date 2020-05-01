@@ -25,15 +25,15 @@ Maintainer: Miguel Luis and Gregory Cristian
 #define REG_OPMODE                                  0x01
 #define REG_BITRATEMSB                              0x02
 #define REG_BITRATELSB                              0x03
-#define REG_FDEVMSB                                 0x04 
+#define REG_FDEVMSB                                 0x04
 #define REG_FDEVLSB                                 0x05
-#define REG_FRFMSB                                  0x06
+#define REG_FRFMSB                                  0x06  // Operational frequency: same for LoRa and FSK
 #define REG_FRFMID                                  0x07
 #define REG_FRFLSB                                  0x08
 // Tx settings
-#define REG_PACONFIG                                0x09
+#define REG_PACONFIG                                0x09  // Same for LoRa and FSK
 #define REG_PARAMP                                  0x0A
-#define REG_OCP                                     0x0B 
+#define REG_OCP                                     0x0B
 // Rx settings
 #define REG_LNA                                     0x0C
 #define REG_RXCONFIG                                0x0D
@@ -41,7 +41,7 @@ Maintainer: Miguel Luis and Gregory Cristian
 #define REG_RSSICOLLISION                           0x0F
 #define REG_RSSITHRESH                              0x10
 #define REG_RSSIVALUE                               0x11
-#define REG_RXBW                                    0x12 
+#define REG_RXBW                                    0x12
 #define REG_AFCBW                                   0x13
 #define REG_OOKPEAK                                 0x14
 #define REG_OOKFIX                                  0x15
@@ -109,19 +109,46 @@ Maintainer: Miguel Luis and Gregory Cristian
 #define REG_AGCTHRESH3                              0x64
 #define REG_PLL                                     0x70
 
+// LoRa registers
+#define REG_LORA_FIFO_ADDR                          0x0D // write into this register the pointer to read/write from the FIFO
+#define REG_LORA_TX_ADDR                            0x0E // base address in FIFO for transmitted packets (normally 0)
+#define REG_LORA_RX_ADDR                            0x0F // base address in FIFO for received packets (normally 0)
+#define REG_LORA_PACKET_ADDR                        0x10 // address in FIFO of the new packet received ?
+#define REG_LORA_IRQ_MASK                           0x11 //
+#define REG_LORA_IRQ_FLAGS                          0x12 // 7=RxTimeout, 6=RxDone, 5=CRCerror, 4=ValidHeader, 3=TxDone, 2=CADdone, 1=FHSSchange, 0=CAD det.
+#define REG_LORA_PACKET_BYTES                       0x13 // number of bytes of the new packet received
+#define REG_LORA_MODEM_STATUS                       0x18 // RRRchxsd RRR=coding rate, c=modem clear, h=header valid, r=RX ongoing, s=signal synced, d=signal detected
+#define REG_LORA_PACKET_SNR                         0x19 // SNR of the last packet [0.25dB]
+#define REG_LORA_PACKET_RSSI                        0x1A // RSSI of the latest packet [dBm] = Value-137
+#define REG_LORA_RSSI                               0x1B // RSSI of the channel [dBm] = Value-137
+#define REG_LORA_HOP_CHANNEL                        0x1C // TCcccccc T=Timeout, C=CRC on (for a received packet), cccccc=hop channel
+#define REG_LORA_MODEM_CONFIG1                      0x1D // BBBBRRRI BBBB=1000(250kHz), RRR=001(4+1) =100(4+4) I=0(explicit header)
+#define REG_LORA_MODEM_CONFIG2                      0x1E // SSSSTCtt SSSS=SF, T=TxCont, C=CRCenable, tt=symbol timeout MSB
+#define REG_LORA_SYMBOL_TIMEOUT                     0x1F // symbol timeout LSB
+#define REG_LORA_PREAMBLE_MSB                       0x20 // preamble length MSB
+#define REG_LORA_PREAMBLE_LSB                       0x21 // preamble length LSB
+#define REG_LORA_PACKET_LEN                         0x22 // [bytes] for TX or for RX when implicit header mode
+#define REG_LORA_PACKET_MAXLEN                      0x23 // [bytes] to discard bad packets
+#define REG_LORA_HOPPING_PERIOD                     0x24 // 0
+#define REG_LORA_RX_BYTE_ADDR                       0x25 //
+#define REG_LORA_MODEM_CONFIG3                      0x26 // 0000MA00 M=Mobile/Static, A=LNA AGC
+#define REG_LORA_FREQ_ERR_MSB                       0x28 // freq. error estimate
+#define REG_LORA_FREQ_ERR_MID                       0x29
+#define REG_LORA_FREQ_ERR_LSB                       0x2A
+#define REG_LORA_DETECT_OPTIMIZE                    0x31 //
+#define REG_LORA_INVERT_IQ                          0x33
+#define REG_LORA_DETECT_THRESHOLD                   0x37 // for SF6
+#define REG_LORA_SYNC                               0x39 // 0xF1 for FANET, default = 0x12 (for old FANET)
+
 /*!
  * ============================================================================
  * SX1276 FSK bits control definition
  * ============================================================================
  */
 
-/*!
- * RegFifo
- */
+// RegFifo
 
-/*!
- * RegOpMode
- */
+// RegOpMode
 #define RF_OPMODE_LONGRANGEMODE_MASK                0x7F
 #define RF_OPMODE_LONGRANGEMODE_OFF                 0x00
 #define RF_OPMODE_LONGRANGEMODE_ON                  0x80
@@ -137,12 +164,24 @@ Maintainer: Miguel Luis and Gregory Cristian
 #define RF_OPMODE_MODULATIONSHAPING_11              0x18
 
 #define RF_OPMODE_MASK                              0xF8
-#define RF_OPMODE_SLEEP                             0x00
-#define RF_OPMODE_STANDBY                           0x01  // Default
+
+#define RF_OPMODE_SLEEP                             0x00  // switch LoRa <-> FSK only in SLEEP mode
+#define RF_OPMODE_STANDBY                           0x01  //
 #define RF_OPMODE_SYNTHESIZER_TX                    0x02
 #define RF_OPMODE_TRANSMITTER                       0x03
 #define RF_OPMODE_SYNTHESIZER_RX                    0x04
 #define RF_OPMODE_RECEIVER                          0x05
+
+#define RF_OPMODE_LORA                              0x80  // LoRa mode, can change only in SLEEP mode
+
+#define RF_OPMODE_LORA_SLEEP                        0x80  // switch LoRa <-> FSK only in SLEEP mode
+#define RF_OPMODE_LORA_STANDBY                      0x81  //
+#define RF_OPMODE_LORA_TX_SYNTH                     0x82
+#define RF_OPMODE_LORA_TX                           0x83
+#define RF_OPMODE_LORA_RX_SYNTH                     0x84
+#define RF_OPMODE_LORA_RX_CONT                      0x85  //
+#define RF_OPMODE_LORA_RX_SINGLE                    0x86  //
+#define RF_OPMODE_LORA_CAD                          0x87  // probe if another device transmit
 
 /*!
  * RegBitRate ( bits/sec )
@@ -961,13 +1000,9 @@ Maintainer: Miguel Luis and Gregory Cristian
 #define RF_IMAGECAL_TEMPMONITOR_ON                  0x00 // Default
 #define RF_IMAGECAL_TEMPMONITOR_OFF                 0x01
 
-/*!
- * RegTemp ( Read Only )
- */
+// RegTemp ( Read Only )
 
-/*!
- * RegLowBat
- */
+// RegLowBat
 #define RF_LOWBAT_MASK                              0xF7
 #define RF_LOWBAT_ON                                0x08
 #define RF_LOWBAT_OFF                               0x00  // Default
@@ -982,47 +1017,27 @@ Maintainer: Miguel Luis and Gregory Cristian
 #define RF_LOWBAT_TRIM_2116                         0x06
 #define RF_LOWBAT_TRIM_2185                         0x07
 
-/*!
- * RegIrqFlags1
- */
+// RegIrqFlags1
 #define RF_IRQFLAGS1_MODEREADY                      0x80
-
 #define RF_IRQFLAGS1_RXREADY                        0x40
-
 #define RF_IRQFLAGS1_TXREADY                        0x20
-
 #define RF_IRQFLAGS1_PLLLOCK                        0x10
-
 #define RF_IRQFLAGS1_RSSI                           0x08
-
 #define RF_IRQFLAGS1_TIMEOUT                        0x04
-
 #define RF_IRQFLAGS1_PREAMBLEDETECT                 0x02
-
 #define RF_IRQFLAGS1_SYNCADDRESSMATCH               0x01
 
-/*!
- * RegIrqFlags2
- */
+// RegIrqFlags2
 #define RF_IRQFLAGS2_FIFOFULL                       0x80
-
 #define RF_IRQFLAGS2_FIFOEMPTY                      0x40
-
 #define RF_IRQFLAGS2_FIFOLEVEL                      0x20
-
 #define RF_IRQFLAGS2_FIFOOVERRUN                    0x10
-
 #define RF_IRQFLAGS2_PACKETSENT                     0x08
-
 #define RF_IRQFLAGS2_PAYLOADREADY                   0x04
-
 #define RF_IRQFLAGS2_CRCOK                          0x02
-
 #define RF_IRQFLAGS2_LOWBAT                         0x01
 
-/*!
- * RegDioMapping1
- */
+// RegDioMapping1
 #define RF_DIOMAPPING1_DIO0_MASK                    0x3F
 #define RF_DIOMAPPING1_DIO0_00                      0x00  // Default
 #define RF_DIOMAPPING1_DIO0_01                      0x40
@@ -1047,9 +1062,7 @@ Maintainer: Miguel Luis and Gregory Cristian
 #define RF_DIOMAPPING1_DIO3_10                      0x02
 #define RF_DIOMAPPING1_DIO3_11                      0x03
 
-/*!
- * RegDioMapping2
- */
+// RegDioMapping2
 #define RF_DIOMAPPING2_DIO4_MASK                    0x3F
 #define RF_DIOMAPPING2_DIO4_00                      0x00  // Default
 #define RF_DIOMAPPING2_DIO4_01                      0x40
@@ -1124,6 +1137,8 @@ Maintainer: Miguel Luis and Gregory Cristian
 #define RF_PLL_BANDWIDTH_150                        0x40
 #define RF_PLL_BANDWIDTH_225                        0x80
 #define RF_PLL_BANDWIDTH_300                        0xC0  // Default
+
+
 
 #endif // __SX1276_H__
 

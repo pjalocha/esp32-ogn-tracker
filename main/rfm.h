@@ -5,7 +5,7 @@
 
 // -----------------------------------------------------------------------------------------------------------------------
 
-#include "config.h"
+// #include "config.h"
 #include "ogn.h"
 
 class RFM_RxPktData                  // packet received by the RF chip
@@ -226,11 +226,11 @@ class RFM_TRX
    static uint16_t SwapBytes(uint16_t Word) { return (Word>>8) | (Word<<8); }
 
    uint8_t WriteByte(uint8_t Byte, uint8_t Addr=0) // write Byte
-   { // printf("WriteByte(0x%02X, 0x%02X)\n", Byte, Addr);
+   { // printf("WriteByte(0x%02X => [0x%02X])\n", Byte, Addr);
      uint8_t *Ret = Block_Write(&Byte, 1, Addr); return *Ret; }
 
    void WriteWord(uint16_t Word, uint8_t Addr=0) // write Word => two bytes
-   { // printf("WriteWord(0x%04X, 0x%02X)\n", Word, Addr);
+   { // printf("WriteWord(0x%04X => [0x%02X])\n", Word, Addr);
      uint16_t Swapped = SwapBytes(Word); Block_Write((uint8_t *)&Swapped, 2, Addr); }
 
    uint8_t ReadByte (uint8_t Addr=0)
@@ -255,7 +255,10 @@ class RFM_TRX
      Buff[3] =        0;
      Block_Write(Buff, 3, Addr); }
 
-   void WritePacket(const uint8_t *Data, uint8_t Len=26)         // write the packet data (26 bytes)
+   void WriteFIFO(const uint8_t *Data, uint8_t Len)
+   { Block_Write(Data, Len, REG_FIFO); }
+
+   void WritePacketOGN(const uint8_t *Data, uint8_t Len=26)         // write the packet data (26 bytes)
    { uint8_t Packet[2*Len];
      uint8_t PktIdx=0;
      for(uint8_t Idx=0; Idx<Len; Idx++)
@@ -266,7 +269,10 @@ class RFM_TRX
      Block_Write(Packet, 2*Len, REG_FIFO);
    }
 
-   void ReadPacket(uint8_t *Data, uint8_t *Err, uint8_t Len=26)             // read packet data from FIFO
+   uint8_t *ReadFIFO(uint8_t Len)
+   { return Block_Read(Len, REG_FIFO); }
+
+   void ReadPacketOGN(uint8_t *Data, uint8_t *Err, uint8_t Len=26)             // read packet data from FIFO
    { uint8_t *Packet = Block_Read(2*Len, REG_FIFO);                         // read 2x26 bytes from the RF chip RxFIFO
      uint8_t PktIdx=0;
      for(uint8_t Idx=0; Idx<Len; Idx++)                                     // loop over packet bytes
@@ -330,7 +336,15 @@ class RFM_TRX
      Deselect();
      return Old; }                                               // return the previously set frequency
 
-   void WritePacket(const uint8_t *Data, uint8_t Len=26) const   // write the packet data (26 bytes)
+   void WriteFIFO(const uint8_t *Data, uint8_t Len)
+   { const uint8_t Addr=REG_FIFO;                                // write to FIFO
+     Select();
+     TransferByte(Addr | 0x80);
+     for(uint8_t Idx=0; Idx<Len; Idx++)
+       TransferByte(Data[Idx]);
+     Deselect(); }
+
+   void WritePacketOGN(const uint8_t *Data, uint8_t Len=26) const   // write the packet data (26 bytes)
    { const uint8_t Addr=REG_FIFO;                                // write to FIFO
      Select();
      TransferByte(Addr | 0x80);
@@ -339,10 +353,9 @@ class RFM_TRX
        TransferByte(ManchesterEncode[Byte>>4]);                  // software manchester encode every byte
        TransferByte(ManchesterEncode[Byte&0x0F]);
      }
-     Deselect();
-   }
+     Deselect(); }
 
-   void ReadPacket(uint8_t *Data, uint8_t *Err, uint8_t Len=26) const       // read packet data from FIFO
+   void ReadPacketOGN(uint8_t *Data, uint8_t *Err, uint8_t Len=26) const       // read packet data from FIFO
    { const uint8_t Addr=REG_FIFO;
      Select();                                                              // select the RF chip: start SPI transfer
      TransferByte(Addr);                                                    // trasnfer the address/read: FIFO
@@ -356,8 +369,7 @@ class RFM_TRX
        Data[Idx]=(ByteH<<4) | ByteL;
        Err [Idx]=(ErrH <<4) | ErrL ;
      }
-     Deselect();                                                            // de-select RF chip: end of SPI transfer
-   }
+     Deselect(); }                                                          // de-select RF chip: end of SPI transfer
 
 #endif // USE_BLOCK_SPI
 
@@ -423,7 +435,7 @@ class RFM_TRX
 
    void WriteTxPowerMin(void) { WriteTxPower_W(-18); } // set minimal Tx power and setup for reception
 
-   int Configure(int16_t Channel, const uint8_t *Sync, bool PW=0)
+   int ConfigureOGN(int16_t Channel, const uint8_t *Sync, bool PW=0)
    { WriteMode(RF_OPMODE_STANDBY);          // mode = STDBY
      ClearIrqFlags();
      WriteByte(  0x02, REG_DATAMODUL);      // [0x00] Packet mode, FSK, 0x02: BT=0.5, 0x01: BT=1.0, 0x03: BT=0.3
@@ -450,42 +462,6 @@ class RFM_TRX
      WriteByte(  0x00, REG_AFCCTRL);        // [0x00] 0x20 = AfcLowBetaOn=1 -> page 64 -> page 33
      WriteByte(   +10, REG_TESTAFC);        // [0x00] [488Hz] if AfcLowBetaOn
      return 0; }
-
-   void PrintReg(void (*CONS_UART_Write)(char))
-   { Format_String(CONS_UART_Write, "RFM69 Mode:");
-     uint8_t RxMode=ReadMode();
-     Format_Hex(CONS_UART_Write, RxMode);
-     CONS_UART_Write(' '); CONS_UART_Write('0'+DIO0_isOn());
-     Format_String(CONS_UART_Write, " IRQ:");
-     Format_Hex(CONS_UART_Write, ReadWord(REG_IRQFLAGS1));
-     Format_String(CONS_UART_Write, " Pre:");
-     Format_Hex(CONS_UART_Write, ReadWord(REG_PREAMBLEMSB));
-     Format_String(CONS_UART_Write, " SYNC:");
-     Format_Hex(CONS_UART_Write, ReadByte(REG_SYNCCONFIG));
-     CONS_UART_Write('/');
-     for(uint8_t Idx=0; Idx<8; Idx++)
-       Format_Hex(CONS_UART_Write, ReadByte(REG_SYNCVALUE1+Idx));
-     Format_String(CONS_UART_Write, " FREQ:");
-     Format_Hex(CONS_UART_Write, ReadByte(REG_FRFMSB));
-     Format_Hex(CONS_UART_Write, ReadByte(REG_FRFMID));
-     Format_Hex(CONS_UART_Write, ReadByte(REG_FRFLSB));
-     Format_String(CONS_UART_Write, " RATE:");
-     Format_Hex(CONS_UART_Write, ReadWord(REG_BITRATEMSB));
-     Format_String(CONS_UART_Write, " FDEV:");
-     Format_Hex(CONS_UART_Write, ReadWord(REG_FDEVMSB));
-     Format_String(CONS_UART_Write, " DIO:");
-     Format_Hex(CONS_UART_Write, ReadWord(REG_DIOMAPPING1));
-     Format_String(CONS_UART_Write, " CFG:");
-     Format_Hex(CONS_UART_Write, ReadByte(REG_PACKETCONFIG1));
-     Format_Hex(CONS_UART_Write, ReadByte(REG_PACKETCONFIG2));
-     Format_Hex(CONS_UART_Write, ReadByte(REG_FIFOTHRESH));
-     Format_Hex(CONS_UART_Write, ReadByte(REG_PAYLOADLENGTH));
-     Format_Hex(CONS_UART_Write, ReadByte(REG_RXBW));
-     Format_Hex(CONS_UART_Write, ReadByte(REG_RSSICONFIG));
-     Format_String(CONS_UART_Write, " PA:");
-     Format_Hex(CONS_UART_Write, ReadByte(REG_PARAMP));
-     Format_Hex(CONS_UART_Write, ReadByte(REG_PALEVEL));
-     Format_String(CONS_UART_Write, "\n"); }
 #endif
 
 // #ifdef WITH_RFM95
@@ -516,13 +492,63 @@ class RFM_TRX
 
    void WriteTxPowerMin(void) { WriteTxPower(0); }
 
-   int Configure(int16_t Channel, const uint8_t *Sync, bool PW=0)
-   { WriteMode(RF_OPMODE_STANDBY);              // mode: STDBY, modulation: FSK, no LoRa
+   int SetLoRa(void)                            // switch to LoRa: has to go througth the SLEEP mode
+   { WriteMode(RF_OPMODE_LORA_SLEEP);
+     WriteMode(RF_OPMODE_LORA_SLEEP);
+     return 0; }
+
+   int SetFSK(void)                             // switch to FSK: has to go through the SLEEP mode
+   { WriteMode(RF_OPMODE_SLEEP);
+     WriteMode(RF_OPMODE_SLEEP);
+     return 0; }
+
+   int ConfigureFNT(uint8_t CR=1)                 // configure for FANET/LoRa
+   { // WriteMode(RF_OPMODE_LORA_STANDBY);
+     WriteTxPower(0);
+     WriteByte(0x00,   REG_LORA_HOPPING_PERIOD);  // disable fast-hopping
+     WriteByte(0xF1,   REG_LORA_SYNC);            // SYNC for FANET
+     WriteWord(0x0005, REG_LORA_PREAMBLE_MSB);    // [symbols] minimal preamble
+     WriteByte(0x80 | (CR<<1), REG_LORA_MODEM_CONFIG1);   // 0x88 = 250kHz, 4+4, explicit header
+     WriteByte(0x74,   REG_LORA_MODEM_CONFIG2);   // 0x74 = SF7, CRC on
+     WriteByte(0xC3,   REG_LORA_DETECT_OPTIMIZE);
+     WriteByte(0x0A,   REG_LORA_DETECT_THRESHOLD);
+     WriteByte(0x04,   REG_LORA_MODEM_CONFIG3);   // LNA auto-gain ?
+     WriteByte(0x64,   REG_LORA_SYMBOL_TIMEOUT);  // 0x64 = default or more ?
+     WriteByte(  40,   REG_LORA_PACKET_MAXLEN);   // [bytes] enough ?
+     WriteByte(0x00,   REG_LORA_RX_ADDR);
+     setChannel(0);                               // operating channel
+     return 0; }
+
+   int SendPacketFNT(const uint8_t *Data, uint8_t Len)
+   { // WriteMode(RF_OPMODE_LORA_STANDBY);
+     // check if FIFO empty, packets could be received ?
+     WriteByte(0x00, REG_LORA_FIFO_ADDR);   // tell write to FIFO at address 0x00
+     WriteFIFO(Data, Len);                  // write the packet data
+     WriteByte(0x00, REG_LORA_TX_ADDR);     // tell packet address in the FIFO
+     WriteByte(Len, REG_LORA_PACKET_LEN);   // tell packet length
+     WriteMode(RF_OPMODE_LORA_TX);          // enter transmission mode
+     return 0; }                            // afterwards just wait for TX mode to stop
+
+   int ReceivePacketFNT(uint8_t *Data, uint8_t MaxLen)
+   { uint8_t Len=ReadByte(REG_LORA_PACKET_BYTES);    // packet length
+     uint8_t Ptr=ReadByte(REG_LORA_PACKET_ADDR);     // packet address in FIFO
+     WriteByte(Ptr, REG_LORA_FIFO_ADDR);             // ask to read FIFO from this address
+     uint8_t Stat = ReadByte(REG_LORA_MODEM_STATUS); //
+      int8_t SNR  = ReadByte(REG_LORA_PACKET_SNR);   // [0.25dB] read SNR
+      int8_t RSSI  = ReadByte(REG_LORA_PACKET_RSSI); // [dBm] read RSSI
+     uint8_t *ReadData = ReadFIFO(Len);              // read data from FIFO
+     // printf("ReceivePacketFNT( , %d) => %d [%02X] %02X %3.1fdB %+ddBm %02X%02X%02X%02X\n",
+     //      MaxLen, Len, Ptr, Stat, 0.25*SNR, -157+RSSI,
+     //      ReadData[0], ReadData[1], ReadData[2], ReadData[3]);
+     return Len; }
+
+   int ConfigureOGN(int16_t Channel, const uint8_t *Sync, bool PW=0)
+   { // WriteMode(RF_OPMODE_STANDBY);              // mode: STDBY, modulation: FSK, no LoRa
      // usleep(1000);
      WriteTxPower(0);
      ClearIrqFlags();
      WriteWord(PW?0x0341:0x0140, REG_BITRATEMSB); // bit rate = 100kbps (32MHz/100000) (0x0341 = 38.415kbps)
-     WriteByte(0x00, REG_BITRATEFRAC);          //
+     WriteByte(0x00, REG_BITRATEFRAC);          // one should set exactly 38.400kbps for PW
      // ReadWord(REG_BITRATEMSB);
      WriteWord(PW?0x013B:0x0333, REG_FDEVMSB);  // FSK deviation = +/-50kHz [32MHz/(1<<19)] (0x013B = 19.226kHz)
      // ReadWord(REG_FDEVMSB);

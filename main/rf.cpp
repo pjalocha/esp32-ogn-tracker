@@ -30,6 +30,11 @@ static uint32_t  RF_SlotTime;               // [sec] UTC time which belongs to t
        FIFO<RFM_RxPktData, 16> RF_RxFIFO;   // buffer for received packets
        FIFO<OGN_TxPacket<OGN_Packet>, 4> RF_TxFIFO;   // buffer for transmitted packets
 
+#ifdef WITH_FANET
+       FIFO<FANET_RxPacket, 8> FNT_RxFIFO;
+       FIFO<FANET_Packet, 4> FNT_TxFIFO;
+#endif
+
        uint16_t TX_Credit  =0;              // counts transmitted packets vs. time to avoid using more than 1% of the time
 
        uint8_t RX_OGN_Packets=0;            // [packets] counts received packets
@@ -76,7 +81,7 @@ static uint8_t ReceivePacket(void)                              // see if a pack
   RxPkt->msTime = TimeSync_msTime(); if(RxPkt->msTime<200) RxPkt->msTime+=1000;
   RxPkt->Channel = RX_Channel;                                  // store reception channel
   RxPkt->RSSI    = RxRSSI;                                      // store signal strength
-  TRX.ReadPacket(RxPkt->Data, RxPkt->Err);                      // get the packet data from the FIFO
+  TRX.ReadPacketOGN(RxPkt->Data, RxPkt->Err);                      // get the packet data from the FIFO
   // PktData.Print();                                           // for debug
 
   RF_RxFIFO.Write();                                            // complete the write to the receiver FIFO
@@ -120,7 +125,7 @@ static uint8_t Transmit(uint8_t TxChan, const uint8_t *PacketByte, uint8_t Thres
   SetTxChannel(TxChan);
 
   TRX.ClearIrqFlags();
-  TRX.WritePacket(PacketByte);                                   // write packet into FIFO
+  TRX.WritePacketOGN(PacketByte);                                   // write packet into FIFO
   TRX.WriteMode(RF_OPMODE_TRANSMITTER);                          // transmit
   vTaskDelay(5);                                                 // wait 5ms
   uint8_t Break=0;
@@ -169,10 +174,10 @@ static uint8_t StartRFchip(void)
   TRX.PrintReg(CONS_UART_Write);
   xSemaphoreGive(CONS_Mutex);
 #endif
-#ifdef WITH_RFM95
-  TRX.WriteDefaultReg();
-#endif
-  TRX.Configure(0, OGN_SYNC);                                // setup RF chip parameters and set to channel #0
+// #ifdef WITH_RFM95
+//   TRX.WriteDefaultReg();
+// #endif
+  TRX.ConfigureOGN(0, OGN_SYNC);                                // setup RF chip parameters and set to channel #0
   TRX.WriteMode(RF_OPMODE_STANDBY);                          // set RF chip mode to STANDBY
   uint8_t Version = TRX.ReadVersion();
 #ifdef DEBUG_PRINT
@@ -196,6 +201,10 @@ extern "C"
 {
   RF_RxFIFO.Clear();                      // clear receive/transmit packet FIFO's
   RF_TxFIFO.Clear();
+#ifdef WITH_FANET
+  FNT_RxFIFO.Clear();
+  FNT_TxFIFO.Clear();
+#endif
 
 #ifdef USE_BLOCK_SPI
   TRX.TransferBlock = RFM_TransferBlock;
@@ -314,8 +323,8 @@ extern "C"
 
     const uint8_t *TxPktData0=0;
     const uint8_t *TxPktData1=0;
-    const OGN_TxPacket<OGN_Packet> *TxPkt0 = RF_TxFIFO.getRead(0);                         // get 1st packet from TxFIFO
-    const OGN_TxPacket<OGN_Packet> *TxPkt1 = RF_TxFIFO.getRead(1);                         // get 2nd packet from TxFIFO
+    const OGN_TxPacket<OGN_Packet> *TxPkt0 = RF_TxFIFO.getRead(0);             // get 1st packet from TxFIFO
+    const OGN_TxPacket<OGN_Packet> *TxPkt1 = RF_TxFIFO.getRead(1);             // get 2nd packet from TxFIFO
     if(TxPkt0) TxPktData0=TxPkt0->Byte();                                      // if 1st is not NULL then get its data
     if(TxPkt1) TxPktData1=TxPkt1->Byte();                                      // if 2nd if not NULL then get its data
           else TxPktData1=TxPktData0;                                          // but if NULL then take copy of the 1st packet
@@ -329,6 +338,47 @@ extern "C"
     TRX.WriteMode(RF_OPMODE_STANDBY);                                          // switch to receive mode
     TxChan = RF_FreqPlan.getChannel(RF_SlotTime, 1, 1);                        // transmit channel
     RX_Channel = TxChan;
+
+#ifdef WITH_FANET
+    const FANET_Packet *FNTpkt = FNT_TxFIFO.getRead(0);                        // read the packet from the FANET transmitt queue
+    if(FNTpkt)                                                                 // was there any ?
+    { TRX.SetLoRa();                                                           // switch TRX to LoRa
+      TRX.ConfigureFNT();                                                      // configure for FANET
+      TRX.WriteMode(RF_OPMODE_LORA_RX_CONT);
+      vTaskDelay(2);
+      for(uint8_t Wait=50; Wait; Wait--)
+      { vTaskDelay(1);
+        uint8_t Stat = TRX.ReadByte(REG_LORA_MODEM_STATUS);
+        if((Stat&0x0B)==0) break; }
+      TRX.WriteMode(RF_OPMODE_LORA_STANDBY);
+      TRX.SendPacketFNT(FNTpkt->Byte, FNTpkt->Len);
+      FNT_TxFIFO.Read();                                                        // remove the last packet from the queue
+/*
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, "TRX: ");
+      Format_Hex(CONS_UART_Write, TRX.ReadMode());
+      CONS_UART_Write(':');
+      Format_Hex(CONS_UART_Write, TRX.ReadByte(REG_LORA_IRQ_FLAGS));
+      CONS_UART_Write(' ');
+      Format_Hex(CONS_UART_Write, TRX.ReadByte(REG_LORA_PREAMBLE_LSB));
+      CONS_UART_Write(':');
+      Format_Hex(CONS_UART_Write, TRX.ReadByte(REG_LORA_SYNC));
+      CONS_UART_Write(' ');
+      Format_Hex(CONS_UART_Write, TRX.ReadByte(REG_LORA_MODEM_CONFIG1));
+      CONS_UART_Write(':');
+      Format_Hex(CONS_UART_Write, TRX.ReadByte(REG_LORA_MODEM_CONFIG2));
+      Format_String(CONS_UART_Write, "\n");
+      xSemaphoreGive(CONS_Mutex);
+*/
+      vTaskDelay(8);
+      for( uint8_t Wait=50; Wait; Wait--)
+      { vTaskDelay(1);
+        uint8_t Mode=TRX.ReadMode();
+        if(Mode!=RF_OPMODE_LORA_TX) break; }
+      TRX.SetFSK();
+      TRX.ConfigureOGN(0, OGN_SYNC);
+    }
+#endif
 
     SetRxChannel();
     TRX.WriteMode(RF_OPMODE_RECEIVER);                                         // switch to receive mode

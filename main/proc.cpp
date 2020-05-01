@@ -21,6 +21,12 @@
 #include "sound.h"
 #endif
 
+#ifdef WITH_GDL90
+#include "gdl90.h"
+GDL90_HEARTBEAT GDL_HEARTBEAT;
+GDL90_REPORT GDL_REPORT;
+#endif
+
 #ifdef WITH_LOOKOUT                   // traffic awareness and warnings
 #include "lookout.h"
 LookOut Look;
@@ -292,6 +298,7 @@ static void ReadStatus(OGN_Packet &Packet)
 // static void ReadStatus(OGN_TxPacket<OGN_Packet> &StatPacket)
 // { ReadStatus(StatPacket.Packet); }
 
+#ifndef WITH_LOOKOUT                                    // with LookOut the PFLAU is produced inside LookOut
 static uint8_t WritePFLAU(char *NMEA, uint8_t GPS=1)    // produce the (mostly dummy) PFLAU to satisfy XCsoar and LK8000
 { uint8_t Len=0;
   Len+=Format_String(NMEA+Len, "$PFLAU,");
@@ -312,6 +319,7 @@ static uint8_t WritePFLAU(char *NMEA, uint8_t GPS=1)    // produce the (mostly d
   Len+=NMEA_AppendCheckCRNL(NMEA, Len);
   NMEA[Len]=0;
   return Len; }
+#endif
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
 
@@ -339,6 +347,13 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
 #ifdef WITH_LOOKOUT
     const LookOut_Target *Tgt=Look.ProcessTarget(RxPacket->Packet);                   // process the received target postion
     if(Tgt) Warn=Tgt->WarnLevel;                                                      // remember warning level of this target
+#ifdef WITH_GDL90
+    if(Tgt)
+    { Look.Write(GDL_REPORT, Tgt);                                                    // produce GDL90 report for this target
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      GDL_REPORT.Send(CONS_UART_Write, 20);                                           // transmit as traffic position report (not own-ship)
+      xSemaphoreGive(CONS_Mutex); }
+#endif
 #ifdef WITH_BEEPER
     if(KNOB_Tick>12) Play(Play_Vol_1 | Play_Oct_2 | (7+2*Warn), 3+16*Warn);
 #endif
@@ -467,6 +482,7 @@ void vTaskPROC(void* pvParameters)
 #else
     GPS_Position *Position = GPS_getPosition(BestIdx, BestResid, SlotTime%60, 0); // get GPS position which isReady
 #endif
+    // GPS_Position *Position = GPS_getPosition();
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
     Format_String(CONS_UART_Write, "getPos(");
@@ -478,7 +494,27 @@ void vTaskPROC(void* pvParameters)
     Format_String(CONS_UART_Write, "s\n");
     xSemaphoreGive(CONS_Mutex);
 #endif
-    // GPS_Position *Position = GPS_getPosition();
+#ifdef WITH_GDL90
+    GDL_HEARTBEAT.Clear();
+    GDL_HEARTBEAT.Initialized=1;
+    if(Position)
+    { if(Position->isTimeValid())
+      { GDL_HEARTBEAT.UTCvalid=1;
+        GDL_HEARTBEAT.setTimeStamp(SlotTime);
+        if(Position->isValid()) GDL_HEARTBEAT.PosValid = 1; }
+    }
+    GDL_REPORT.Clear();
+    GDL_REPORT.setAddress(Parameters.Address);
+    GDL_REPORT.setAddrType(Parameters.AddrType!=1);
+    GDL_REPORT.setAcftType(Parameters.AcftType);
+    if(Parameters.Reg[0]) GDL_REPORT.setAcftCall(Parameters.Reg);
+                     // else GDL_REPORT.setAcftCall();
+    if(Position && Position->isValid()) Position->Encode(GDL_REPORT);
+    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    GDL_HEARTBEAT.Send(CONS_UART_Write);
+    GDL_REPORT.Send(CONS_UART_Write);
+    xSemaphoreGive(CONS_Mutex);
+#endif
     if(Position) Position->EncodeStatus(StatPacket.Packet);             // encode GPS altitude and pressure/temperature/humidity
       else { StatPacket.Packet.Status.FixQuality=0; StatPacket.Packet.Status.Satellites=0; } // or lack of the GPS lock
     { uint8_t SatSNR = (GPS_SatSNR+2)/4;
@@ -521,6 +557,7 @@ void vTaskPROC(void* pvParameters)
 #endif
       OGN_TxPacket<OGN_Packet> *TxPacket = RF_TxFIFO.getWrite();
       TxPacket->Packet = PosPacket.Packet;                             // copy the position packet to the TxFIFO
+
 #ifdef WITH_ENCRYPT
       if(Parameters.Encrypt) TxPacket->Packet.Encrypt(Parameters.EncryptKey); // if encryption is requested then encrypt
                         else TxPacket->Packet.Whiten();                       // otherwise only whiten
@@ -542,6 +579,13 @@ void vTaskPROC(void* pvParameters)
       if( (AverSpeed>10) || ((RX_Random&0x3)==0) )                        // send only some positions if the speed is less than 1m/s
         RF_TxFIFO.Write();                                                // complete the write into the TxFIFO
       Position->Sent=1;
+#ifdef WITH_FANET
+    if( (SlotTime&0x07)==4 )                                              // every 8sec
+    { FANET_Packet *FNTpkt = FNT_TxFIFO.getWrite();
+      FNTpkt->setAddress(Parameters.Address);
+      Position->EncodeAirPos(*FNTpkt, Parameters.AcftType, !Parameters.Stealth);
+      FNT_TxFIFO.Write(); }
+#endif
 #ifdef WITH_LOOKOUT
       const LookOut_Target *Tgt=Look.ProcessOwn(PosPacket.Packet);        // process own position, get the most dangerous target
 #ifdef WITH_PFLAA
@@ -583,6 +627,12 @@ void vTaskPROC(void* pvParameters)
         Sound_TrafficWarn(Tgt);
 #endif
       }
+#else  // WITH_LOOKOUT
+      if(Parameters.Verbose)
+      { uint8_t Len=Look.WritePFLAU(Line);                                // $PFLAU, overall status
+        xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+        Format_String(CONS_UART_Write, Line, 0, Len);
+        xSemaphoreGive(CONS_Mutex); }
 #endif // WITH_LOOKOUT
 #ifdef WITH_FLASHLOG
       bool Written=FlashLog_Process(PosPacket.Packet, PosTime);
@@ -624,6 +674,15 @@ void vTaskPROC(void* pvParameters)
     Format_String(CONS_UART_Write, Line);
     xSemaphoreGive(CONS_Mutex);
 #endif
+
+#ifdef WITH_FANET
+    if(Parameters.Pilot[0] && (SlotTime&0xFF)==0 )              // every 256sec
+    { FANET_Packet *FNTpkt = FNT_TxFIFO.getWrite();
+      FNTpkt->setAddress(Parameters.Address);
+      FNTpkt->setName(Parameters.Pilot);
+      FNT_TxFIFO.Write(); }
+#endif
+
     StatPacket.Packet.HeaderWord=0;
     StatPacket.Packet.Header.Address    = Parameters.Address;    // set address
     StatPacket.Packet.Header.AddrType   = Parameters.AddrType;   // address-type
