@@ -339,7 +339,7 @@ extern "C"
     TxChan = RF_FreqPlan.getChannel(RF_SlotTime, 1, 1);                        // transmit channel
     RX_Channel = TxChan;
 
-#ifdef WITH_FANET
+#if defined(WITH_FANET) && defined(WITH_RFM95)
     const FANET_Packet *FNTpkt = FNT_TxFIFO.getRead(0);                        // read the packet from the FANET transmitt queue
     if(FNTpkt)                                                                 // was there any ?
     { TRX.SetLoRa();                                                           // switch TRX to LoRa

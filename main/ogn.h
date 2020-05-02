@@ -1102,13 +1102,15 @@ class GPS_Position
   int32_t getCordicLatitude (void) const { return ((int64_t)Latitude *83399993+(1<<21))>>22; }
   int32_t getCordicLongitude(void) const { return ((int64_t)Longitude*83399993+(1<<21))>>22; }
 
-  void EncodeAirPos(FANET_Packet &Packet, uint8_t AcftType=1, bool Track=1)
-  { int32_t Alt = Altitude; if(Alt<0) Alt=0; else Alt=(Alt+5)/10;
-    int32_t Lat = getCordicLatitude();                                     // Latitude:  [0.0001/60deg] => [cordic]
-    int32_t Lon = getCordicLongitude();                                    // Longitude: [0.0001/60deg] => [cordic]
+   void EncodeAirPos(FANET_Packet &Packet, uint8_t AcftType=1, bool Track=1)
+   { int32_t Alt = Altitude; if(Alt<0) Alt=0; else Alt=(Alt+5)/10;
+     int32_t Lat = getCordicLatitude();                                     // Latitude:  [0.0001/60deg] => [cordic]
+     int32_t Lon = getCordicLongitude();                                    // Longitude: [0.0001/60deg] => [cordic]
                              // other, glider, tow, heli, chute, drop, hang, para, powered, jet, UFO, balloon, air, UAV, ground, static
-    const uint8_t FNTtype[16] = { 0,     4,     5,   6,     1,     5,    2,   1,     5,      5,   0,    3,      5,   7,    0,     0  } ; // convert aircraft-type from OGN to FANET
-    Packet.setAirPos(FNTtype[AcftType&0x0F], Track, Lat, Lon, Alt, (((uint16_t)Heading<<4)+112)/225, Speed, ClimbRate); }
+     const uint8_t FNTtype[16] = { 0,     4,     5,   6,     1,     5,    2,   1,     5,      5,   0,    3,      5,   7,    0,     0  } ; // convert aircraft-type from OGN to FANET
+     Packet.setAirPos(FNTtype[AcftType&0x0F], Track, Lat, Lon, Alt, (((uint16_t)Heading<<4)+112)/225, Speed, ClimbRate);
+     if(hasBaro) { Packet.setQNE((StdAltitude+5)/10); }
+   }
 
    void Encode(GDL90_REPORT &Report)
    { Report.setAccuracy(9, 9);

@@ -7,8 +7,9 @@
 
 // #include "config.h"
 #include "ogn.h"
+#include "fanet.h"
 
-class RFM_RxPktData                  // packet received by the RF chip
+class RFM_RxPktData                 // OGN packet received by the RF chip
 { public:
    static const uint8_t Bytes=26;   // [bytes] number of bytes in the packet
    uint32_t Time;                   // [sec] Time slot
@@ -254,6 +255,11 @@ class RFM_TRX
      Buff[2] = Freq    ;
      Buff[3] =        0;
      Block_Write(Buff, 3, Addr); }
+
+   uint32_t ReadFreq(uint8_t Addr=REG_FRFMSB)
+   { uint8_t *Data = Block_Read(3, Addr);
+     uint32_t Freq=Data[0]; Freq<<=8; Freq|=Data[1]; Freq<<=8; Freq|=Data[2];
+     return Freq; }
 
    void WriteFIFO(const uint8_t *Data, uint8_t Len)
    { Block_Write(Data, Len, REG_FIFO); }
@@ -503,8 +509,7 @@ class RFM_TRX
      return 0; }
 
    int ConfigureFNT(uint8_t CR=1)                 // configure for FANET/LoRa
-   { // WriteMode(RF_OPMODE_LORA_STANDBY);
-     WriteTxPower(0);
+   { WriteTxPower(0);
      WriteByte(0x00,   REG_LORA_HOPPING_PERIOD);  // disable fast-hopping
      WriteByte(0xF1,   REG_LORA_SYNC);            // SYNC for FANET
      WriteWord(0x0005, REG_LORA_PREAMBLE_MSB);    // [symbols] minimal preamble
@@ -513,10 +518,12 @@ class RFM_TRX
      WriteByte(0xC3,   REG_LORA_DETECT_OPTIMIZE);
      WriteByte(0x0A,   REG_LORA_DETECT_THRESHOLD);
      WriteByte(0x04,   REG_LORA_MODEM_CONFIG3);   // LNA auto-gain ?
-     WriteByte(0x64,   REG_LORA_SYMBOL_TIMEOUT);  // 0x64 = default or more ?
-     WriteByte(  40,   REG_LORA_PACKET_MAXLEN);   // [bytes] enough ?
+     WriteByte(0xFF,   REG_LORA_SYMBOL_TIMEOUT);  // 0x64 = default or more ?
+     WriteByte(FANET_Packet::MaxBytes,   REG_LORA_PACKET_MAXLEN);   // [bytes] enough ?
      WriteByte(0x00,   REG_LORA_RX_ADDR);
      setChannel(0);                               // operating channel
+     WriteWord(0x0000, REG_DIOMAPPING1);    // 001122334455___D signals: 00=DIO0 11=DIO1 22=DIO2 33=DIO3 44=DIO4 55=DIO5 D=MapPreambleDetect
+                                            // DIO0: 00=RxDone, 01=TxDone, 10=CadDone
      return 0; }
 
    int SendPacketFNT(const uint8_t *Data, uint8_t Len)
@@ -529,17 +536,37 @@ class RFM_TRX
      WriteMode(RF_OPMODE_LORA_TX);          // enter transmission mode
      return 0; }                            // afterwards just wait for TX mode to stop
 
+   int ReceivePacketFNT(FANET_RxPacket &Packet)
+   { uint8_t Stat = ReadByte(REG_LORA_MODEM_STATUS);     // coding rate in three top bits
+     Packet.SNR   = ReadByte(REG_LORA_PACKET_SNR);       // [0.25dB] read SNR
+     Packet.RSSI = -157+ReadByte(REG_LORA_PACKET_RSSI);  // [dBm] read RSSI
+     int32_t FreqOfs = ReadFreq(REG_LORA_FREQ_ERR_MSB);  // (FreqOfs*1718+0x8000)>>16 [10Hz]
+     Packet.FreqOfs = (FreqOfs*1718+0x8000)>>16;         //  [10Hz]
+     if(FreqOfs&0x00080000) FreqOfs|=0xFFF00000;         // extend the sign bit
+                       else FreqOfs&=0x000FFFFF;
+     Packet.BitErr=0;
+     Packet.CodeErr=0;
+     int Len=ReceivePacketFNT(Packet.Byte, Packet.MaxBytes);
+     // printf("ReceivePacketFNT() => %d %02X %3.1fdB %+ddBm 0x%08X=%+6.3fkHz, %02X%02X%02X%02X\n",
+     //       Packet.Len, Stat, 0.25*Packet.SNR, Packet.RSSI, FreqOfs, 0.5*0x1000000/32e9*FreqOfs,
+     //       Packet.Byte[0], Packet.Byte[1], Packet.Byte[2], Packet.Byte[3]);
+     Packet.Len=Len; return Len; }
+
    int ReceivePacketFNT(uint8_t *Data, uint8_t MaxLen)
    { uint8_t Len=ReadByte(REG_LORA_PACKET_BYTES);    // packet length
      uint8_t Ptr=ReadByte(REG_LORA_PACKET_ADDR);     // packet address in FIFO
      WriteByte(Ptr, REG_LORA_FIFO_ADDR);             // ask to read FIFO from this address
-     uint8_t Stat = ReadByte(REG_LORA_MODEM_STATUS); //
-      int8_t SNR  = ReadByte(REG_LORA_PACKET_SNR);   // [0.25dB] read SNR
-      int8_t RSSI  = ReadByte(REG_LORA_PACKET_RSSI); // [dBm] read RSSI
+     // uint8_t Stat = ReadByte(REG_LORA_MODEM_STATUS); //
+     //  int8_t SNR  = ReadByte(REG_LORA_PACKET_SNR);   // [0.25dB] read SNR
+     //  int8_t RSSI = ReadByte(REG_LORA_PACKET_RSSI);  // [dBm] read RSSI
+     // int32_t FreqOfs = ReadFreq(REG_LORA_FREQ_ERR_MSB); // (FreqOfs*1718+0x8000)>>16 [10Hz]
+     // if(FreqOfs&0x00080000) FreqOfs|=0xFFF00000;     // extend the sign bit
+     //                   else FreqOfs&=0x000FFFFF;
      uint8_t *ReadData = ReadFIFO(Len);              // read data from FIFO
-     // printf("ReceivePacketFNT( , %d) => %d [%02X] %02X %3.1fdB %+ddBm %02X%02X%02X%02X\n",
-     //      MaxLen, Len, Ptr, Stat, 0.25*SNR, -157+RSSI,
-     //      ReadData[0], ReadData[1], ReadData[2], ReadData[3]);
+     memcpy(Data, ReadData, Len);
+     // printf("ReceivePacketFNT( , %d) => %d [%02X] %02X %3.1fdB %+ddBm 0x%08X=%+6.3fkHz, %02X%02X%02X%02X\n",
+     //       MaxLen, Len, Ptr, Stat, 0.25*SNR, -157+RSSI, FreqOfs, 0.5*0x1000000/32e9*FreqOfs,
+     //       ReadData[0], ReadData[1], ReadData[2], ReadData[3]);
      return Len; }
 
    int ConfigureOGN(int16_t Channel, const uint8_t *Sync, bool PW=0)

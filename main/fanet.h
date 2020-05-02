@@ -14,8 +14,14 @@
 
 class FANET_Packet
 { public:
-   uint8_t Len;
-   static const int MaxBytes = 32;
+   union
+   { uint8_t Flags;
+     struct
+     { uint8_t CR:3;  // Coding rate
+     } ;
+   } ;
+   uint8_t Len;       // [bytes] packet length
+   static const int MaxBytes = 40;
    uint8_t Byte[MaxBytes+2];
 
   public:
@@ -100,9 +106,14 @@ class FANET_Packet
   { uint16_t Press = Byte[1]; Press<<=8; Press|=Byte[0]; return Press+4300; }
 
   static int16_t getQNE(uint8_t Byte)                                  // [m] difference between pressure altitude and GPS altitude
-  { int16_t QNE = Byte&0x3F; if(Byte&0x40) QNE|=0xFFC0;
-    if(Byte&0x80) return QNE*2;
+  { int16_t QNE = Byte&0x7F; if(Byte&0x40) QNE|=0xFF80;
+    if(Byte&0x80) return QNE<<2;
     return QNE; }
+  static void setQNE(uint8_t *Byte, int16_t QNE)
+  { if(QNE>= 64 ) { if(QNE>  254 ) QNE=  254 ; Byte[0] = 0x80 |  ((QNE+2)>>2);       return; }
+    if(QNE<(-64)) { if(QNE<(-254)) QNE=(-254); Byte[0] = 0x80 | (((QNE+2)>>2)&0x7F); return; }
+    Byte[0] = QNE&0x7F; }
+
   static uint16_t getAltitude(const uint8_t *Byte)                     // [m]
   { uint16_t Alt = Byte[1]; Alt<<=8; Alt|=Byte[0]; Alt&=0x0FFF;
     if(Alt<0x800) return Alt;
@@ -115,7 +126,7 @@ class FANET_Packet
   void setAirPos(uint8_t AcftType, uint8_t Track, int32_t Lat, int32_t Lon, int16_t Alt, uint8_t Dir, uint16_t Speed, int16_t Climb)
   { setHeader(1);
     uint8_t Ofs=MsgOfs();
-    Len=15;
+    Len=Ofs+11;
     setLat(Byte+Ofs, Lat);         // [cordic]
     setLon(Byte+Ofs+3, Lon);       // [cordic]
     Byte[Ofs+7]=(AcftType<<4) | (Track<<7);
@@ -126,6 +137,12 @@ class FANET_Packet
     setClimb(Byte+Ofs+9, Climb);   // [0.1m/s]
     Byte[Ofs+10] = Dir; }          // [cordic]
 
+  void setQNE(int32_t StdAltitude) // [m] only for air-position
+  { uint8_t Ofs=MsgOfs();
+    int32_t Alt=getAltitude(Byte+Ofs+6);
+    if(Len<(Ofs+12)) Len=Ofs+12;
+    setQNE(Byte+Ofs+11, StdAltitude-Alt); }
+
   //                    [0..15]         [0..1]     [cordic]      [cordic]
   void setGndPos(uint8_t Status, uint8_t Track, int32_t Lat, int32_t Lon)
   { setHeader(7);
@@ -134,6 +151,26 @@ class FANET_Packet
     setLat(Byte+Ofs, Lat);
     setLon(Byte+Ofs+3, Lon);
     Byte[Ofs+6] = (Status<<4) | Track; }
+
+/*
+ * $FNNGB,manufacturer(hex),id(hex),name(up to 32bytes),type/status,latitude,longitude,altitude,climb,speed,heading*checksum
+ * manufacturer:	1-2 chars hex
+ * id:			1-4 chars hex
+ * name:		string up to 32 chars
+ * type/status:		while airborne: aircraft type: 0-7 (3D tracking), else: status: 0-15 (2D tracking) +10 -> 10-25
+ * latitude:		%.5f in degree
+ * longitude:		%.5f in degree
+ * altitude:		%.f in meter, -1000 for ground
+ * climb:		%.1f in m/s
+ * speed:		%.1f in km/h
+ * heading:		%.f in degree
+ *
+ * for the types please see: https://github.com/3s1d/fanet-stm32/blob/master/Src/fanet/radio/protocol.txt
+ *
+ */
+
+  uint8_t WriteFNNGB(char *Out)
+  { return 0; }
 
   void Print(char *Name=0) const
   { if(Name) printf("%s ", Name);
@@ -176,6 +213,9 @@ class FANET_Packet
       printf(" [%+9.5f,%+10.5f] %dm %3.1fkm/h %03.0fdeg %+4.1fm/s a%X%c",
           FloatCoord(Lat), FloatCoord(Lon), Alt, 0.5*Speed, (180.0/128)*Byte[Idx+10], 0.1*Climb,
           AcftType&0x07, AcftType&0x08?'T':'H');
+      if((Idx+11)<Len)
+      { int16_t QNE = getQNE(Byte[Idx+11]);
+        printf(" %+dm", QNE); }
       printf("\n"); return; }
     if(Type()==7)                                                    // ground position
     { uint8_t Idx=MsgOfs(); uint8_t Status=Byte[Idx+6];
@@ -242,14 +282,18 @@ class FANET_Packet
 
 class FANET_RxPacket: public FANET_Packet
 { public:
-   double Time;             // reception time
+   uint32_t  sTime;         // [ s] reception time
+   uint16_t msTime;         // [ms]
    int16_t FreqOfs;         // [ 10Hz]
-   uint8_t SNR;             // [0.25dB]
+    int8_t SNR;             // [0.25dB]
+    int8_t RSSI;            // [dBm]
    uint8_t BitErr;          // number of bit errors
    uint8_t CodeErr;         // number of block errors
 
   public:
-   uint32_t SlotTime(void) const { return floor(Time-0.3); }
+   void setTime(double RxTime) { sTime=floor(RxTime); msTime=floor(1000.0*(RxTime-sTime)); }
+   double getTime(void) const { return (double)sTime+0.001*msTime; }
+   uint32_t SlotTime(void) const { uint32_t Slot=sTime; if(msTime<=300) Slot--; return Slot; }
 
    void Print(char *Name=0) const
    { char HHMMSS[8];
@@ -419,7 +463,7 @@ class FANET_RxPacket: public FANET_Packet
 
 class FANET_Name
 { public:
-   static const int MaxSize = 40;
+   static const int MaxSize = 32;
    uint32_t Time;
    // uint8_t Type;
    char Name[MaxSize];
