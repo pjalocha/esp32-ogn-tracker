@@ -537,20 +537,28 @@ class RFM_TRX
      return 0; }                            // afterwards just wait for TX mode to stop
 
    int ReceivePacketFNT(FANET_RxPacket &Packet)
-   { uint8_t Stat = ReadByte(REG_LORA_MODEM_STATUS);     // coding rate in three top bits
+   { uint8_t Flags = ReadByte(REG_LORA_IRQ_FLAGS);
+     if((Flags&LORA_FLAG_RX_DONE)==0) return 0;
+     uint8_t Stat = ReadByte(REG_LORA_MODEM_STATUS);     // coding rate in three top bits
+     uint8_t HopChan = ReadByte(REG_LORA_HOP_CHANNEL);
+     Packet.CR    = Stat>>5;                             // coding rate used for this packet
+     Packet.hasCRC = HopChan&0x40;                       // did this packet have CRC ? (flags should be checked for CRC error)
+     Packet.badCRC = Flags&LORA_FLAG_BAD_CRC;
      Packet.SNR   = ReadByte(REG_LORA_PACKET_SNR);       // [0.25dB] read SNR
      Packet.RSSI = -157+ReadByte(REG_LORA_PACKET_RSSI);  // [dBm] read RSSI
-     int32_t FreqOfs = ReadFreq(REG_LORA_FREQ_ERR_MSB);  // (FreqOfs*1718+0x8000)>>16 [10Hz]
-     Packet.FreqOfs = (FreqOfs*1718+0x8000)>>16;         //  [10Hz]
+     int32_t FreqOfs = ReadFreq(REG_LORA_FREQ_ERR_MSB);  //
      if(FreqOfs&0x00080000) FreqOfs|=0xFFF00000;         // extend the sign bit
                        else FreqOfs&=0x000FFFFF;
-     Packet.BitErr=0;
-     Packet.CodeErr=0;
+     Packet.FreqOfs = (FreqOfs*1718+0x8000)>>16;         //  [10Hz]
+     Packet.BitErr  = 0;
+     Packet.CodeErr = 0;
      int Len=ReceivePacketFNT(Packet.Byte, Packet.MaxBytes);
      // printf("ReceivePacketFNT() => %d %02X %3.1fdB %+ddBm 0x%08X=%+6.3fkHz, %02X%02X%02X%02X\n",
      //       Packet.Len, Stat, 0.25*Packet.SNR, Packet.RSSI, FreqOfs, 0.5*0x1000000/32e9*FreqOfs,
      //       Packet.Byte[0], Packet.Byte[1], Packet.Byte[2], Packet.Byte[3]);
-     Packet.Len=Len; return Len; }
+     Packet.Len=Len;
+     WriteByte(LORA_FLAG_RX_DONE | LORA_FLAG_BAD_CRC, REG_LORA_IRQ_FLAGS);
+     return Len; }
 
    int ReceivePacketFNT(uint8_t *Data, uint8_t MaxLen)
    { uint8_t Len=ReadByte(REG_LORA_PACKET_BYTES);    // packet length

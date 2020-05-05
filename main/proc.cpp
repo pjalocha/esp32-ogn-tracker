@@ -580,10 +580,11 @@ void vTaskPROC(void* pvParameters)
         RF_TxFIFO.Write();                                                // complete the write into the TxFIFO
       Position->Sent=1;
 #ifdef WITH_FANET
-    if( (SlotTime&0x07)==4 )                                              // every 8sec
+    if( (SlotTime&0x07)==(RX_Random&0x07) )                                              // every 8sec
     { FANET_Packet *FNTpkt = FNT_TxFIFO.getWrite();
       FNTpkt->setAddress(Parameters.Address);
       Position->EncodeAirPos(*FNTpkt, Parameters.AcftType, !Parameters.Stealth);
+      XorShift32(RX_Random);
       FNT_TxFIFO.Write(); }
 #endif
 #ifdef WITH_LOOKOUT
@@ -676,10 +677,11 @@ void vTaskPROC(void* pvParameters)
 #endif
 
 #ifdef WITH_FANET
-    if(Parameters.Pilot[0] && (SlotTime&0xFF)==0 )              // every 256sec
+    if(Parameters.Pilot[0] && (SlotTime&0xFF)==(RX_Random&0xFF) )              // every 256sec
     { FANET_Packet *FNTpkt = FNT_TxFIFO.getWrite();
       FNTpkt->setAddress(Parameters.Address);
       FNTpkt->setName(Parameters.Pilot);
+      XorShift32(RX_Random);
       FNT_TxFIFO.Write(); }
 #endif
 

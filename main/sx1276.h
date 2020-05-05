@@ -140,6 +140,16 @@ Maintainer: Miguel Luis and Gregory Cristian
 #define REG_LORA_DETECT_THRESHOLD                   0x37 // for SF6
 #define REG_LORA_SYNC                               0x39 // 0xF1 for FANET, default = 0x12 (for old FANET)
 
+// LoRa flags
+#define LORA_FLAG_TIMEOUT     0x80  // timeout in single packet reception ?
+#define LORA_FLAG_RX_DONE     0x40  // new packet received
+#define LORA_FLAG_BAD_CRC     0x20  // packet received with bad CRC
+#define LORA_FLAG_RX_HEADER   0x10  // received a valid header
+#define LORA_FLAG_TX_DONE     0x08  // packet transmission completed
+#define LORA_FLAG_CAD_DONE    0x04  // CArrier Detect completed
+#define LORA_FLAG_FHSS_CHANGE 0x02  // hopping channel changed ?
+#define LORA_FLAG_CAD_DETECT  0x01  // LoRa symbol(s) detected during CArrier Detection
+
 /*!
  * ============================================================================
  * SX1276 FSK bits control definition

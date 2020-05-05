@@ -17,7 +17,10 @@ class FANET_Packet
    union
    { uint8_t Flags;
      struct
-     { uint8_t CR:3;  // Coding rate
+     { uint8_t  CR:3;  // Coding rate used (RX) or to be used (TX)
+       bool hasCRC:1;  // CRC was there (RX)
+       bool badCRC:1;  // CRC was bad (RX)
+       bool   Done:1;
      } ;
    } ;
    uint8_t Len;       // [bytes] packet length
@@ -298,7 +301,7 @@ class FANET_RxPacket: public FANET_Packet
    void Print(char *Name=0) const
    { char HHMMSS[8];
      Format_HHMMSS(HHMMSS, SlotTime());  HHMMSS[6]='h'; HHMMSS[7]=0;
-     printf("%s %3.1fdB/%de %+3.1fkHz ", HHMMSS, 0.25*SNR, BitErr, 1e-2*FreqOfs);
+     printf("%s CR%c%c%c %3.1fdB/%de %+3.1fkHz ", HHMMSS, '0'+CR, hasCRC?'c':'_', badCRC?'-':'+', 0.25*SNR, BitErr, 1e-2*FreqOfs);
      FANET_Packet::Print(Name); }
 
    int WriteAPRS(char *Out)
