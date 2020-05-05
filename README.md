@@ -132,3 +132,26 @@ Note: the SDA/SCL naming suggest this display is interfaced with I2C but actuall
 
 There is as well an LCD code for the M5 stack, which is already wired to the ESP32 thus no additional wiring is needed.
 There you need however to wire other devices like the RF chip and pressure sensor.
+
+## Console dialog and configuration
+
+Use minicom and connect to /dev/ttyUSB0 (on Linux) for configuration set 115200bps and turn the hard- and soft-handshake OFF.
+You shall see stream of NMEA sentences.
+You can give the following commands:
+
+Ctrl-C - lists internal state, internal log files and current parameter values.
+Ctrl-L - list internal log files
+Ctrl-V - hold the NMEA stream for 1 min
+Ctrl-X - restarts the system
+
+To set parameters send $POGNS with parameter name and value like
+```
+$POGNS,Pilot=John
+```
+the parameter value changes and all parameters are writen to internal flash thus they are preserved across system restart or repower.
+To list all parameters with their values send Ctrl-C (software and hardware handshake must be OFF).
+
+## BT interface
+
+OGN-Tracker can be connected via Bluetooth from Android devices. The BT port is like a serial port and carriers the same data as the USB serial port.
+
