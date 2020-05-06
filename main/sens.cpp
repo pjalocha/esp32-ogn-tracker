@@ -9,6 +9,9 @@
 #include "proc.h"
 #include "ctrl.h"
 #include "gps.h"
+#ifdef WITH_SDLOG
+#include "sdlog.h"
+#endif
 
 // #define DEBUG_PRINT
 

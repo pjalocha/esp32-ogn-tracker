@@ -16,6 +16,10 @@
 #include "sound.h"                // sounds, warnings, alarms
 #include "disp.h"
 
+#ifdef WITH_SDLOG
+#include "sdlog.h"
+#endif
+
 #ifdef WITH_AERO
 #include "aero.h"
 #endif
@@ -70,6 +74,10 @@ void app_main(void)
     xTaskCreate(vTaskRF,    "RF",    2048, 0, tskIDLE_PRIORITY+4, 0);
 #ifdef WITH_LOG
     xTaskCreate(vTaskLOG ,  "LOG",   4096, 0, tskIDLE_PRIORITY+1, 0);
+#endif
+#ifdef WITH_SDLOG
+    Log_Mutex = xSemaphoreCreateMutex();
+    xTaskCreate(vTaskSDLOG, "SDLOG", 4096, 0, tskIDLE_PRIORITY+1, 0);
 #endif
     xTaskCreate(vTaskPROC,  "PROC",  2048, 0, tskIDLE_PRIORITY+3, 0);
     xTaskCreate(vTaskGPS,   "GPS",   2048, 0, tskIDLE_PRIORITY+4, 0);

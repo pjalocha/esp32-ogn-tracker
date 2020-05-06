@@ -16,6 +16,9 @@
 #ifdef WITH_FLASHLOG                  // log own track to unused Flash pages (STM32 only)
 #include "flashlog.h"
 #endif
+#ifdef WITH_SDLOG
+#include "sdlog.h"
+#endif
 
 #ifdef WITH_SOUND
 #include "sound.h"
@@ -289,7 +292,7 @@ static void ReadStatus(OGN_Packet &Packet)
 #ifdef WITH_SDLOG
     if(Log_Free()>=128)
     { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
-      Format_String(Log_Write, Line, Len);                                     // send the NMEA out to the log file
+      Format_String(Log_Write, Line, 0, Len);                                     // send the NMEA out to the log file
       xSemaphoreGive(Log_Mutex); }
 #endif
   }
@@ -334,11 +337,18 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
   { RxPacket->calcRelayRank(GPS_Altitude/10);                                         // calculate the relay-rank (priority for relay)
     OGN_RxPacket<OGN_Packet> *PrevRxPacket = RelayQueue.addNew(RxPacketIdx);
 #ifdef WITH_POGNT
-    if(Parameters.Verbose)
     { uint8_t Len=RxPacket->WritePOGNT(Line);                                           // print on the console as $POGNT
-      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-      Format_String(CONS_UART_Write, Line, 0, Len);
-      xSemaphoreGive(CONS_Mutex); }
+      if(Parameters.Verbose)
+      { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+        Format_String(CONS_UART_Write, Line, 0, Len);
+        xSemaphoreGive(CONS_Mutex); }
+#ifdef WITH_SDLOG
+      if(Log_Free()>=128)
+      { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
+        Format_String(Log_Write, Line, 0, Len);
+        xSemaphoreGive(Log_Mutex); }
+#endif
+    }
 #endif
 //     Len=RxPacket->Packet.WriteAPRS(Line, RxTime);                                     // print on the console as APRS message
 //     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -366,12 +376,6 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
      bool Signif = PrevRxPacket!=0;
      if(!Signif) Signif=OGN_isSignif(&(RxPacket->Packet), &(PrevRxPacket->Packet));
      if(Signif) SPIFFSlog(RxPacket, RxTime);                                          // log only significant packets
-#endif
-#ifdef WITH_SDLOG
-    if(Log_Free()>=128)
-    { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
-      Format_String(Log_Write, Line, Len);
-      xSemaphoreGive(Log_Mutex); }
 #endif
 #ifdef WITH_PFLAA
     if( Parameters.Verbose    // print PFLAA on the console for received packets

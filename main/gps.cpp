@@ -5,12 +5,14 @@
 #include "hal.h"
 #include "gps.h"
 #include "ctrl.h"
-
 #include "nmea.h"
 #include "ubx.h"
 #ifdef WITH_MAVLINK
 #include "mavlink.h"
 #include "atmosphere.h"
+#endif
+#ifdef WITH_SDLOG
+#include "sdlog.h"
 #endif
 
 #include "ogn.h"
