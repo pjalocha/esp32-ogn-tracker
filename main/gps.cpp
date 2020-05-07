@@ -461,7 +461,7 @@ static void GPS_BurstComplete(void)                                        // wh
   }
   uint8_t NextPosIdx = (PosIdx+1)&PosPipeIdxMask;                         // next position to be recorded
   if( Position[PosIdx].isTimeValid() && Position[NextPosIdx].isTimeValid() )
-  { int16_t Period = Position[PosIdx].calcTimeDiff(Position[NextPosIdx]);
+  { int32_t Period = Position[PosIdx].calcTimeDiff(Position[NextPosIdx]);
     if(Period>0) GPS_PosPeriod = (Period+GPS_PosPipeSize/2)/(GPS_PosPipeSize-1);
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -475,7 +475,6 @@ static void GPS_BurstComplete(void)                                        // wh
     Format_String(CONS_UART_Write, "s\n");
     xSemaphoreGive(CONS_Mutex);
 #endif
-
   }
   Position[NextPosIdx].Clear();                                           // clear the next position
   // int8_t Sec = Position[PosIdx].Sec;                                      //

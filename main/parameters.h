@@ -48,7 +48,7 @@ class FlashParameters
    { uint32_t Console;
      struct
      { uint32_t  CONbaud:24; // [bps] Console baud rate
-       uint8_t   CONprot: 8; // [bit-mask] Console protocol mask: 0=minGPS, 1=allGPS, 2=Baro, 3=UBX, 4=OGN, 5=FLARM, 6=GDL90, 7=
+       uint8_t   CONprot: 8; // [bit-mask] Console protocol mask: 0=minGPS, 1=allGPS, 2=Baro, 3=UBX, 4=OGN, 5=FLARM, 6=GDL90, 7=$PGAV5
      } ;
    } ;
 

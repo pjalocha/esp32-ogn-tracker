@@ -1018,10 +1018,10 @@ class GPS_Position
      calcLatitudeCosine();
      return 1; }
 
-   int16_t calcTimeDiff(GPS_Position &RefPos) const
-   { int16_t TimeDiff = (FracSec+(int16_t)Sec*100) - (RefPos.FracSec+(int16_t)RefPos.Sec*100);
-     if(TimeDiff<(-3000)) TimeDiff+=6000;
-     else if(TimeDiff>=3000) TimeDiff-=6000;
+   int32_t calcTimeDiff(GPS_Position &RefPos) const
+   { int32_t TimeDiff = ((int32_t)Min*6000+(int16_t)Sec*100+FracSec) - ((int32_t)RefPos.Min*6000+(int16_t)RefPos.Sec*100+RefPos.FracSec);
+     if(TimeDiff<(-180000)) TimeDiff+=360000;                                               // wrap-around 60min
+     else if(TimeDiff>=180000) TimeDiff-=360000;
      return TimeDiff; }                                                                     // [0.01s]
 
    int16_t calcDifferentials(GPS_Position &RefPos) // calculate climb rate and turn rate with an earlier reference position

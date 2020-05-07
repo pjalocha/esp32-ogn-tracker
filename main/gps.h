@@ -7,7 +7,11 @@
 
 #include "lowpass2.h"
 
-const  uint8_t GPS_PosPipeSize         = 4; // number of GPS positions held in a pipe
+#ifdef WITH_ESP32
+const  uint8_t GPS_PosPipeSize         = 32; // number of GPS positions held in a pipe
+#else
+const  uint8_t GPS_PosPipeSize         =  4; // number of GPS positions held in a pipe
+#endif
 
 // extern uint8_t GPS_PowerMode;               // 0=shutdown, 1=reduced, 2=normal
 
