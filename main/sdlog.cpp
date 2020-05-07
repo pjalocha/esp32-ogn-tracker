@@ -18,7 +18,8 @@ static   uint16_t  LogDate = 0;                                   // [~days] dat
 static TickType_t  LogOpenTime;                                   // [msec] when was the log file (re)open
 static const  TickType_t  LogReopen = 30000;                      // [msec] when to close and re-open the log file
 
-static FIFO<char, 16384> Log_FIFO;                                // 16K buffer for SD-log
+const size_t FIFOsize = 16384;
+static FIFO<char, FIFOsize> Log_FIFO;                             // 16K buffer for SD-log
        SemaphoreHandle_t Log_Mutex;                               // Mutex for the FIFO to prevent mixing between threads
 
 void Log_Write(char Byte)                                         // write a byte into the log file buffer (FIFO)
@@ -59,13 +60,12 @@ static void Log_Check(void)                                       // time check:
     utime(LogFileName, &LogTime); }
 }
 
-
-static int WriteLog(size_t MaxBlock=8192)                        // process the queue of lines to be written to the log
+static int WriteLog(size_t MaxBlock=FIFOsize/2)                    // process the queue of lines to be written to the log
 { if(!LogFile) return 0;
   int Count=0;
   for( ; ; )
   { char *Block; size_t Len=Log_FIFO.getReadBlock(Block); if(Len==0) break;
-    if(Len>MaxBlock) Len=MaxBlock;
+    if(Len>MaxBlock) Len/=2;
     int Write=fwrite(Block, 1, Len, LogFile);
     Log_FIFO.flushReadBlock(Len);
     if(Write!=Len) { fclose(LogFile); LogFile=0; return -1; }
@@ -83,10 +83,11 @@ extern "C"
     { Log_Open();
       if(!LogFile) { SD_Unmount(); vTaskDelay(1000); continue; }
     }
+    if(Log_FIFO.Full()<FIFOsize/4) { vTaskDelay(100); }
     int Write;
     do { Write=WriteLog(); } while(Write>0);
     if(Write<0) { SD_Unmount(); vTaskDelay(1000); continue; }
-    if(Write==0) vTaskDelay(100);
+    // if(Write==0) vTaskDelay(100);
     Log_Check(); }
 }
 
