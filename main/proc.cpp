@@ -261,17 +261,17 @@ static void ReadStatus(OGN_Packet &Packet)
 
   if(Parameters.Verbose)
   { uint8_t Len=0;
-    Len+=Format_String(Line+Len, "$POGNR,");                                 // NMEA report: radio status
-    Len+=Format_UnsDec(Line+Len, RF_FreqPlan.Plan);                          // which frequency plan
+    Len+=Format_String(Line+Len, "$POGNR,");                                  // NMEA report: radio status
+    Len+=Format_UnsDec(Line+Len, RF_FreqPlan.Plan);                           // which frequency plan
     Line[Len++]=',';
-    Len+=Format_UnsDec(Line+Len, RX_OGN_Count64);                            // number of OGN packets received
+    Len+=Format_UnsDec(Line+Len, RX_OGN_Count64);                             // number of OGN packets received
     Line[Len++]=',';
     Line[Len++]=',';
     Len+=Format_SignDec(Line+Len, -5*TRX.averRSSI, 2, 1);                     // average RF level (over all channels)
     Line[Len++]=',';
     Len+=Format_UnsDec(Line+Len, (uint16_t)TX_Credit);
     Line[Len++]=',';
-    Len+=Format_SignDec(Line+Len, (int16_t)TRX.chipTemp);                    // the temperature of the RF chip
+    Len+=Format_SignDec(Line+Len, (int16_t)TRX.chipTemp);                     // the temperature of the RF chip
     Line[Len++]=',';
     // Len+=Format_SignDec(Line+Len, MCU_Temp, 2, 1);
     Line[Len++]=',';
@@ -287,12 +287,12 @@ static void ReadStatus(OGN_Packet &Packet)
     // LogLine(Line);
     // if(CONS_UART_Free()>=128)
     { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-      Format_String(CONS_UART_Write, Line, 0, Len);                               // send the NMEA out to the console
+      Format_String(CONS_UART_Write, Line, 0, Len);                          // send the NMEA out to the console
       xSemaphoreGive(CONS_Mutex); }
 #ifdef WITH_SDLOG
     if(Log_Free()>=128)
     { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
-      Format_String(Log_Write, Line, 0, Len);                                     // send the NMEA out to the log file
+      Format_String(Log_Write, Line, 0, Len);                                // send the NMEA out to the log file
       xSemaphoreGive(Log_Mutex); }
 #endif
   }
@@ -386,7 +386,14 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
     { uint8_t Len=RxPacket->WritePFLAA(Line, Warn, LatDist, LonDist, RxPacket->Packet.DecodeAltitude()-GPS_Altitude/10);
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_String(CONS_UART_Write, Line, 0, Len);
-      xSemaphoreGive(CONS_Mutex); }
+      xSemaphoreGive(CONS_Mutex);
+#ifdef WITH_SDLOG
+    if(Log_Free()>=128)
+    { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
+      Format_String(Log_Write, Line, 0, Len);                                // send the NMEA out to the log file
+      xSemaphoreGive(Log_Mutex); }
+#endif
+    }
 #endif
 #ifdef WITH_MAVLINK
    MAV_ADSB_VEHICLE MAV_RxReport;
@@ -597,13 +604,27 @@ void vTaskPROC(void* pvParameters)
       if(Parameters.Verbose)
       { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
         Look.WritePFLA(CONS_UART_Write);                                  // produce PFLAU and PFLAA for all tracked targets
-        xSemaphoreGive(CONS_Mutex); }
+        xSemaphoreGive(CONS_Mutex);
+#ifdef WITH_SDLOG
+       if(Log_Free()>=512)
+       { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
+         Look.WritePFLA(Log_Write);
+         xSemaphoreGive(Log_Mutex); }
+#endif
+      }
 #else
       if(Parameters.Verbose)
       { uint8_t Len=Look.WritePFLAU(Line);                                // $PFLAU, overall status
         xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
         Format_String(CONS_UART_Write, Line, 0, Len);
-        xSemaphoreGive(CONS_Mutex); }
+        xSemaphoreGive(CONS_Mutex);
+#ifdef WITH_SDLOG
+        if(Log_Free()>=128)
+        { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
+          Format_String(Log_Write, Line, 0, Len);                                // send the NMEA out to the log file
+          xSemaphoreGive(Log_Mutex); }
+#endif
+      }
 #endif // WITH_PFLAA
       uint8_t Warn = 0;
       if(Tgt) Warn = Tgt->WarnLevel;                                       // what is the warning level ?
@@ -637,7 +658,14 @@ void vTaskPROC(void* pvParameters)
       { uint8_t Len=Look.WritePFLAU(Line);                                // $PFLAU, overall status
         xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
         Format_String(CONS_UART_Write, Line, 0, Len);
-        xSemaphoreGive(CONS_Mutex); }
+        xSemaphoreGive(CONS_Mutex);
+#ifdef WITH_SDLOG
+        if(Log_Free()>=128)
+        { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
+          Format_String(Log_Write, Line, 0, Len);                                // send the NMEA out to the log file
+          xSemaphoreGive(Log_Mutex); }
+#endif
+      }
 #endif // WITH_LOOKOUT
 #ifdef WITH_FLASHLOG
       bool Written=FlashLog_Process(PosPacket.Packet, PosTime);
