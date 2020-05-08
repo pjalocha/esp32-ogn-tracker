@@ -72,6 +72,8 @@ static int WriteLog(size_t MaxBlock=FIFOsize/2)                    // process th
     Count+=Write; }
   return Count; }
 
+#ifdef WITH_SDLOG
+
 extern "C"
  void vTaskSDLOG(void* pvParameters)
 { Log_FIFO.Clear();
@@ -91,3 +93,4 @@ extern "C"
     Log_Check(); }
 }
 
+#endif // WITH_SDLOG
