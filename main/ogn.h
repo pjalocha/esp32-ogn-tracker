@@ -1446,6 +1446,9 @@ class GPS_Position
     setUnixTime(Time);
     FracSec = (Time_ms-(uint64_t)Time*1000)/10; }
 
+  uint64_t getUnixTime_ms(void) const
+  { return (uint64_t)getUnixTime()*1000 + (uint32_t)FracSec*10; }
+
   private:
 
    static const uint32_t SecsPerMin =       60;
