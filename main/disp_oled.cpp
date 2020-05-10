@@ -572,6 +572,9 @@ void OLED_DrawSystem(u8g2_t *OLED, GPS_Position *GPS)
 {
   u8g2_SetFont(OLED, u8g2_font_7x13_tf);              // 5 lines, 12 pixels/line
   uint8_t Len=0;
+#ifdef WITH_MAVLINK
+  Len+=Format_String(Line+Len, "MAVLINK ");
+#else
   Len+=Format_String(Line+Len, "GPS ");
 #ifdef WITH_GPS_UBX
   Len+=Format_String(Line+Len, "UBX ");
@@ -582,6 +585,7 @@ void OLED_DrawSystem(u8g2_t *OLED, GPS_Position *GPS)
 #ifdef WITH_GPS_SRF
   Len+=Format_String(Line+Len, "SRF ");
 #endif
+#endif // WITH_MAVLINK
   Len+=Format_UnsDec(Line+Len, GPS_getBaudRate(), 1);
   Len+=Format_String(Line+Len, "bps");
   Line[Len]=0;
