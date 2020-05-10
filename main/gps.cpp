@@ -88,9 +88,15 @@ uint32_t GPS_nextBaudRate(void) { BaudRateIdx++; if(BaudRateIdx>=BaudRates) Baud
 const uint32_t GPS_TargetBaudRate = 57600; // BaudRate[4]; // [bps] must be one of the baud rates known by the autbaud
 // const uint8_t  GPS_TargetDynModel =      7; // for UBX GPS's: 6 = airborne with >1g, 7 = with >2g
 
-static char GPS_Cmd[64];
+#ifdef WITH_MAVLINK
+uint16_t MAVLINK_BattVolt = 0;   // [mV]
+uint16_t MAVLINK_BattCurr = 0;   // [10mA]
+uint8_t  MAVLINK_BattCap  = 0;   // [%]
+#endif
 
 // ----------------------------------------------------------------------------
+
+static char GPS_Cmd[64];
 
 static uint16_t SatSNRsum = 0;
 static uint8_t  SatSNRcount = 0;
@@ -789,6 +795,9 @@ static void GPS_MAV(void)                                                  // wh
 #endif
   } else if(MsgID==MAV_ID_SYS_STATUS)
   { const MAV_SYS_STATUS *Status = (const MAV_SYS_STATUS *)MAV.getPayload();
+    MAVLINK_BattVolt = Status->battery_voltage;   // [mV]
+    MAVLINK_BattCurr = Status->battery_current;   // [10mA]
+    MAVLINK_BattCap  = Status->battery_remaining; // [%]
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
     Format_String(CONS_UART_Write, "MAV_SYS_STATUS: ");

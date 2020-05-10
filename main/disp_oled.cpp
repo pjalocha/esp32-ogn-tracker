@@ -446,7 +446,12 @@ static uint8_t BattCapacity(uint16_t mVolt)
   return (mVolt-3600+2)/5; }
 
 void OLED_DrawBattery(u8g2_t *OLED, GPS_Position *GPS) // draw battery status page
-{ uint8_t Cap=BattCapacity(BatteryVoltage>>8);         // est. battery capacity based on the voltage readout
+{ 
+#ifdef WITH_MAVLINK
+  uint8_t Cap=MAVLINK_BattCap;                         // [%] from the drone's telemetry
+#else
+  uint8_t Cap=BattCapacity(BatteryVoltage>>8);         // [%] est. battery capacity based on the voltage readout
+#endif
   // u8g2_SetFont(OLED, u8g2_font_battery19_tn);
   // u8g2_DrawGlyph(OLED, 120, 60, '0'+(Cap+10)/20);
 
@@ -466,11 +471,20 @@ void OLED_DrawBattery(u8g2_t *OLED, GPS_Position *GPS) // draw battery status pa
   u8g2_DrawBox  (OLED,  8, 23,  4,  8);                // and the battery tip
 
   strcpy(Line, " .   V");
+#ifdef WITH_MAVLINK
+  Format_UnsDec(Line, MAVLINK_BattVolt, 4, 3);
+#else
   Format_UnsDec(Line, BatteryVoltage>>8, 4, 3);        // print the battery voltage readout
+#endif
   u8g2_DrawStr(OLED, 0, 48, Line);
 
+#ifdef WITH_MAVLINK
+  strcpy(Line, "  .  A");
+  Format_UnsDec(Line, MAVLINK_BattCurr, 4, 2);
+#else
   strcpy(Line, "   . mV/min ");                        // print the battery voltage rate
   Format_SignDec(Line, (600*BatteryVoltageRate+128)>>8, 3, 1);
+#endif
   u8g2_DrawStr(OLED, 0, 60, Line);
 
 #ifdef WITH_BQ
@@ -505,7 +519,11 @@ void OLED_DrawBattery(u8g2_t *OLED, GPS_Position *GPS) // draw battery status pa
 
 void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS)
 { static bool Odd=0;
-  uint8_t Cap = BattCapacity(BatteryVoltage>>8);           // est. battery capacity
+#ifdef WITH_MAVLINK
+  uint8_t Cap = MAVLINK_BattCap;                           // [%]
+#else
+  uint8_t Cap = BattCapacity(BatteryVoltage>>8);           // [%] est. battery capacity
+#endif
   uint8_t BattLev = (Cap+10)/20;                           // [0..5] convert to display scale
   uint8_t Charging = 0;                                    // charging or not changing ?
 #ifdef WITH_BQ

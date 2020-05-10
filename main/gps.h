@@ -50,6 +50,12 @@ GPS_Position *GPS_getPosition(uint8_t &BestIdx, int16_t &BestRes, int8_t Sec, in
 
 int16_t GPS_AverageSpeed(void);             // [0.1m/s] calc. average speed based on most recent GPS positions
 
+#ifdef WITH_MAVLINK
+extern uint16_t MAVLINK_BattVolt;   // [mV]
+extern uint16_t MAVLINK_BattCurr;   // [10mA]
+extern uint8_t  MAVLINK_BattCap;    // [%]
+#endif
+
 #ifdef __cplusplus
   extern "C"
 #endif
