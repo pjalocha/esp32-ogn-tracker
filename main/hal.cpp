@@ -1840,15 +1840,23 @@ void IO_Configuration(void)
   LCD_Start();
 #endif
 
-#ifdef WITH_ILI9341             // M5stack configuration
-#define LCD_SPI_SPEED 26000000     // [Hz]
-#define LCD_SPI_MODE         0     //
+#ifdef WITH_ILI9341             // M5stack or HELTEC configuration
+#define LCD_SPI_SPEED 26000000  // [Hz]
+#define LCD_SPI_MODE         0  //
+#ifdef WITH_HELTEC_V2
+  LCD_PIN_CS   = GPIO_NUM_23;
+  LCD_PIN_DC   = GPIO_NUM_17;
+  LCD_PIN_RST  = GPIO_NUM_NC;
+  LCD_PIN_BCKL = GPIO_NUM_12;
+#endif
+#ifdef WITH_M5_JACEK
   LCD_PIN_CS   = GPIO_NUM_14;   //
   LCD_PIN_DC   = GPIO_NUM_27;   // D/C: Command = 0, Data = 1
   LCD_PIN_RST  = GPIO_NUM_33;   //
   LCD_PIN_BCKL = GPIO_NUM_32;   // back-light: HIGH active
+#endif
   LCD_WIDTH=320; LCD_HEIGHT=240;
-  LCD_TYPE = 1;
+  LCD_TYPE = 1;                 // 1 = ILI9341
   LCD_Init(RFM_SPI_HOST, LCD_SPI_MODE, LCD_SPI_SPEED);
   LCD_Start();
 #endif
