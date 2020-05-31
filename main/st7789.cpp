@@ -95,7 +95,8 @@ static const uint8_t ST7789_init[] = {
 };
 
 static const uint8_t ILI9341_init[] = {
-    0x01, 0xD0,                       // Software RESET
+    0x01, 0xE0,                       // 1st Software RESET
+    0x01, 0xE0,                       // 2nd Software RESET
     0xCF, 3, 0x00, 0x83, 0x30 ,       // Power contorl B, power control = 0, DC_ENA = 1
     0xED, 4, 0x64, 0x03, 0x12, 0x81 , // Power on sequence control, cp1 keeps 1 frame, 1st frame enable, vcl = 0, ddvdh=3, vgh=1, vgl=2, DDVDH_ENH=1
     0xE8, 3, 0x85, 0x01, 0x79 ,       // Driver timing control A, non-overlap=default +1, EQ=default - 1, CR=default, pre-charge=default - 1
