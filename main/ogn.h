@@ -651,7 +651,7 @@ class GPS_Position
   { uint8_t Flags;             // bit #0 = GGA and RMC had same Time
     struct
     { bool hasGPS   :1;         // all required GPS information has been supplied (but this is not the GPS lock status)
-      bool hasBaro  :1;         // barometric information has beed supplied
+      bool hasBaro  :1;         // pressure sensor information: pressure, standard pressure altitude, temperature, humidity
       // bool hasHum   :1;         //
       bool isReady  :1;         // is ready for the following treaement
       bool Sent     :1;         // has been transmitted
@@ -841,9 +841,10 @@ class GPS_Position
      Out[Len++]='/'; Len+=Format_SignDec(Out+Len, GeoidSeparation, 4, 1); Out[Len++]='m';
      Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, Speed,     2, 1); Out[Len++]='m'; Out[Len++]='/'; Out[Len++]='s';
      Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, Heading,   4, 1); Out[Len++]='d'; Out[Len++]='e'; Out[Len++]='g';
-     Out[Len++]=' '; Len+=Format_SignDec(Out+Len, Temperature, 2, 1); Out[Len++]='C';
-     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, Pressure/4        ); Out[Len++]='P'; Out[Len++]='a';
-     Out[Len++]=' '; Len+=Format_SignDec(Out+Len, StdAltitude, 2, 1); Out[Len++]='m';
+     if(hasBaro)
+     { Out[Len++]=' '; Len+=Format_SignDec(Out+Len, Temperature, 2, 1); Out[Len++]='C';
+       Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, Pressure/4        ); Out[Len++]='P'; Out[Len++]='a';
+       Out[Len++]=' '; Len+=Format_SignDec(Out+Len, StdAltitude, 2, 1); Out[Len++]='m'; }
      Out[Len++]='\n'; Out[Len++]=0; return Len; }
 #endif // __AVR__
 
@@ -904,7 +905,7 @@ class GPS_Position
      return 0; }
 
    int8_t ReadGGA(NMEA_RxMsg &RxMsg)
-   { if(RxMsg.Parms<14) return -1;                                                        // no less than 14 paramaters
+   { if(RxMsg.Parms<14) return -2;                                                        // no less than 14 paramaters
      hasGPS = ReadTime((const char *)RxMsg.ParmPtr(0))>0;                                 // read time and check if same as the RMC says
      FixQuality =Read_Dec1(*RxMsg.ParmPtr(5)); if(FixQuality<0) FixQuality=0;             // fix quality: 0=invalid, 1=GPS, 2=DGPS
      Satellites=Read_Dec2((const char *)RxMsg.ParmPtr(6));                                // number of satellites
@@ -996,7 +997,7 @@ class GPS_Position
      return 1; }
 */
    int ReadRMC(NMEA_RxMsg &RxMsg)
-   { if(RxMsg.Parms<12) return -1;                                                        // no less than 12 parameters
+   { if(RxMsg.Parms<11) return -2;                                                        // no less than 12 parameters
      hasGPS = ReadTime((const char *)RxMsg.ParmPtr(0))>0;                                 // read time and check if same as the GGA says
      if(ReadDate((const char *)RxMsg.ParmPtr(8))<0) setDefaultDate();                     // date
      ReadLatitude(*RxMsg.ParmPtr(3), (const char *)RxMsg.ParmPtr(2));                     // Latitude
@@ -1008,7 +1009,7 @@ class GPS_Position
 
    int8_t ReadRMC(const char *RMC)
    { if( (memcmp(RMC, "$GPRMC", 6)!=0) && (memcmp(RMC, "$GNRMC", 6)!=0) ) return -1;      // check if the right sequence
-     uint8_t Index[20]; if(IndexNMEA(Index, RMC)<12) return -2;                           // index parameters and check the sum
+     uint8_t Index[20]; if(IndexNMEA(Index, RMC)<11) return -2;                           // index parameters and check the sum
      hasGPS = ReadTime(RMC+Index[0])>0;
      if(ReadDate(RMC+Index[8])<0) setDefaultDate();
      ReadLatitude( RMC[Index[3]], RMC+Index[2]);
@@ -1099,13 +1100,18 @@ class GPS_Position
      Temperature = MAV->temperature/10;
      hasBaro=1; }
 
-  int32_t getCordicLatitude (void) const { return ((int64_t)Latitude *83399993+(1<<21))>>22; }
-  int32_t getCordicLongitude(void) const { return ((int64_t)Longitude*83399993+(1<<21))>>22; }
+   static int32_t getCordic(int32_t Coord) { return ((int64_t)Coord*83399993+(1<<21))>>22; } // [0.0001/60 deg] => [cordic]
+   int32_t getCordicLatitude (void) const { return getCordic(Latitude ); }
+   int32_t getCordicLongitude(void) const { return getCordic(Longitude); }
+
+   // [deg]  [0.0001/60deg]    [Cordic]   [FANET Cordic]
+   //  180    0x066FF300      0x80000000   0x7FFFBC00
+   static int32_t getFANETcordic(int32_t Coord) { return ((int64_t)Coord*83399317+(1<<21))>>22; } // [0.0001/60 deg] => [FANET cordic]
 
    void EncodeAirPos(FANET_Packet &Packet, uint8_t AcftType=1, bool Track=1)
    { int32_t Alt = Altitude; if(Alt<0) Alt=0; else Alt=(Alt+5)/10;
-     int32_t Lat = getCordicLatitude();                                     // Latitude:  [0.0001/60deg] => [cordic]
-     int32_t Lon = getCordicLongitude();                                    // Longitude: [0.0001/60deg] => [cordic]
+     int32_t Lat = getFANETcordic(Latitude);                                     // Latitude:  [0.0001/60deg] => [cordic]
+     int32_t Lon = getFANETcordic(Longitude);                                    // Longitude: [0.0001/60deg] => [cordic]
                              // other, glider, tow, heli, chute, drop, hang, para, powered, jet, UFO, balloon, air, UAV, ground, static
      const uint8_t FNTtype[16] = { 0,     4,     5,   6,     1,     5,    2,   1,     5,      5,   0,    3,      5,   7,    0,     0  } ; // convert aircraft-type from OGN to FANET
      Packet.setAirPos(FNTtype[AcftType&0x0F], Track, Lat, Lon, Alt, (((uint16_t)Heading<<4)+112)/225, Speed, ClimbRate);

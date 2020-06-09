@@ -29,6 +29,13 @@ class FANET_Packet
 
   public:
    FANET_Packet() { Len=0; }
+
+   uint8_t Dump(char *Out)
+   { uint8_t Len=0;
+     for(int Idx=0; Idx<this->Len; Idx++)
+     { Len+=Format_Hex(Out+Len, Byte[Idx]); }
+     return Len; }
+
    bool ExtHeader(void) const { return Byte[0]&0x80; }      // is there extended header ?
    bool Forward(void) const { return Byte[0]&0x40; }        // forward flag
    uint8_t Type(void) const { return Byte[0]&0x3F; }        // message type
@@ -193,7 +200,7 @@ class FANET_Packet
     { uint8_t Idx=MsgOfs(); uint8_t Service=Byte[Idx++];
       int32_t Lat=getLat(Byte+Idx); Idx+=3;
       int32_t Lon=getLon(Byte+Idx); Idx+=3;
-      printf(" [%+9.5f,%+10.5f] s%02X", FloatCoord(Lat), FloatCoord(Lon), Service);
+      printf(" [%+09.5f,%+010.5f] s%02X", FloatCoord(Lat), FloatCoord(Lon), Service);
       if(Service&0x80) printf(" Igw");
       if(Service&0x40) printf(" %+3.1fC", 0.5*(int8_t)Byte[Idx++]);  // temperature
       if(Service&0x20)                                               // wind direction and speed
@@ -213,7 +220,7 @@ class FANET_Packet
       uint16_t Alt=getAltitude(Byte+Idx+6);                          // [m]
       uint16_t Speed=getSpeed(Byte[Idx+8]);                          // [0.5km/h]
        int16_t Climb=getClimb(Byte[Idx+9]);                          // [0.1m/s]
-      printf(" [%+9.5f,%+10.5f] %dm %3.1fkm/h %03.0fdeg %+4.1fm/s a%X%c",
+      printf(" [%+09.5f,%+010.5f] %dm %3.1fkm/h %03.0fdeg %+4.1fm/s a%X%c",
           FloatCoord(Lat), FloatCoord(Lon), Alt, 0.5*Speed, (180.0/128)*Byte[Idx+10], 0.1*Climb,
           AcftType&0x07, AcftType&0x08?'T':'H');
       if((Idx+11)<Len)
@@ -224,7 +231,7 @@ class FANET_Packet
     { uint8_t Idx=MsgOfs(); uint8_t Status=Byte[Idx+6];
       int32_t Lat=getLat(Byte+Idx);
       int32_t Lon=getLon(Byte+Idx+3);
-      printf(" [%+9.5f,%+10.5f] s%02X", FloatCoord(Lat), FloatCoord(Lon), Status);
+      printf(" [%+09.5f,%+010.5f] s%02X", FloatCoord(Lat), FloatCoord(Lon), Status);
       printf("\n"); return; }
     if(Type()==8)                                                    // Hardware/Software
     { uint8_t Idx=MsgOfs();
@@ -242,9 +249,11 @@ class FANET_Packet
       Byte[Len] = (Upp<<4) | Low; Inp+=2; }                          // new byte, count input
     return Len; }                                                    // return number of bytes read = packet length
 
+   static int32_t CoordUBX(int32_t Coord) { return ((int64_t)900007296*Coord+0x20000000)>>30; } // convert FANET-cordic to UBX 10e-7deg units
+                                                // ((int64_t)900000000*Coord+0x20000000)>>30;   // this is the exact formula, but FANET is not exact here
+
    static int Format_Lat(char *Str, int32_t Lat, char &HighRes) // format latitude after APRS
-   { // Lat = ((int64_t)900000000*Lat+0x20000000)>>30;           // convert from cordic to UBX 1e-7 deg
-     Lat = ((int64_t)900007296*Lat+0x20000000)>>30;          // convert from FANET cordic to UBX 1e-7 deg
+   { Lat = CoordUBX(Lat);                                       // convert from FANET cordic to UBX 1e-7 deg
      char Sign;
      if(Lat>0) { Sign='N'; }
           else { Sign='S'; Lat=(-Lat); }
@@ -262,8 +271,7 @@ class FANET_Packet
      return 8; }
 
    static int Format_Lon(char *Str, int32_t Lon, char &HighRes) // format longitude after APRS
-   { // Lon = ((int64_t)900000000*Lon+0x20000000)>>30;
-     Lon = ((int64_t)900007296*Lon+0x20000000)>>30;
+   { Lon = CoordUBX(Lon);                                       // convert from FANET cordic to UBX 1e-7 deg
      char Sign;
      if(Lon>0) { Sign='E'; }
           else { Sign='W'; Lon=(-Lon); }
@@ -374,7 +382,7 @@ class FANET_RxPacket: public FANET_Packet
          const uint8_t OGNtype[8] = {   0,    7,    6,  0xB,    1,     8,    3,  0xD } ; // OGN aircraft types
          uint8_t AcftType=Msg[7]>>4;                               // aircraft-type and online-tracking flag
          const char *Icon = AcftIcon[AcftType&7];                  // APRS icon
-         uint8_t AddrType = 2;                                     // 2 (FLARM) or 3 (OGN) ?
+         uint8_t AddrType = getAddrType();                         // 2 (FLARM) or 3 (OGN)
          uint32_t ID = (OGNtype[AcftType&7]<<2) | AddrType;        // acft-type and addr-type
          bool Track = AcftType&0x08;                               // online tracking flag
          if(!Track) ID|=0x80;                                      // if no online tracking the set as stealth flag
@@ -425,7 +433,7 @@ class FANET_RxPacket: public FANET_Packet
          const char *Icon = "\\n";                                 // static object
          if(Status>=13) Icon = "\\!";                              // Emergency
          // const char *StatMsg = StatusMsg[Status];
-         uint8_t AddrType = 2;                                     // 
+         uint8_t AddrType = getAddrType();                         // 
          uint8_t AcftType = 15;                                    //
          uint32_t ID = (AcftType<<2) | AddrType;                   // acft-type and addr-type
          if(!Track) ID|=0x80;                                      // stealth flag
