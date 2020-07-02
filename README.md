@@ -20,6 +20,7 @@ cd esp-idf
 ```
 If you are doing this on a Raspberry PI and see error messages about *virtualenv* you may need the following:
 ```
+sudo apt-get install libffi-dev
 pip install --upgrade virtualenv==16.7.9
 ```
 
