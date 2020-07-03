@@ -1793,7 +1793,7 @@ void IO_Configuration(void)
     sclk_io_num     : PIN_RFM_SCK,
     quadwp_io_num   : -1,
     quadhd_io_num   : -1,
-#ifdef WITH_ILI9341             // M5stack configuration
+#ifdef WITH_ILI9341                                       // ILI9341 is connected to same SPI as RFM and it needs larger buffer
     max_transfer_sz : LCD_BUFF_SIZE*2+8,
 #else
     max_transfer_sz : 64,
@@ -1861,11 +1861,17 @@ void IO_Configuration(void)
   LCD_PIN_RST  = GPIO_NUM_NC;
   LCD_PIN_BCKL = GPIO_NUM_12;
 #endif
+#if defined(WITH_TBEAM) || defined(WITH_TBEAM_V10)
+  LCD_PIN_CS   = GPIO_NUM_32;   // CS: low active
+  LCD_PIN_DC   = GPIO_NUM_2;    // D/C: Command = 0, Data = 1
+  LCD_PIN_RST  = GPIO_NUM_33;   // Reset: low active
+  LCD_PIN_BCKL = GPIO_NUM_15;   // Back-light: HIGH active
+#endif
 #ifdef WITH_M5_JACEK
   LCD_PIN_CS   = GPIO_NUM_14;   //
   LCD_PIN_DC   = GPIO_NUM_27;   // D/C: Command = 0, Data = 1
   LCD_PIN_RST  = GPIO_NUM_33;   //
-  LCD_PIN_BCKL = GPIO_NUM_32;   // back-light: HIGH active
+  LCD_PIN_BCKL = GPIO_NUM_32;   // Back-light: HIGH active
 #endif
   LCD_WIDTH=320; LCD_HEIGHT=240;
   LCD_TYPE = 1;                 // 1 = ILI9341
