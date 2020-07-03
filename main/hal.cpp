@@ -579,7 +579,8 @@ static const esp_spp_mode_t esp_spp_mode = ESP_SPP_MODE_CB;
 static const esp_spp_sec_t  sec_mask     = ESP_SPP_SEC_AUTHENTICATE;
 static const esp_spp_role_t role_slave   = ESP_SPP_ROLE_SLAVE;
 
-static FIFO<char, 512> BT_SPP_TxFIFO;         //
+static FIFO<char, 512> BT_SPP_TxFIFO;         // buffer for console output to be sent over BT
+static FIFO<uint8_t, 512> BT_SPP_RxFIFO;      // buffer for BT data to be send to the console
 static uint32_t        BT_SPP_Conn = 0;       // BT incoming connection handle
 static uint32_t        BT_SPP_TxCong = 0;     // congestion control
 // static TickType_t      BT_SPP_LastTxPush=0;   // [ms]
@@ -651,9 +652,10 @@ static void esp_spp_cb(esp_spp_cb_event_t Event, esp_spp_cb_param_t *Param)
 #endif
       break;
     case ESP_SPP_DATA_IND_EVT:                                    // [30] data is sent by the client
+      BT_SPP_RxFIFO.Write(Param->data_ind.data, Param->data_ind.len);
 #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-      Param->data_ind.handle, Param->data_ind.data, Param->data_ind.len
+      // Param->data_ind.handle, Param->data_ind.data, Param->data_ind.len
       Format_String(CONS_UART_Write, "BT_SPP: [");
       Format_UnsDec(CONS_UART_Write, Param->data_ind.len);
       Format_String(CONS_UART_Write, "]\n");
@@ -725,14 +727,17 @@ static void esp_bt_gap_cb(esp_bt_gap_cb_event_t Event, esp_bt_gap_cb_param_t *Pa
   xSemaphoreGive(CONS_Mutex);
 }
 
-void static BT_SPP_Write (char Byte)  // send a character to the BT serial port
-{ if(BT_SPP_Conn)                                                                           // if BT connection is active
-  { BT_SPP_TxFIFO.Write(Byte);                                                              // write the byte into the TxFIFO
-    // TickType_t Behind = xTaskGetTickCount() - BT_SPP_LastTxPush;                         // [ms]
-    // if(Behind>=20) BT_SPP_TxPush();
-    if( (BT_SPP_TxCong==0) && ( (Byte=='\n') || (BT_SPP_TxFIFO.Full()>=64) ) )              // if no congestion and EOL or 64B waiting already
-    { BT_SPP_TxPush(); }                                                                    // read a block from TxFIFO ad push it into the BT_SPP
-  }
+static int BT_SPP_Read (uint8_t &Byte)   // read a character from the BT serial port (buffer)
+{ // if(!BT_SPP_Conn) return 0;
+  return BT_SPP_RxFIFO.Read(Byte); }
+
+static void BT_SPP_Write (char Byte)  // send a character to the BT serial port
+{ if(!BT_SPP_Conn) return;                                                                           // if BT connection is active
+  BT_SPP_TxFIFO.Write(Byte);                                                              // write the byte into the TxFIFO
+  // TickType_t Behind = xTaskGetTickCount() - BT_SPP_LastTxPush;                         // [ms]
+  // if(Behind>=20) BT_SPP_TxPush();
+  if( (BT_SPP_TxCong==0) && ( (Byte=='\n') || (BT_SPP_TxFIFO.Full()>=64) ) )              // if no congestion and EOL or 64B waiting already
+  { BT_SPP_TxPush(); }                                                                    // read a block from TxFIFO ad push it into the BT_SPP
 }
 
 int BT_SPP_Init(void)
@@ -793,7 +798,14 @@ void CONS_UART_Write (char     Byte)
   BT_SPP_Write(Byte);
 #endif
 }                                            // it appears the NL is translated into CR+NL
-int  CONS_UART_Read  (uint8_t &Byte)  { int Ret=getchar(); if(Ret>=0) { Byte=Ret; return 1; } else return Ret; }
+int  CONS_UART_Read  (uint8_t &Byte)
+{ int Ret=getchar(); if(Ret>=0) { Byte=Ret; return 1; }
+#ifdef WITH_BT_SPP
+  else return BT_SPP_Read(Byte);
+#else
+  else return Ret;
+#endif
+}
 // int  CONS_UART_Free  (void)           { return UART2_Free(); }
 // int  CONS_UART_Full  (void)           { return UART2_Full(); }
 
@@ -1834,7 +1846,7 @@ void IO_Configuration(void)
 #ifdef WITH_TBEAM_V10
   LCD_PIN_RST = GPIO_NUM_33;
   LCD_PIN_DC  = GPIO_NUM_2;
-  LCD_PIN_BCKL = GPIO_NUM_32; // on one baord it is 15
+  LCD_PIN_BCKL = GPIO_NUM_15; // on one baord it is 32
 #endif
   LCD_Init(LCD_SPI_HOST, LCD_SPI_MODE, LCD_SPI_SPEED);
   LCD_Start();
