@@ -168,6 +168,7 @@ int  NVS_Init(void);                     // initialize non-volatile-storage in t
 
 #ifdef WITH_BT_SPP
 int  BT_SPP_Init(void);
+bool BT_SPP_isConnected(void);
 #endif
 
 #ifdef WITH_SPIFFS

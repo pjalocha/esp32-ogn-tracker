@@ -590,6 +590,8 @@ static uint32_t        BT_SPP_TxCong = 0;     // congestion control
 
 // static const char *BT_SPP_Welcome = "ESP32 OGN-Tracker\n";
 
+bool BT_SPP_isConnected(void) { return BT_SPP_Conn; }             // is a client conencted to BT_SPP ?
+
 static void setPilotID(esp_bd_addr_t MAC, size_t Len=6)           // set PilotID in the parameters from the BT SPP client MAC (thus Pilot's smartphone)
 { char *ID = Parameters.PilotID;
   ID[0]='B'; ID[1]='T'; ID[2]='_'; ID+=3;
@@ -626,7 +628,7 @@ static void esp_spp_cb(esp_spp_cb_event_t Event, esp_spp_cb_param_t *Param)
       BT_SPP_TxFIFO.Clear();                                      // clear the TxFIFO
       BT_SPP_Conn = Param->srv_open.handle;                       // store handle for esp_spp_write()
       BT_SPP_TxCong = 0;                                          // assume no congestion
-      setPilotID(Param->srv_open.rem_bda, sizeof(esp_bd_addr_t)); // PilotID is not taken from the connected BT client
+      setPilotID(Param->srv_open.rem_bda, sizeof(esp_bd_addr_t)); // PilotID is now taken from the connected BT client
       // memcpy(BT_SPP_MAC, Param->srv_open.rem_bda, sizeof(esp_bd_addr_t));
       // esp_spp_write(Param->srv_open.handle, BT_SPP_Wait, (uint8_t *)BT_SPP_Welcome); // write Welcome message to the BT_SPP
 #ifdef DEBUG_PRINT

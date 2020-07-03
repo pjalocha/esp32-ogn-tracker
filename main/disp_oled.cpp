@@ -517,7 +517,7 @@ void OLED_DrawBattery(u8g2_t *OLED, GPS_Position *GPS) // draw battery status pa
 #endif
 }
 
-void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS)
+void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS)   // status bar on top of the OLED
 { static bool Odd=0;
 #ifdef WITH_MAVLINK
   uint8_t Cap = MAVLINK_BattCap;                           // [%]
@@ -546,7 +546,12 @@ void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS)
 #ifdef WITH_SD
   if(SD_isMounted())
   { u8g2_SetFont(OLED, u8g2_font_twelvedings_t_all);
-    u8g2_DrawGlyph(OLED, 30, 12, 0x73); }
+    u8g2_DrawGlyph(OLED, 24, 12, 0x73); }
+#endif
+#ifdef WITH_BT_SPP
+  if(BT_SPP_isConnected())
+  { u8g2_SetFont(OLED, u8g2_font_open_iconic_embedded_1x_t);
+    u8g2_DrawGlyph(OLED, 36, 11, 0x4A); }
 #endif
   // u8g2_SetFont(OLED, u8g2_font_5x7_tr);
   // u8g2_SetFont(OLED, u8g2_font_5x8_tr);
