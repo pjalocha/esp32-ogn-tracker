@@ -510,7 +510,7 @@ void vTaskPROC(void* pvParameters)
     xSemaphoreGive(CONS_Mutex);
 #endif
 
-    Flight.Process(*Position);                                 // flight monitor: takeoff/landing
+    // Flight.Process(*Position);                                 // flight monitor: takeoff/landing
 
 #ifdef WITH_GDL90
     GDL_HEARTBEAT.Clear();
