@@ -13,6 +13,8 @@
 
 #include "fifo.h"
 
+#include "flight.h"                   // flight status
+
 #ifdef WITH_FLASHLOG                  // log own track to unused Flash pages (STM32 only)
 #include "flashlog.h"
 #endif
@@ -76,6 +78,8 @@ uint32_t BatteryVoltage = 0;          // [1/256 mV] low-pass filtered battery vo
 static char           Line[128];      // for printing out to the console, etc.
 
 static LDPC_Decoder     Decoder;      // decoder and error corrector for the OGN Gallager/LDPC code
+
+FlightMonitor Flight;
 
 // #define DEBUG_PRINT
 
@@ -505,6 +509,9 @@ void vTaskPROC(void* pvParameters)
     Format_String(CONS_UART_Write, "s\n");
     xSemaphoreGive(CONS_Mutex);
 #endif
+
+    Flight.Process(*Position);                                 // flight monitor: takeoff/landing
+
 #ifdef WITH_GDL90
     GDL_HEARTBEAT.Clear();
     GDL_HEARTBEAT.Initialized=1;

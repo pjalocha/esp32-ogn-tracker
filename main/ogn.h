@@ -1307,6 +1307,36 @@ class GPS_Position
    { int16_t LatAngle =  calcLatAngle16(Latitude);
        LatitudeCosine = calcLatCosine(LatAngle); }
 
+   static int WriteIGC(char *Out, int32_t Coord, uint8_t DegSize, const char *SignChar)
+   { int Len=0;
+     bool Neg = Coord<0; if(Neg) Coord=(-Coord);
+     int32_t Deg = Coord/600000;
+     Len+=Format_UnsDec(Out+Len, Deg, DegSize);
+     Coord-=Deg*600000; Coord/=10;
+     Len+=Format_UnsDec(Out+Len, Coord, 5);
+     Out[Len++]=SignChar[Neg];
+     return Len; }
+
+   int WriteIGC(char *Out)
+   { if(!isValid()) return 0;
+     int Len=0;
+     Out[Len++] = 'B';
+     Len+=Format_UnsDec(Out+Len, Hour, 2);
+     Len+=Format_UnsDec(Out+Len, Min, 2);
+     Len+=Format_UnsDec(Out+Len, Sec, 2);
+     Len+=WriteIGC(Out+Len, Latitude, 2, "NS");
+     Len+=WriteIGC(Out+Len, Longitude, 3, "EW");
+     Out[Len++] = FixMode>2 ? 'A':'V';
+     if(hasBaro)
+     { int32_t Alt = StdAltitude/10;      // [m]
+       if(Alt<0) { Alt = (-Alt); Out[Len++] = '-'; Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 4); }
+            else { Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 5); }
+     } else Len+=Format_String(Out+Len, "     ");
+     int32_t Alt = (Altitude+GeoidSeparation)/10;   // [m]
+     if(Alt<0) { Alt = (-Alt); Out[Len++] = '-'; Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 4); }
+          else { Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 5); }
+     Out[Len]=0; return Len; }
+
   private:
 
    int8_t ReadLatitude(char Sign, const char *Value)
