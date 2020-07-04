@@ -1972,3 +1972,126 @@ uint8_t I2C_Restart(uint8_t Bus)
 
 // ======================================================================================================
 
+// Charge Mode
+#ifdef WITH_CHARGE_MODE
+void Handle_ChargeMode(void)
+{
+    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    Format_String(CONS_UART_Write, "Start Pressing PRG Button if you want to Charge.\n");
+    xSemaphoreGive(CONS_Mutex);
+
+    displayChargeStartScreen();
+
+    vTaskDelay(2500);
+
+    if(Button_isPressed()) {
+        clearChargeScreen();
+
+        xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+        Format_String(CONS_UART_Write, "PRG Button Pressed. Entering Charge Mode.\n");
+        xSemaphoreGive(CONS_Mutex);
+
+        // show the screen initialy for 10 sec, with update every sec, so the volts change on screen
+        for( int i=0;i<10;i++) {
+            displayChargeScreen();
+            vTaskDelay(1000);
+        }
+        turnOffDisplay(); // turn off OLED
+
+        while ( true ) {
+            if(Button_isPressed()) { // if button pressed: turn back OLED, show the screen for 10 sec with updates every second.
+                turnOnDisplay();
+                for( int i=0;i<10;i++) {
+                    displayChargeScreen();
+                    vTaskDelay(1000);
+                }
+                turnOffDisplay();
+            }
+            vTaskDelay(100);
+        }
+    }
+    else {
+        clearChargeScreen();
+    }
+}
+
+void displayChargeStartScreen() {
+  #ifdef WITH_U8G2_OLED
+    u8g2_ClearBuffer(&U8G2_OLED);
+    u8g2_SetFont(&U8G2_OLED, u8g2_font_7x13_tf);
+
+    uint8_t text_width = 0;
+    char Line[128];
+    uint8_t Len=0;
+
+    Len = Format_String(Line   , "Press and Hold");
+    Line[Len]=0;
+    text_width = u8g2_GetStrWidth(&U8G2_OLED, Line);
+    u8g2_DrawStr(&U8G2_OLED, ( u8g2_GetDisplayWidth(&U8G2_OLED) - text_width ) / 2, 16, Line);
+
+    Len = Format_String(Line   , "PRG Button");
+    Line[Len]=0;
+    text_width = u8g2_GetStrWidth(&U8G2_OLED, Line);
+    u8g2_DrawStr(&U8G2_OLED, ( u8g2_GetDisplayWidth(&U8G2_OLED) - text_width ) / 2, 32, Line);
+
+    Len = Format_String(Line   , "for Charge Mode");
+    Line[Len]=0;
+    text_width = u8g2_GetStrWidth(&U8G2_OLED, Line);
+    u8g2_DrawStr(&U8G2_OLED, ( u8g2_GetDisplayWidth(&U8G2_OLED) - text_width ) / 2, 48, Line);
+
+    uint32_t Battery = BatterySense(10);                        // [mV]
+
+    Len = Format_String(Line   , "Volts:  -.---");
+    Line[Len]=0;
+    Format_SignDec(Line+7, Battery, 1, 3);           // battery voltage or charge percentage
+    text_width = u8g2_GetStrWidth(&U8G2_OLED, Line);
+    u8g2_DrawStr(&U8G2_OLED,( u8g2_GetDisplayWidth(&U8G2_OLED) - text_width ) / 2,64, Line);
+    u8g2_SendBuffer(&U8G2_OLED);
+  #endif
+}
+void displayChargeScreen() {
+  #ifdef WITH_U8G2_OLED
+    u8g2_ClearBuffer(&U8G2_OLED);
+    u8g2_SetFont(&U8G2_OLED, u8g2_font_7x13_tf);
+
+    uint8_t text_width = 0;
+    char Line[128];
+    uint8_t Len=0;
+
+    Len = Format_String(Line   , "Charging mode");
+    Line[Len]=0;
+    text_width = u8g2_GetStrWidth(&U8G2_OLED, Line);
+    u8g2_DrawStr(&U8G2_OLED, ( u8g2_GetDisplayWidth(&U8G2_OLED) - text_width ) / 2, 16, Line);
+
+    Len = Format_String(Line   , "ON");
+    Line[Len]=0;
+    text_width = u8g2_GetStrWidth(&U8G2_OLED, Line);
+    u8g2_DrawStr(&U8G2_OLED, ( u8g2_GetDisplayWidth(&U8G2_OLED) - text_width ) / 2, 32, Line);
+
+    uint32_t Battery = BatterySense(10);                        // [mV]
+
+    Len = Format_String(Line   , "Volts:  -.---");
+    Line[Len]=0;
+    Format_SignDec(Line+7, Battery, 1, 3);           // battery voltage or charge percentage
+    text_width = u8g2_GetStrWidth(&U8G2_OLED, Line);
+    u8g2_DrawStr(&U8G2_OLED,( u8g2_GetDisplayWidth(&U8G2_OLED) - text_width ) / 2,64, Line);
+    u8g2_SendBuffer(&U8G2_OLED);
+  #endif
+}
+void clearChargeScreen() {
+  #ifdef WITH_U8G2_OLED
+    u8g2_ClearBuffer(&U8G2_OLED);
+    u8g2_SendBuffer(&U8G2_OLED);
+  #endif
+}
+void turnOnDisplay() {
+  #ifdef WITH_U8G2_OLED
+    u8g2_SetPowerSave(&U8G2_OLED,0);
+  #endif
+}
+void turnOffDisplay() {
+  #ifdef WITH_U8G2_OLED
+    u8g2_SetPowerSave(&U8G2_OLED,1);
+  #endif
+}
+#endif

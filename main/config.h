@@ -26,6 +26,8 @@
 
 // #define WITH_SLEEP                         // with software sleep mode controlled by the long-press on the button
 
+// #define WITH_CHARGE_MODE                   // Charge mode for those device which can not be charge without turning them on, like the TTGO. On boot the U8G2_OLED will display a message and charge mode can be entered by pressing the PRG button.
+
 #define WITH_AXP                           // with AXP192 power controller (T-BEAM V1.0)
 // #define WITH_BQ                            // with BQ24295  power controller (FollowMe)
 

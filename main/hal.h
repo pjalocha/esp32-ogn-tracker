@@ -161,6 +161,7 @@ void LED_TimerCheck(uint8_t Ticks=1);
 
 // extern bool Button_SleepRequest;
 int32_t Button_TimerCheck(uint8_t Ticks=1);
+bool Button_isPressed(void);
 
 void IO_Configuration(void);             // Configure I/O
 
@@ -209,6 +210,16 @@ extern AXP192 AXP;
 
 #ifdef WITH_SLEEP
 void Sleep(void);
+#endif
+
+#ifdef WITH_CHARGE_MODE
+void Handle_ChargeMode(void);
+
+void displayChargeStartScreen();
+void displayChargeScreen();
+void clearChargeScreen();
+void turnOnDisplay();
+void turnOffDisplay();
 #endif
 
 #endif // __HAL_H__

@@ -46,6 +46,10 @@ void app_main(void)
 #endif
     IO_Configuration();                      // initialize the GPIO/UART/I2C/SPI for Radio, GPS, OLED, Baro
 
+#ifdef WITH_CHARGE_MODE
+    Handle_ChargeMode();
+#endif
+
 #ifdef WITH_SD
     if(SD_isMounted())                       // if SD card succesfully mounted at startup
     { Parameters.SaveToFlash=0;
