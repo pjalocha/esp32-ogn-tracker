@@ -21,6 +21,8 @@
 // #define WITH_OLED2                         // 2nd OLED display, I2C address next higher
 #define WITH_U8G2_OLED                     // I2C OLED through the U8g2 library
 // #define WITH_U8G2_SH1106
+#define U8G2_OLED_PAGES_ENABLED   0b0001111111  // use if WITH_U8G2_OLED is on, 10 pages currently, see end of disp.ccp for the list of pages
+
 
 #define WITH_RFM95                         // RF chip selection:  both HELTEC and TTGO use sx1276 which is same as RFM95
 

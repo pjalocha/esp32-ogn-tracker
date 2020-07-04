@@ -22,5 +22,6 @@ void OLED_DrawBattery  (u8g2_t *OLED, GPS_Position *GPS=0);
 void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS=0);
 void OLED_DrawSystem   (u8g2_t *OLED, GPS_Position *GPS=0);
 void OLED_DrawID       (u8g2_t *OLED, GPS_Position *GPS=0);
+void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS=0);
 
 #endif
