@@ -510,8 +510,6 @@ void vTaskPROC(void* pvParameters)
     xSemaphoreGive(CONS_Mutex);
 #endif
 
-    // Flight.Process(*Position);                                 // flight monitor: takeoff/landing
-
 #ifdef WITH_GDL90
     GDL_HEARTBEAT.Clear();
     GDL_HEARTBEAT.Initialized=1;
@@ -533,12 +531,17 @@ void vTaskPROC(void* pvParameters)
     GDL_REPORT.Send(CONS_UART_Write);
     xSemaphoreGive(CONS_Mutex);
 #endif
-    if(Position) Position->EncodeStatus(StatPacket.Packet);             // encode GPS altitude and pressure/temperature/humidity
-      else { StatPacket.Packet.Status.FixQuality=0; StatPacket.Packet.Status.Satellites=0; } // or lack of the GPS lock
-    { uint8_t SatSNR = (GPS_SatSNR+2)/4;
+    if(Position)
+    { Position->EncodeStatus(StatPacket.Packet);             // encode GPS altitude and pressure/temperature/humidity
+      Flight.Process(*Position); }                           // flight monitor: takeoff/landing
+    else
+    { StatPacket.Packet.Status.FixQuality=0; StatPacket.Packet.Status.Satellites=0; } // or lack of the GPS lock
+
+    { uint8_t SatSNR = (GPS_SatSNR+2)/4;                     // encode number of satellites and SNR in the Status packet
       if(SatSNR>8) { SatSNR-=8; if(SatSNR>31) SatSNR=31; }
               else { SatSNR=0; }
       StatPacket.Packet.Status.SatSNR = SatSNR; }
+
     if( Position && Position->isReady && (!Position->Sent) && Position->isValid() )
     { int16_t AverSpeed=GPS_AverageSpeed();                             // [0.1m/s] average speed, including the vertical speed
       if(Parameters.FreqPlan==0)

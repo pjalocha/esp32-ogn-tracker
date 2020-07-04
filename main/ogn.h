@@ -644,72 +644,14 @@ template<class OGNx_Packet, uint8_t Size=8>
 
 } ;
 
-class GPS_Position
+class GPS_Time
 { public:
-
-  union
-  { uint8_t Flags;             // bit #0 = GGA and RMC had same Time
-    struct
-    { bool hasGPS   :1;         // all required GPS information has been supplied (but this is not the GPS lock status)
-      bool hasBaro  :1;         // pressure sensor information: pressure, standard pressure altitude, temperature, humidity
-      // bool hasHum   :1;         //
-      bool isReady  :1;         // is ready for the following treaement
-      bool Sent     :1;         // has been transmitted
-      bool hasTime  :1;         // Time has been supplied
-      bool hasRMC   :1;         // GxRMC has been supplied
-      bool hasGGA   :1;         // GxGGA has been supplied
-      bool hasGSA   :1;         // GxGSA has been supplied
-      // bool hasGSV   :1;
-    } ;
-  } ;
-
-   // uint16_t SatSNRsum;          // sum of cSNR from GPGSV
-   // uint8_t SatSNRcount;         // count of satellites from GPGSV
-
-   int8_t FixQuality;           // 0 = none, 1 = GPS, 2 = Differential GPS (can be WAAS)
-   int8_t FixMode;              // 0 = not set (from GSA) 1 = none, 2 = 2-D, 3 = 3-D
-   int8_t Satellites;           // number of active satellites
-
    int8_t  Year, Month, Day;    // Date (UTC) from GPS
    int8_t  Hour, Min, Sec;      // Time-of-day (UTC) from GPS
    int8_t  FracSec;             // [1/100 sec] some GPS-es give second fraction with the time-of-day
-
-   uint8_t PDOP;                // [0.1] dilution of precision
-   uint8_t HDOP;                // [0.1] horizontal dilution of precision
-   uint8_t VDOP;                // [0.1] vertical dilution of precision
-
-   int16_t Speed;               // [0.1 m/s] speed-over-ground
-   int16_t Heading;             // [0.1 deg]  heading-over-ground
-
-   int16_t ClimbRate;           // [0.1 meter/sec)
-   int16_t TurnRate;            // [0.1 deg/sec]
-
-   int16_t GeoidSeparation;     // [0.1 meter] difference between Geoid and Ellipsoid
-   int32_t Altitude;            // [0.1 meter] height above Geoid (sea level)
-
-   int32_t Latitude;            // [0.0001/60 deg] about 0.18m accuracy (to convert to u-Blox GPS 1e-7deg units mult by 50/3)
-   int32_t Longitude;           // [0.0001/60 deg]
-  uint16_t LatitudeCosine;      // [2^-12] Latitude cosine for distance calculation
-
-   int16_t Temperature;         // [0.1 degC]
-  uint32_t Pressure;            // [0.25 Pa]   from pressure sensor
-   int32_t StdAltitude;         // [0.1 meter] standard pressure altitude (from the pressure sensor and atmosphere calculator)
-   int16_t Humidity;            // [0.1%]      relative humidity
-   int16_t Accel;               // [0.1m/s^2]  acceleration along the track
+   int8_t  Spare;
 
   public:
-
-   GPS_Position() { Clear(); }
-
-   void Clear(void)
-   { Flags=0; FixQuality=0; FixMode=0;
-     PDOP=0; HDOP=0; VDOP=0;
-     // SatSNRsum=0; SatSNRcount=0;
-     setDefaultDate(); setDefaultTime();
-     Latitude=0; Longitude=0; LatitudeCosine=3000;
-     Altitude=0; GeoidSeparation=0;
-     Speed=0; Heading=0; ClimbRate=0; TurnRate=0;
-     Temperature=0; Pressure=0; StdAltitude=0; Humidity=0; }
 
    void setDefaultDate() { Year=00; Month=1; Day=1; } // default Date is 01-JAN-2000
    void setDefaultTime() { Hour=0;  Min=0;   Sec=0; FracSec=0; } // default Time is 00:00:00.00
@@ -719,27 +661,6 @@ class GPS_Position
 
    bool isDateValid(void) const                      // is the GPS date valid ?
    { return (Year>=0) && (Month>=0) && (Day>=0); }
-
-   bool isValid(void) const                          // is GPS data is valid = GPS lock
-   { if(!isTimeValid()) return 0;                    // is GPS time valid/present ?
-     if(!isDateValid()) return 0;                    // is GPS date valid/present ?
-     if(FixQuality==0)  return 0;                    // Fix quality must be 1=GPS or 2=DGPS
-     if(FixMode==1)     return 0;                    // if GSA says "no lock" (when GSA is not there, FixMode=0)
-     if(Satellites<=0)  return 0;                    // if number of satellites none or invalid
-     return 1; }
-
-   void copyTime(GPS_Position &RefPosition)           // copy HH:MM:SS.SSS from another record
-   { FracSec = RefPosition.FracSec;
-     Sec     = RefPosition.Sec;
-     Min     = RefPosition.Min;
-     Hour    = RefPosition.Hour; }
-
-   void copyDate(GPS_Position &RefPosition)           // copy YY:MM:DD from another record
-   { Day     = RefPosition.Day;
-     Month   = RefPosition.Month;
-     Year    = RefPosition.Year; }
-
-   void copyTimeDate(GPS_Position &RefPosition) { copyTime(RefPosition); copyDate(RefPosition); }
 
    uint8_t incrTime(void)                            // increment HH:MM:SS by one second
    { Sec++;  if(Sec<60) return 0;
@@ -758,6 +679,12 @@ class GPS_Position
      if(Hour>0) { Hour--; return 0; }
      Hour=24;
      return 1; }                                     // return 1 if date needs to be decremented
+
+   int32_t calcTimeDiff(GPS_Time &RefTime) const
+   { int32_t TimeDiff = ((int32_t)Min*6000+(int16_t)Sec*100+FracSec) - ((int32_t)RefTime.Min*6000+(int16_t)RefTime.Sec*100+RefTime.FracSec);
+     if(TimeDiff<(-180000)) TimeDiff+=360000;                                               // wrap-around 60min
+     else if(TimeDiff>=180000) TimeDiff-=360000;
+     return TimeDiff; }                                                                     // [0.01s]
 
    uint8_t MonthDays(void)                           // number of days per month
    { const uint16_t Table = 0x0AD5;                  // 1010 1101 0101 0=30days, 1=31days
@@ -780,6 +707,179 @@ class GPS_Position
    void incrTimeDate(void) { if(incrTime()) incrDate(); }
    void decrTimeDate(void) { if(decrTime()) decrDate(); }
 
+   void copyTime(GPS_Time &RefTime)                // copy HH:MM:SS.SSS from another record
+   { FracSec = RefTime.FracSec;
+     Sec     = RefTime.Sec;
+     Min     = RefTime.Min;
+     Hour    = RefTime.Hour; }
+
+   void copyDate(GPS_Time &RefTime)                // copy YY:MM:DD from another record
+   { Day     = RefTime.Day;
+     Month   = RefTime.Month;
+     Year    = RefTime.Year; }
+
+   void copyTimeDate(GPS_Time &RefTime) { copyTime(RefTime); copyDate(RefTime); }
+   uint32_t getDayTime(void) const
+   { return Times60((uint32_t)(Times60((uint16_t)Hour) + Min)) + Sec; } // this appears to save about 100 bytes of code
+     // return (uint32_t)Hour*SecsPerHour + (uint16_t)Min*SecsPerMin + Sec; }              // compared to this line
+
+   uint32_t getUnixTime(void) const                         // return the Unix timestamp (tested 2000-2037)
+   { uint16_t Days = DaysSinceYear2000() + DaysSimce1jan();
+     return Times60(Times60(Times24((uint32_t)(Days+10957)))) + getDayTime(); }
+
+   uint32_t getFatTime(void) const                          // return timestamp in FAT format
+   { uint16_t Date = ((uint16_t)(Year+20)<<9) | ((uint16_t)Month<<5) | Day;
+     uint16_t Time = ((uint16_t)Hour<<11) | ((uint16_t)Min<<5) | (Sec>>1);
+     return ((uint32_t)Date<<16) | Time; }
+
+   void setUnixTime(uint32_t Time)                          // works except for the 1.1.2000
+   { uint32_t Days = Time/SecsPerDay;                       // [day] since 1970
+     uint32_t DayTime = Time - Days*SecsPerDay;             // [sec] time-of-day
+     Hour  = DayTime/SecsPerHour; DayTime -= (uint32_t)Hour*SecsPerHour;  //
+     Min   = DayTime/SecsPerMin;  DayTime -= (uint16_t)Min*SecsPerMin;
+     Sec   = DayTime;
+     FracSec=0;
+     Days -= 10957+1;                                       // [day] since 2000 minus 1 day
+     Year  = (Days*4)/((365*4)+1);                          // [year] since 1970
+     Days -= 365*Year + (Year/4);
+     Month = Days/31;
+     Day   = Days-(uint16_t)Month*31+1; Month++;
+     uint32_t CheckTime = getUnixTime();
+     if(CheckTime<Time) incrDate((Time-CheckTime)/SecsPerDay);
+     // hasTime=1;
+  }
+
+  void setUnixTime_ms(uint64_t Time_ms)
+  { uint32_t Time=Time_ms/1000;
+    setUnixTime(Time);
+    FracSec = (Time_ms-(uint64_t)Time*1000)/10; }
+
+  uint64_t getUnixTime_ms(void) const
+  { return (uint64_t)getUnixTime()*1000 + (uint32_t)FracSec*10; }
+
+  private:
+
+   static const uint32_t SecsPerMin =       60;
+   static const uint32_t SecsPerHour =   60*60;
+   static const uint32_t SecsPerDay = 24*60*60;
+
+   uint8_t isLeapYear(void) const { return (Year&3)==0; }
+
+#ifdef __AVR__
+   int16_t DaysSimce1jan(void) const
+   { static const uint8_t DaysDiff[12] PROGMEM = { 0, 3, 3, 6, 8, 11, 13, 16, 19, 21, 24, 26 } ;
+     uint16_t Days = (uint16_t)(Month-1)*28 + pgm_read_byte(DaysDiff+(Month-1)) + Day - 1;
+     if(isLeapYear() && (Month>2) ) Days++;
+     return Days; }
+#else
+   int16_t DaysSimce1jan(void) const  //  31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+   { static const uint8_t DaysDiff[12] = { 0,  3,  3,  6,  8, 11, 13, 16, 19, 21, 24, 26 } ;
+     uint16_t Days = (uint16_t)(Month-1)*28 + DaysDiff[Month-1] + Day - 1;
+     if(isLeapYear() && (Month>2) ) Days++;
+     return Days; }
+#endif
+
+   uint16_t DaysSinceYear2000(void) const
+   { uint16_t Days = 365*Year;
+     if(Year>0) Days += ((Year-1)>>2)+1;
+     return Days; }
+
+   template <class Type>
+     static Type Times60(Type X) { return ((X<<4)-X)<<2; }
+
+   template <class Type>
+     static Type Times28(Type X) { X+=(X<<1)+(X<<2); return X<<2; }
+
+   template <class Type>
+     static Type Times24(Type X) { X+=(X<<1);        return X<<3; }
+
+} ;
+
+class GPS_Position: public GPS_Time
+{ public:
+
+  union
+  { uint16_t Flags;             // bit #0 = GGA and RMC had same Time
+    struct
+    { bool hasGPS   :1;         // all required GPS information has been supplied (but this is not the GPS lock status)
+      bool hasBaro  :1;         // pressure sensor information: pressure, standard pressure altitude, temperature, humidity
+      // bool hasHum   :1;         //
+      bool isReady  :1;         // is ready for the following treaement
+      bool Sent     :1;         // has been transmitted
+      bool hasTime  :1;         // Time has been supplied
+      bool hasRMC   :1;         // GxRMC has been supplied
+      bool hasGGA   :1;         // GxGGA has been supplied
+      bool hasGSA   :1;         // GxGSA has been supplied
+      // bool hasGSV   :1;
+    } ;
+  } ;
+
+   // uint16_t SatSNRsum;          // sum of cSNR from GPGSV
+   // uint8_t SatSNRcount;         // count of satellites from GPGSV
+
+   int8_t FixQuality;           // 0 = none, 1 = GPS, 2 = Differential GPS (can be WAAS)
+   int8_t FixMode;              // 0 = not set (from GSA) 1 = none, 2 = 2-D, 3 = 3-D
+   int8_t Satellites;           // number of active satellites
+
+   uint8_t PDOP;                // [0.1] dilution of precision
+   uint8_t HDOP;                // [0.1] horizontal dilution of precision
+   uint8_t VDOP;                // [0.1] vertical dilution of precision
+
+   int16_t Speed;               // [0.1 m/s] speed-over-ground
+   int16_t Heading;             // [0.1 deg]  heading-over-ground
+
+   int16_t ClimbRate;           // [0.1 meter/sec)
+   int16_t TurnRate;            // [0.1 deg/sec]
+
+   int32_t Altitude;            // [0.1 meter] height above Geoid (sea level)
+
+   int32_t Latitude;            // [0.0001/60 deg] about 0.18m accuracy (to convert to u-Blox GPS 1e-7deg units mult by 50/3)
+   int32_t Longitude;           // [0.0001/60 deg]
+   int16_t GeoidSeparation;     // [0.1 meter] difference between Geoid and Ellipsoid
+  uint16_t LatitudeCosine;      // [2^-12] Latitude cosine for distance calculation
+
+  uint32_t Pressure;            // [0.25 Pa]   from pressure sensor
+   int32_t StdAltitude;         // [0.1 meter] standard pressure altitude (from the pressure sensor and atmosphere calculator)
+   int16_t Temperature;         // [0.1 degC]
+   int16_t Humidity;            // [0.1%]      relative humidity
+   int16_t Accel;               // [0.1m/s^2]  acceleration along the track
+   uint16_t Seq;                // sequencial number to track GPS positions in a pipe
+
+  public:
+
+   GPS_Position() { Clear(); }
+
+   void Clear(void)
+   { Flags=0; FixQuality=0; FixMode=0;
+     PDOP=0; HDOP=0; VDOP=0;
+     // SatSNRsum=0; SatSNRcount=0;
+     setDefaultDate(); setDefaultTime();
+     Latitude=0; Longitude=0; LatitudeCosine=3000;
+     Altitude=0; GeoidSeparation=0;
+     Speed=0; Heading=0; ClimbRate=0; TurnRate=0;
+     Temperature=0; Pressure=0; StdAltitude=0; Humidity=0; }
+
+   bool isValid(void) const                          // is GPS data is valid = GPS lock
+   { if(!isTimeValid()) return 0;                    // is GPS time valid/present ?
+     if(!isDateValid()) return 0;                    // is GPS date valid/present ?
+     if(FixQuality==0)  return 0;                    // Fix quality must be 1=GPS or 2=DGPS
+     if(FixMode==1)     return 0;                    // if GSA says "no lock" (when GSA is not there, FixMode=0)
+     if(Satellites<=0)  return 0;                    // if number of satellites none or invalid
+     return 1; }
+/*
+   void copyTime(GPS_Position &RefPosition)           // copy HH:MM:SS.SSS from another record
+   { FracSec = RefPosition.FracSec;
+     Sec     = RefPosition.Sec;
+     Min     = RefPosition.Min;
+     Hour    = RefPosition.Hour; }
+
+   void copyDate(GPS_Position &RefPosition)           // copy YY:MM:DD from another record
+   { Day     = RefPosition.Day;
+     Month   = RefPosition.Month;
+     Year    = RefPosition.Year; }
+
+   void copyTimeDate(GPS_Position &RefPosition) { copyTime(RefPosition); copyDate(RefPosition); }
+*/
 #ifndef __AVR__ // there is not printf() with AVR
    void PrintDateTime(void) const { printf("%02d.%02d.%04d %02d:%02d:%05.2f", Day, Month, 2000+Year, Hour, Min, Sec+0.01*FracSec ); }
    void PrintTime(void)     const { printf("%02d:%02d:%05.2f", Hour, Min, Sec+0.01*FracSec ); }
@@ -1018,13 +1118,13 @@ class GPS_Position
      ReadHeading(RMC+Index[7]);
      calcLatitudeCosine();
      return 1; }
-
+/*
    int32_t calcTimeDiff(GPS_Position &RefPos) const
    { int32_t TimeDiff = ((int32_t)Min*6000+(int16_t)Sec*100+FracSec) - ((int32_t)RefPos.Min*6000+(int16_t)RefPos.Sec*100+RefPos.FracSec);
      if(TimeDiff<(-180000)) TimeDiff+=360000;                                               // wrap-around 60min
      else if(TimeDiff>=180000) TimeDiff-=360000;
      return TimeDiff; }                                                                     // [0.01s]
-
+*/
    int16_t calcDifferentials(GPS_Position &RefPos) // calculate climb rate and turn rate with an earlier reference position
    { ClimbRate=0; TurnRate=0;
      if(RefPos.FixQuality==0) return 0;
@@ -1069,7 +1169,7 @@ class GPS_Position
      MAV->satellites_visible = Satellites; }
 
    void Read(const MAV_GPS_RAW_INT *MAV, uint64_t UnixTime_ms=0)
-   { if(UnixTime_ms) setUnixTime_ms(UnixTime_ms);
+   { if(UnixTime_ms) { setUnixTime_ms(UnixTime_ms); hasTime=1; }
      Latitude   = ((int64_t)MAV->lat*3+25)/50;
      Longitude  = ((int64_t)MAV->lon*3+25)/50;
      Altitude   = (MAV->alt+50)/100;               // [0.1m] AMSL
@@ -1083,7 +1183,7 @@ class GPS_Position
      hasGPS     = 1; }
 
    void Read(const MAV_GLOBAL_POSITION_INT *MAV, uint64_t UnixTime_ms=0)
-   { if(UnixTime_ms) setUnixTime_ms(UnixTime_ms);
+   { if(UnixTime_ms) { setUnixTime_ms(UnixTime_ms); hasTime=1; }
      Latitude   = ((int64_t)MAV->lat*3+25)/50;
      Longitude  = ((int64_t)MAV->lon*3+25)/50;
      Altitude   = (MAV->alt+50)/100;                                                         // [0.1m] AMSL
@@ -1095,7 +1195,7 @@ class GPS_Position
      hasGPS     = 1; }
 
    void Read(const MAV_SCALED_PRESSURE *MAV, uint64_t UnixTime_ms=0)
-   { if(UnixTime_ms) setUnixTime_ms(UnixTime_ms);
+   { if(UnixTime_ms) { setUnixTime_ms(UnixTime_ms); hasTime=1; }
      Pressure = 100*4*MAV->press_abs;
      Temperature = MAV->temperature/10;
      hasBaro=1; }
@@ -1307,7 +1407,7 @@ class GPS_Position
    { int16_t LatAngle =  calcLatAngle16(Latitude);
        LatitudeCosine = calcLatCosine(LatAngle); }
 
-   static int WriteIGC(char *Out, int32_t Coord, uint8_t DegSize, const char *SignChar)
+   static int WriteIGCcoord(char *Out, int32_t Coord, uint8_t DegSize, const char *SignChar)
    { int Len=0;
      bool Neg = Coord<0; if(Neg) Coord=(-Coord);
      int32_t Deg = Coord/600000;
@@ -1318,23 +1418,29 @@ class GPS_Position
      return Len; }
 
    int WriteIGC(char *Out)
-   { if(!isValid()) return 0;
+   { // if(!isValid()) return 0;
      int Len=0;
      Out[Len++] = 'B';
-     Len+=Format_UnsDec(Out+Len, Hour, 2);
-     Len+=Format_UnsDec(Out+Len, Min, 2);
-     Len+=Format_UnsDec(Out+Len, Sec, 2);
-     Len+=WriteIGC(Out+Len, Latitude, 2, "NS");
-     Len+=WriteIGC(Out+Len, Longitude, 3, "EW");
-     Out[Len++] = FixMode>2 ? 'A':'V';
+     if(isTimeValid())
+     { Len+=Format_UnsDec(Out+Len, Hour, 2);
+       Len+=Format_UnsDec(Out+Len, Min, 2);
+       Len+=Format_UnsDec(Out+Len, Sec, 2); }
+     else Len+=Format_String(Out+Len, "      ");
+     if(isValid())
+     { Len+=WriteIGCcoord(Out+Len, Latitude, 2, "NS");
+       Len+=WriteIGCcoord(Out+Len, Longitude, 3, "EW");
+       Out[Len++] = FixMode>2 ? 'A':'V'; }
+     else Len+=Format_String(Out+Len, "                    ");
      if(hasBaro)
      { int32_t Alt = StdAltitude/10;      // [m]
        if(Alt<0) { Alt = (-Alt); Out[Len++] = '-'; Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 4); }
             else { Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 5); }
      } else Len+=Format_String(Out+Len, "     ");
-     int32_t Alt = (Altitude+GeoidSeparation)/10;   // [m]
-     if(Alt<0) { Alt = (-Alt); Out[Len++] = '-'; Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 4); }
-          else { Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 5); }
+     if(isValid())
+     { int32_t Alt = (Altitude+GeoidSeparation)/10;   // [m]
+       if(Alt<0) { Alt = (-Alt); Out[Len++] = '-'; Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 4); }
+            else { Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 5); }
+     } else Len+=Format_String(Out+Len, "     ");
      Out[Len]=0; return Len; }
 
   private:
@@ -1447,79 +1553,6 @@ class GPS_Position
      if(Seq[Ptr++]!=HexDigit(Check&0x0F)) return -2;
      // printf("%s => [%d]\n", Seq, Params);
      return Params; }
-
-   uint32_t getDayTime(void) const
-   { return Times60((uint32_t)(Times60((uint16_t)Hour) + Min)) + Sec; } // this appears to save about 100 bytes of code
-     // return (uint32_t)Hour*SecsPerHour + (uint16_t)Min*SecsPerMin + Sec; }              // compared to this line
-
-   uint32_t getUnixTime(void) const                         // return the Unix timestamp (tested 2000-2037)
-   { uint16_t Days = DaysSinceYear2000() + DaysSimce1jan();
-     return Times60(Times60(Times24((uint32_t)(Days+10957)))) + getDayTime(); }
-
-   uint32_t getFatTime(void) const                          // return timestamp in FAT format
-   { uint16_t Date = ((uint16_t)(Year+20)<<9) | ((uint16_t)Month<<5) | Day;
-     uint16_t Time = ((uint16_t)Hour<<11) | ((uint16_t)Min<<5) | (Sec>>1);
-     return ((uint32_t)Date<<16) | Time; }
-
-   void setUnixTime(uint32_t Time)                          // works except for the 1.1.2000
-   { uint32_t Days = Time/SecsPerDay;                       // [day] since 1970
-     uint32_t DayTime = Time - Days*SecsPerDay;             // [sec] time-of-day
-     Hour  = DayTime/SecsPerHour; DayTime -= (uint32_t)Hour*SecsPerHour;  //
-     Min   = DayTime/SecsPerMin;  DayTime -= (uint16_t)Min*SecsPerMin;
-     Sec   = DayTime;
-     FracSec=0;
-     Days -= 10957+1;                                       // [day] since 2000 minus 1 day
-     Year  = (Days*4)/((365*4)+1);                          // [year] since 1970
-     Days -= 365*Year + (Year/4);
-     Month = Days/31;
-     Day   = Days-(uint16_t)Month*31+1; Month++;
-     uint32_t CheckTime = getUnixTime();
-     if(CheckTime<Time) incrDate((Time-CheckTime)/SecsPerDay);
-     hasTime=1; }
-
-  void setUnixTime_ms(uint64_t Time_ms)
-  { uint32_t Time=Time_ms/1000;
-    setUnixTime(Time);
-    FracSec = (Time_ms-(uint64_t)Time*1000)/10; }
-
-  uint64_t getUnixTime_ms(void) const
-  { return (uint64_t)getUnixTime()*1000 + (uint32_t)FracSec*10; }
-
-  private:
-
-   static const uint32_t SecsPerMin =       60;
-   static const uint32_t SecsPerHour =   60*60;
-   static const uint32_t SecsPerDay = 24*60*60;
-
-   uint8_t isLeapYear(void) const { return (Year&3)==0; }
-
-#ifdef __AVR__
-   int16_t DaysSimce1jan(void) const
-   { static const uint8_t DaysDiff[12] PROGMEM = { 0, 3, 3, 6, 8, 11, 13, 16, 19, 21, 24, 26 } ;
-     uint16_t Days = (uint16_t)(Month-1)*28 + pgm_read_byte(DaysDiff+(Month-1)) + Day - 1;
-     if(isLeapYear() && (Month>2) ) Days++;
-     return Days; }
-#else
-   int16_t DaysSimce1jan(void) const  //  31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
-   { static const uint8_t DaysDiff[12] = { 0,  3,  3,  6,  8, 11, 13, 16, 19, 21, 24, 26 } ;
-     uint16_t Days = (uint16_t)(Month-1)*28 + DaysDiff[Month-1] + Day - 1;
-     if(isLeapYear() && (Month>2) ) Days++;
-     return Days; }
-#endif
-
-   uint16_t DaysSinceYear2000(void) const
-   { uint16_t Days = 365*Year;
-     if(Year>0) Days += ((Year-1)>>2)+1;
-     return Days; }
-
-   template <class Type>
-     static Type Times60(Type X) { return ((X<<4)-X)<<2; }
-
-   template <class Type>
-     static Type Times28(Type X) { X+=(X<<1)+(X<<2); return X<<2; }
-
-   template <class Type>
-     static Type Times24(Type X) { X+=(X<<1);        return X<<3; }
 
 } ;
 

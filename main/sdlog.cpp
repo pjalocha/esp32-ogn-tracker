@@ -35,10 +35,12 @@ static int Log_Open(void)
   int32_t Year  = (LogDate>>9)-20;
   uint32_t Date = 0;
   if(Year>=0) Date = Day*10000 + Month*100 + Year;                // create DDMMYY number for easy printout
-  strcpy(LogFileName, "/sdcard/TR000000.LOG");
-  Format_UnsDec(LogFileName+10, Date, 6);                         // format the date into the log file name
-  LogFile = fopen(LogFileName, "at");
-  if(LogFile==0) return -1;
+  strcpy(LogFileName, "/sdcard/CONS/TR000000.LOG");
+  Format_UnsDec(LogFileName+15, Date, 6);                         // format the date into the log file name
+  LogFile = fopen(LogFileName, "at");                             // try to open the file
+  if(LogFile==0)                                                  // if this fails
+  { if(mkdir("/sdcard/CONS", 0777)<0) return -1;                  // try to create the sub-directory
+    LogFile = fopen(LogFileName, "at"); if(LogFile==0) return -1; } // and again attempt to open the log file
   LogOpenTime=xTaskGetTickCount();
   return 0; }
 

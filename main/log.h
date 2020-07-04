@@ -9,6 +9,7 @@ int  SPIFFSlog_FullFileName(char *FileName, uint32_t Time);    // create full na
 int  SPIFFSlog_ShortFileName(char *FileName, uint32_t Time);
 uint32_t SPIFFSlog_ReadShortFileTime(const char *FileName, int Len);
 uint32_t SPIFFSlog_ReadShortFileTime(const char *FileName);
+int SPIFFSlog_CopyToSD(void);
 int  SPIFFSlog_FindOldestFile(uint32_t &Oldest, uint32_t After=0);        // find the oldest log file
 int  SPIFFSlog_ListFiles(void);                                // list the log files on the console
 int  SPIFFSlog_ListFile(uint32_t FileTime);                    //
