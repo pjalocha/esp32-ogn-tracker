@@ -100,6 +100,8 @@ class FlashParameters
    // char Copilot[16]
    // char Category[16]
 
+   uint32_t PageMask;
+
 #ifdef WITH_BT_SPP
    char BTname[16];
    // char  BTpin[16];
@@ -198,6 +200,7 @@ class FlashParameters
 #endif
     for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
       InfoParmValue(Idx)[0] = 0;
+    PageMask       =    0b0001111111;
 #ifdef WITH_BT_SPP
    getAprsCall(BTname);
 // #ifdef WITH_TBEAM
@@ -484,6 +487,9 @@ class FlashParameters
     if(strcmp(Name, "NavRate")==0)
     { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
       if(Mode<1) Mode=1; NavRate=Mode; return 1; }
+    if(strcmp(Name, "PageMask")==0)
+    { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
+      PageMask=Mode; return 1; }
     if(strcmp(Name, "Verbose")==0)
     { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
       Verbose=Mode; return 1; }
@@ -616,8 +622,9 @@ class FlashParameters
     // Write_Hex    (Line, "EncryptKey[2]",       EncryptKey[2] , 8); strcat(Line, " # [32-bit]\n"); if(fputs(Line, File)==EOF) return EOF;
     // Write_Hex    (Line, "EncryptKey[3]",       EncryptKey[3] , 8); strcat(Line, " # [32-bit]\n"); if(fputs(Line, File)==EOF) return EOF;
 #endif
-    Write_UnsDec (Line, "Verbose"  ,      (uint32_t)Verbose     ); strcat(Line, " #  [ 0..3]\n"); if(fputs(Line, File)==EOF) return EOF;
-    Write_UnsDec (Line, "PPSdelay"  ,(uint32_t)PPSdelay         ); strcat(Line, " #  [   ms]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_Hex    (Line, "Verbose"  ,      (uint32_t)Verbose,   2); strcat(Line, " #  [ 0..3]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_Hex    (Line, "PageMask" ,      (uint32_t)PageMask,  4); strcat(Line, " #  [ mask]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_UnsDec (Line, "PPSdelay"  ,     (uint32_t)PPSdelay    ); strcat(Line, " #  [   ms]\n"); if(fputs(Line, File)==EOF) return EOF;
 #ifdef WITH_BT_PWR
     Write_UnsDec (Line, "Bluetooth" ,          BT_ON            ); strcat(Line, " #  [  1|0]\n"); if(fputs(Line, File)==EOF) return EOF;
 #endif
@@ -666,7 +673,8 @@ class FlashParameters
     // Write_Hex    (Line, "EncryptKey[2]",       EncryptKey[2] , 8); strcat(Line, " # [32-bit]\n"); Format_String(Output, Line);
     // Write_Hex    (Line, "EncryptKey[3]",       EncryptKey[3] , 8); strcat(Line, " # [32-bit]\n"); Format_String(Output, Line);
 #endif
-    Write_UnsDec (Line, "Verbose"  ,      (uint32_t)Verbose     ); strcat(Line, " #  [ 0..3]\n"); Format_String(Output, Line);
+    Write_Hex    (Line, "Verbose"  ,      (uint32_t)Verbose,   2); strcat(Line, " #  [ 0..3]\n"); Format_String(Output, Line);
+    Write_Hex    (Line, "PageMask" ,      (uint32_t)PageMask,  4); strcat(Line, " #  [ mask]\n"); Format_String(Output, Line);
     Write_UnsDec (Line, "PPSdelay"  ,(uint32_t)PPSdelay         ); strcat(Line, " #  [   ms]\n"); Format_String(Output, Line);
 #ifdef WITH_BT_PWR
     Write_UnsDec (Line, "Bluetooth" ,          BT_ON            ); strcat(Line, " #  [  1|0]\n"); Format_String(Output, Line);

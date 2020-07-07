@@ -166,9 +166,10 @@ void vTaskDISP(void* pvParameters)
 //       else
 // #endif
       // skip not enabled pages
-      while ( (U8G2_OLED_PAGES_ENABLED & (1 << DISP_Page)) == 0 ) {
-        DISP_Page++;
-        if(DISP_Page>=DISP_Pages) DISP_Page=0;
+      if(Parameters.PageMask)
+      { while( ((Parameters.PageMask>>DISP_Page)&1) == 0 )
+        { DISP_Page++;
+          if(DISP_Page>=DISP_Pages) DISP_Page=0; }
       }
 
 #ifdef DEBUG_PRINT
