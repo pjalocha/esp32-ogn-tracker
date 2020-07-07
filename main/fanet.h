@@ -73,16 +73,16 @@ class FANET_Packet
     // xif(Ofs<MaxBytes) Byte[Ofs++]=0;
     Len=Ofs; }
 
-  static float FloatCoord(int32_t Coord)                               // convert from cordic units to float degrees
+  static float FloatCoord(int32_t Coord)                               // convert from FANET cordic units to float degrees
   { // const float Conv = 90.0/0x40000000;                                // conversion factor (exact cordic)
-    const float Conv = 90.0007295677/0x40000000;                       // exact FANET conversion factor (not exactly cordic)
+    const float Conv = 90.0007295677/0x40000000;                       // FANET cordic conversion factor (not exactly cordic)
     return Conv*Coord; }
 
-  static int32_t getLat(const uint8_t *Byte)                           // cordic units
+  static int32_t getLat(const uint8_t *Byte)                           // FANET cordic units
   { int32_t Latitude=Byte[2]; Latitude<<=8; Latitude|=Byte[1]; Latitude<<=8; Latitude|=Byte[0]; Latitude<<=7; return Latitude; }
   static void setLat(uint8_t *Byte, int32_t Lat)
   { Lat = (Lat+0x40)>>7; Byte[0]=Lat; Byte[1]=Lat>>8; Byte[2]=Lat>>16; }
-  static int32_t getLon(const uint8_t *Byte)                           // cordic units
+  static int32_t getLon(const uint8_t *Byte)                           // FANET cordic units
   { int32_t Longitude=Byte[2]; Longitude<<=8; Longitude|=Byte[1]; Longitude<<=8; Longitude|=Byte[0]; Longitude<<=8; return Longitude; }
   static void setLon(uint8_t *Byte, int32_t Lon)
   { Lon = (Lon+0x80)>>8; Byte[0]=Lon; Byte[1]=Lon>>8; Byte[2]=Lon>>16; }
@@ -115,6 +115,15 @@ class FANET_Packet
   static uint16_t getPressure(const uint8_t *Byte)                     // [0.1hPa]
   { uint16_t Press = Byte[1]; Press<<=8; Press|=Byte[0]; return Press+4300; }
 
+  static int16_t getTurnRate(uint8_t Byte)                             // [0.25deg/s]
+  { int16_t Rate = Byte&0x7F; if(Byte&0x40) Rate|=0xFF80;
+    if(Byte&0x80) return Rate<<2;
+    return Rate; }
+  static void setTurnRate(uint8_t *Byte, int16_t Rate)
+  { if(Rate>= 64 ) { if(Rate>  254 ) Rate=  254 ; Byte[0] = 0x80 |  ((Rate+2)>>2);       return; }
+    if(Rate<(-64)) { if(Rate<(-254)) Rate=(-254); Byte[0] = 0x80 | (((Rate+2)>>2)&0x7F); return; }
+    Byte[0] = Rate&0x7F; }
+
   static int16_t getQNE(uint8_t Byte)                                  // [m] difference between pressure altitude and GPS altitude
   { int16_t QNE = Byte&0x7F; if(Byte&0x40) QNE|=0xFF80;
     if(Byte&0x80) return QNE<<2;
@@ -132,28 +141,29 @@ class FANET_Packet
   { if(Alt>=0x800) { Alt>>=2; if(Alt>0x800) Alt=0x800; Alt|=0x800; }
     Byte[0]=Alt; Byte[1] = (Byte[1]&0xF0) | (Alt>>8); }
 
-  //                       [0..7]         [0..1]     [cordic]     [cordic]          [m]     [cordic]        [0.1m/s]       [0.1m/s]
-  void setAirPos(uint8_t AcftType, uint8_t Track, int32_t Lat, int32_t Lon, int16_t Alt, uint8_t Dir, uint16_t Speed, int16_t Climb)
+  //                       [0..7]         [0..1] [FANET cordic] [FANET cordic]     [m]     [cordic]        [0.1m/s]       [0.1m/s]    [0.1deg/s]
+  void setAirPos(uint8_t AcftType, uint8_t Track, int32_t Lat, int32_t Lon, int16_t Alt, uint8_t Dir, uint16_t Speed, int16_t Climb, int16_t Turn)
   { setHeader(1);
     uint8_t Ofs=MsgOfs();
-    Len=Ofs+11;
-    setLat(Byte+Ofs, Lat);         // [cordic]
-    setLon(Byte+Ofs+3, Lon);       // [cordic]
+    Len=Ofs+12;
+    setLat(Byte+Ofs, Lat);            // [cordic]
+    setLon(Byte+Ofs+3, Lon);          // [cordic]
     Byte[Ofs+7]=(AcftType<<4) | (Track<<7);
     if(Alt<0) Alt=0;
-    setAltitude(Byte+Ofs+6, Alt);  // [m]
-    Speed = (Speed*23+16)>>5;      // [0.1m/s] => [0.5km/h]
-    setSpeed(Byte+Ofs+8, Speed);   // [0.5km/h]
-    setClimb(Byte+Ofs+9, Climb);   // [0.1m/s]
-    Byte[Ofs+10] = Dir; }          // [cordic]
+    setAltitude(Byte+Ofs+6, Alt);     // [m]
+    Speed = (Speed*23+16)>>5;         // [0.1m/s] => [0.5km/h]
+    setSpeed(Byte+Ofs+8, Speed);      // [0.5km/h]
+    setClimb(Byte+Ofs+9, Climb);      // [0.1m/s]
+    Byte[Ofs+10] = Dir;               // [cordic]
+    setTurnRate(Byte+Ofs+11, Turn*2/5); } // [0.25deg/s]
 
-  void setQNE(int32_t StdAltitude) // [m] only for air-position
+  void setQNE(int32_t StdAltitude)    // [m] only for air-position
   { uint8_t Ofs=MsgOfs();
     int32_t Alt=getAltitude(Byte+Ofs+6);
-    if(Len<(Ofs+12)) Len=Ofs+12;
-    setQNE(Byte+Ofs+11, StdAltitude-Alt); }
+    if(Len<(Ofs+13)) Len=Ofs+13;
+    setQNE(Byte+Ofs+12, StdAltitude-Alt); }
 
-  //                    [0..15]         [0..1]     [cordic]      [cordic]
+  //                    [0..15]         [0..1]  [FANET cordic]  [FANET cordic]
   void setGndPos(uint8_t Status, uint8_t Track, int32_t Lat, int32_t Lon)
   { setHeader(7);
     uint8_t Ofs=MsgOfs();
@@ -182,7 +192,7 @@ class FANET_Packet
   uint8_t WriteFNNGB(char *Out)
   { return 0; }
 
-  void Print(char *Name=0) const
+  void Print(const char *Name=0) const
   { if(Name) printf("%s ", Name);
     printf("[%2d:%d:%2d] FNT%06X", Len, Type(), MsgLen(), getAddr());
     if(Type()==2)                                                      // Name
@@ -198,8 +208,8 @@ class FANET_Packet
       printf("\n"); return; }
     if(Type()==4)                                                    // Service, mostly meteo
     { uint8_t Idx=MsgOfs(); uint8_t Service=Byte[Idx++];
-      int32_t Lat=getLat(Byte+Idx); Idx+=3;
-      int32_t Lon=getLon(Byte+Idx); Idx+=3;
+      int32_t Lat=getLat(Byte+Idx); Idx+=3;                          // [FANET cordic]
+      int32_t Lon=getLon(Byte+Idx); Idx+=3;                          // [FANET cordic]
       printf(" [%+09.5f,%+010.5f] s%02X", FloatCoord(Lat), FloatCoord(Lon), Service);
       if(Service&0x80) printf(" Igw");
       if(Service&0x40) printf(" %+3.1fC", 0.5*(int8_t)Byte[Idx++]);  // temperature
@@ -215,8 +225,8 @@ class FANET_Packet
       printf("\n"); return; }
     if(Type()==1)                                                    // airborne position
     { uint8_t Idx=MsgOfs(); uint8_t AcftType=Byte[Idx+7]>>4;
-      int32_t Lat=getLat(Byte+Idx);
-      int32_t Lon=getLon(Byte+Idx+3);
+      int32_t Lat=getLat(Byte+Idx);                                  // [FANET cordic]
+      int32_t Lon=getLon(Byte+Idx+3);                                // [FANET cordic]
       uint16_t Alt=getAltitude(Byte+Idx+6);                          // [m]
       uint16_t Speed=getSpeed(Byte[Idx+8]);                          // [0.5km/h]
        int16_t Climb=getClimb(Byte[Idx+9]);                          // [0.1m/s]
@@ -224,13 +234,16 @@ class FANET_Packet
           FloatCoord(Lat), FloatCoord(Lon), Alt, 0.5*Speed, (180.0/128)*Byte[Idx+10], 0.1*Climb,
           AcftType&0x07, AcftType&0x08?'T':'H');
       if((Idx+11)<Len)
-      { int16_t QNE = getQNE(Byte[Idx+11]);
+      { int16_t Rate = getTurnRate(Byte[Idx+11]);
+        printf(" %+3.1fdeg/s", 0.25*Rate); }
+      if((Idx+12)<Len)
+      { int16_t QNE = getQNE(Byte[Idx+12]);
         printf(" %+dm", QNE); }
       printf("\n"); return; }
     if(Type()==7)                                                    // ground position
     { uint8_t Idx=MsgOfs(); uint8_t Status=Byte[Idx+6];
-      int32_t Lat=getLat(Byte+Idx);
-      int32_t Lon=getLon(Byte+Idx+3);
+      int32_t Lat=getLat(Byte+Idx);                                  // [FANET cordic]
+      int32_t Lon=getLon(Byte+Idx+3);                                // [FANET cordic]
       printf(" [%+09.5f,%+010.5f] s%02X", FloatCoord(Lat), FloatCoord(Lon), Status);
       printf("\n"); return; }
     if(Type()==8)                                                    // Hardware/Software
@@ -311,6 +324,97 @@ class FANET_RxPacket: public FANET_Packet
      Format_HHMMSS(HHMMSS, SlotTime());  HHMMSS[6]='h'; HHMMSS[7]=0;
      printf("%s CR%c%c%c %3.1fdB/%de %+3.1fkHz ", HHMMSS, '0'+CR, hasCRC?'c':'_', badCRC?'-':'+', 0.25*SNR, BitErr, 1e-2*FreqOfs);
      FANET_Packet::Print(Name); }
+
+   int WriteJSON(char *JSON) const
+   { int Len=0;
+     Len+=Format_String(JSON+Len, "\"addr\":\"");
+     Len+=Format_Hex(JSON+Len, Byte[1]);
+     Len+=Format_Hex(JSON+Len, Byte[3]);
+     Len+=Format_Hex(JSON+Len, Byte[2]);
+     JSON[Len++]='\"';
+     JSON[Len++]=',';
+     Len+=Format_String(JSON+Len, "\"addr_type\":");
+     JSON[Len++] = HexDigit(getAddrType());
+     const uint8_t *Msg = this->Msg();
+     uint8_t  MsgLen = this->MsgLen();
+     uint8_t Type = this->Type();
+     uint32_t Time=sTime; if(msTime<300) Time--;
+     Len+=Format_String(JSON+Len, ",\"time\":");
+     Len+=Format_UnsDec(JSON+Len, Time);
+     int64_t RxTime=(int64_t)sTime-Time; RxTime*=1000; RxTime+=msTime;
+     Len+=Format_String(JSON+Len, ",\"rx_time\":");
+     Len+=Format_SignDec(JSON+Len, RxTime, 4, 3, 1);
+     if(Type==2)
+     { Len+=Format_String(JSON+Len, ",\"Name\":\"");
+       for(int Idx=0; Idx<MsgLen; Idx++)
+       { uint8_t Byte=Msg[Idx]; if(Byte==0) break;
+         JSON[Len++]=Byte; }
+       JSON[Len++]='\"'; }
+     if(Type==1)                                               // for airborne position
+     { uint8_t AcftType=Msg[7]>>4;                             // get the aircraft-type and online-track flag
+       Len+=Format_String(JSON+Len, ",\"acft_type\":\"");
+       JSON[Len++] = HexDigit(AcftType&0x7);
+       JSON[Len++]='\"';
+       Len+=Format_String(JSON+Len, ",\"acft_cat\":\"");           // GDL90 aircraft category
+                           // no-info, para-glider, hang-glider, balloon, glider, powered, heli, UAV
+       const uint8_t AcftCat[8] = { 0,          12,          12,      10,      9,       1,    7,  14 } ;
+       Len+=Format_Hex(JSON+Len, AcftCat[AcftType&0x07]);
+       JSON[Len++]='\"';
+       Len+=Format_String(JSON+Len, ",\"no_track\":");
+       JSON[Len++]='0' + (AcftType>>3); }
+     if(Type==4)                                               // for service/weather
+     { uint8_t Service=Msg[0];                                 //
+       Len+=Format_String(JSON+Len, ",\"service\":\"");
+       if(Service&0x80) JSON[Len++]='I';
+       if(Service&0x40) JSON[Len++]='T';
+       if(Service&0x20) JSON[Len++]='W';
+       if(Service&0x10) JSON[Len++]='H';
+       if(Service&0x08) JSON[Len++]='B';
+       // if(Service&0x04) JSON[Len++]='R';
+       if(Service&0x02) JSON[Len++]='C';
+       JSON[Len++]='\"';
+       int32_t Lat = getLat(Msg+1);                            // [cordic] decode the latitude
+       int32_t Lon = getLon(Msg+4);                            // [cordic] decode the longitude
+       Len+=Format_String(JSON+Len, ",\"lat_deg\":");
+       Len+=Format_SignDec(JSON+Len, CoordUBX(Lat), 8, 7, 1);
+       Len+=Format_String(JSON+Len, ",\"lon_deg\":");
+       Len+=Format_SignDec(JSON+Len, CoordUBX(Lon), 8, 7, 1); }
+     if(Type==1 || Type==7)                                    // airborne or ground position
+     { int32_t Lat = getLat(Msg);                              // [cordic] decode the latitude
+       int32_t Lon = getLon(Msg+3);                            // [cordic] decode the longitude
+       Len+=Format_String(JSON+Len, ",\"lat_deg\":");
+       Len+=Format_SignDec(JSON+Len, CoordUBX(Lat), 8, 7, 1);
+       Len+=Format_String(JSON+Len, ",\"lon_deg\":");
+       Len+=Format_SignDec(JSON+Len, CoordUBX(Lon), 8, 7, 1); }
+     if(Type==1)                                               // for airpborne position
+     { uint32_t Alt=getAltitude(Msg+6);                        // [m] decode the altitude
+       uint32_t Speed=getSpeed(Msg[8]);                        // [0.5km/h] ground speed
+       Speed = (Speed*355+0x80)>>8;                            // [0.5km/h] => [0.1m/s] convert
+       int32_t Climb=getClimb(Msg[9]);                         // [0.1m/s] climb rate
+       uint16_t Dir=getDir(Msg[10]);                           // [deg]
+       Len+=Format_String(JSON+Len, ",\"alt_msl_m\":");
+       Len+=Format_UnsDec(JSON+Len, Alt);
+       Len+=Format_String(JSON+Len, ",\"track_deg\":");
+       Len+=Format_UnsDec(JSON+Len, Dir);
+       Len+=Format_String(JSON+Len, ",\"speed_mps\":");
+       Len+=Format_UnsDec(JSON+Len, Speed, 2, 1);
+       Len+=Format_String(JSON+Len, ",\"climb_mps\":");
+       Len+=Format_SignDec(JSON+Len, Climb, 2, 1, 1);
+       if(MsgLen>11)
+       { int16_t Turn=getTurnRate(Msg[11]);
+         Len+=Format_String(JSON+Len, ",\"turn_dps\":");
+         Len+=Format_SignDec(JSON+Len, Turn*10/4, 2, 1, 1); }
+       if(MsgLen>12)
+       { int32_t AltStd=Alt; Alt+=getQNE(Msg[12]);
+         Len+=Format_String(JSON+Len, ",\"alt_std_m\":");
+         Len+=Format_SignDec(JSON+Len, AltStd, 1, 0, 1); }
+       Len+=Format_String(JSON+Len, ",\"on_ground\":0"); }
+     if(Type==7)                                               // for ground position
+     { uint8_t Status = Msg[6];
+       Len+=Format_String(JSON+Len, ",\"no_track\":1");
+       JSON[Len++]='0' + (Status&1);
+       Len+=Format_String(JSON+Len, ",\"on_ground\":1"); }
+     return Len; }
 
    int WriteAPRS(char *Out)
    { bool Report=0;
@@ -396,7 +500,8 @@ class FANET_RxPacket: public FANET_Packet
           int32_t Climb=getClimb(Msg[9]);                          // [0.1m/s]
           int32_t ClimbFeet = ((int32_t)1968*Climb+50)/100;        // [fpm]
          uint16_t Dir=getDir(Msg[10]);                             // [deg]
-          int16_t QNE=getQNE(Msg[11]);                             // [m]
+          int16_t Turn=getQNE(Msg[11]);                            // [0.25deg/s]
+          int16_t QNE=getQNE(Msg[12]);                             // [m]
           int32_t StdAlt=Alt+QNE; if(StdAlt<0) StdAlt=0;           // [m]
          uint32_t StdFeet = ((int32_t)3360*StdAlt+512)>>10;        // [feet]
          char hLat, hLon;
@@ -418,9 +523,13 @@ class FANET_RxPacket: public FANET_Packet
          Out[Len++]=' ';
          Len+=Format_SignDec(Out+Len, ClimbFeet);
          Len+=Format_String(Out+Len, "fpm");
-         if(MsgLen>=12)
+         if(MsgLen>11)
+         { Out[Len++]=' ';
+           Len+=Format_SignDec(Out+Len, Turn*5/6, 2, 1);
+           Len+=Format_String(Out+Len, "rot"); }
+         if(MsgLen>12)
          { Len+=Format_String(Out+Len, " FL");
-           Len+=Format_UnsDec(Out+Len, StdFeet, 5, 2);}
+           Len+=Format_UnsDec(Out+Len, StdFeet, 5, 2); }
          Len+=Format_String(Out+Len, " FNT1"); Out[Len++]='0'+(AcftType&7);
          Report=1; break; }
        case 7:                                                     // ground position

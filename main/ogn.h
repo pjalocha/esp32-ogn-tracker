@@ -1214,7 +1214,7 @@ class GPS_Position: public GPS_Time
      int32_t Lon = getFANETcordic(Longitude);                                    // Longitude: [0.0001/60deg] => [cordic]
                              // other, glider, tow, heli, chute, drop, hang, para, powered, jet, UFO, balloon, air, UAV, ground, static
      const uint8_t FNTtype[16] = { 0,     4,     5,   6,     1,     5,    2,   1,     5,      5,   0,    3,      5,   7,    0,     0  } ; // convert aircraft-type from OGN to FANET
-     Packet.setAirPos(FNTtype[AcftType&0x0F], Track, Lat, Lon, Alt, (((uint16_t)Heading<<4)+112)/225, Speed, ClimbRate);
+     Packet.setAirPos(FNTtype[AcftType&0x0F], Track, Lat, Lon, Alt, (((uint16_t)Heading<<4)+112)/225, Speed, ClimbRate, TurnRate);
      if(hasBaro) { Packet.setQNE((StdAltitude+5)/10); }
    }
 
