@@ -63,7 +63,7 @@ class FlightMonitor
    bool inFlight(void) const { return Takeoff.isValid() && !Landing.isValid(); }
 
    int Process(const GPS_Position &Position)
-   { Position.Print();
+   { // Position.Print();
      if(inFlight())
      { int Det=FlightThresh(Position, MinSpeed/2); // printf("FlightThres() => %d\n", Det);
        if(Det<=0)

@@ -14,7 +14,10 @@
 #include "rf.h"
 #include "ctrl.h"
 #include "proc.h"
-// #include "log.h"
+
+#ifdef WITH_WIFI
+#include "wifi.h"
+#endif
 
 #include "gps.h"
 // #include "ubx.h"
@@ -552,6 +555,11 @@ void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS)   // status bar on top 
   if(BT_SPP_isConnected())
   { u8g2_SetFont(OLED, u8g2_font_open_iconic_embedded_1x_t);
     u8g2_DrawGlyph(OLED, 36, 11, 0x4A); }
+#endif
+#ifdef WITH_WIFI
+  if(WIFI_isConnected())
+  { u8g2_SetFont(OLED, u8g2_font_open_iconic_embedded_1x_t);
+    u8g2_DrawGlyph(OLED, 43, 11, 0x50); }
 #endif
   // u8g2_SetFont(OLED, u8g2_font_5x7_tr);
   // u8g2_SetFont(OLED, u8g2_font_5x8_tr);

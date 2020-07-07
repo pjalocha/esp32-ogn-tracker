@@ -42,7 +42,7 @@ class Socket
      if(Host) { freeaddrinfo(Host); Host=0; }
    }
 
-   bool Connected(void) { return Link>=0; }
+   bool isConnected(void) { return Link>=0; }
 
    int setBlocking(int Block=1)
    { int Flags = fcntl(Link, F_GETFL, 0);
@@ -54,12 +54,12 @@ class Socket
    { return setBlocking(0); }
 
    int Send(void *Buff, int Len)
-   { if(!Connected()) return -1;
+   { if(!isConnected()) return -1;
      return send(Link, Buff, Len, 0); }
      // return write(Link, Buff, Len); }
 
    int Receive(void *Buff, int Len)
-   { if(!Connected()) return -1;
+   { if(!isConnected()) return -1;
      int Ret=recv(Link, Buff, Len-1, 0);
      if(Ret>=0) return Ret;
      return errno==EWOULDBLOCK ? 0:Ret; }

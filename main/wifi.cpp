@@ -19,6 +19,10 @@
 
 // ======================================================================================================
 
+wifi_config_t WIFI_Config;   // WIFI config: ESSID, etc.
+uint32_t WIFI_LocalIP = 0;   // WIFI local IP address
+bool WIFI_isConnected(void) { return WIFI_LocalIP!=0; }
+
 static esp_err_t WIFI_event_handler(void *ctx, system_event_t *event)
 {
 #ifdef DEBUG_PRINT
@@ -85,21 +89,22 @@ static esp_err_t WIFI_PassiveScan(wifi_ap_record_t *AP, uint16_t &APs)
 
 static esp_err_t WIFI_Connect(wifi_ap_record_t *AP, const char *Pass) // connect to given Access Point with gicen password
 { esp_err_t Err;
-  wifi_config_t Config;
-  memcpy(Config.sta.ssid, AP->ssid, 32);
-  if(Pass) strncpy((char *)Config.sta.password, Pass, 64);
-     else  Config.sta.password[0]=0;
-  memcpy(Config.sta.bssid, AP->bssid, 6);
-  Config.sta.bssid_set = 1;
-  Config.sta.channel = AP->primary;
-  Config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
-  Config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
-  Config.sta.threshold.rssi = -127;
-  Err = esp_wifi_set_config(ESP_IF_WIFI_STA, &Config); if(Err!=ESP_OK) return Err;
-  return esp_wifi_connect(); }
+  memcpy(WIFI_Config.sta.ssid, AP->ssid, 32);
+  if(Pass) strncpy((char *)WIFI_Config.sta.password, Pass, 64);
+     else  WIFI_Config.sta.password[0]=0;
+  memcpy(WIFI_Config.sta.bssid, AP->bssid, 6);
+  WIFI_Config.sta.bssid_set = 1;
+  WIFI_Config.sta.channel = AP->primary;
+  WIFI_Config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+  WIFI_Config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+  WIFI_Config.sta.threshold.rssi = -127;
+  Err = esp_wifi_set_config(ESP_IF_WIFI_STA, &WIFI_Config); if(Err!=ESP_OK) return Err;
+  Err = esp_wifi_connect(); if(Err!=ESP_OK) return Err;
+  return Err; }
 
 static esp_err_t WIFI_Disconnect(void)
-{ return esp_wifi_disconnect(); }
+{ esp_err_t Err=esp_wifi_disconnect();
+  return Err; }
 
 static uint32_t WIFI_getLocalIP(void)                       // get local IP, once DHCP phase is done
 { esp_err_t Err;
@@ -145,7 +150,8 @@ uint8_t AP_Print(char *Out, wifi_ap_record_t *AP)                  // print numb
 static wifi_ap_record_t AP[8];
 static uint16_t APs=0;
 
-static char Line[128];
+const int MaxLineLen=512;
+static char Line[MaxLineLen];
 
 static void AP_Print(void (*Output)(char))
 { for(uint16_t Idx=0; Idx<APs; Idx++)
@@ -154,14 +160,14 @@ static void AP_Print(void (*Output)(char))
     Format_String(Output, Line); }
 }
 
-static      Socket AprsLink;                                       // socket to talk to
-static const char *AprsHost = "aprs.glidernet.org";                // server address
-static const char *AprsPort = "14580";                             // server socket
-static const char *AprsSoft = "OGN-Tracker";                       // software name for APRS server
-static char        AprsLoginLine[64];                              // login command including name, password and software name
-static uint8_t     AprsLoginLen=0;
+Socket APRS_Socket;                                                 // socket to talk to APRS server
+bool APRS_isConnected(void) { return APRS_Socket.isConnected(); }
 
-static uint16_t AprsCallPass(const char *Call)                     // calc. password for the APRS server login
+static const char *APRS_Host = "aprs.glidernet.org";                // server address
+static const char *APRS_Port = "14580";                             // server socket
+static const char *APRS_Soft = "OGN-Tracker";                       // software name for APRS server
+
+static uint16_t APRS_CallPass(const char *Call)                     // calc. password for the APRS server login
 { uint16_t Hash=0x73e2;
   for( ; ; )
   { uint16_t High=(*Call++); if((High==0)||(High=='-')) break;
@@ -170,19 +176,36 @@ static uint16_t AprsCallPass(const char *Call)                     // calc. pass
     Low=toupper(Low); Hash^=(Low); }
   return Hash&0x7FFF; }
 
+static uint8_t LoginLine(char *Line, /* , const char *Call,*/ uint16_t Range=0 )
+{ uint8_t Len=0;
+  Len += Format_String(Line, "user ");           // prepare the login line for the APRS server
+  Len += Parameters.getAprsCall(Line+Len);
+  uint16_t Pass = APRS_CallPass(Line+5);
+  Len += Format_String(Line+Len, " pass ");
+  Len += Format_UnsDec(Line+Len, Pass);
+  Len += Format_String(Line+Len, " vers OGN-Tracker v0.0");
+  if(Range)
+  { Len += Format_String(Line+Len, " filter m/");
+    Len += Format_UnsDec(Line+Len, Range); }
+  Line[Len++]='\n';
+  Line[Len]=0;
+  return Len; }
+
+int APRS_RxMsg(const char *Msg)
+{
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "APRS -> ");
+  Format_String(CONS_UART_Write, Msg);
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
+  return 0; }
+
 extern "C"
 void vTaskWIFI(void* pvParameters)
 { esp_err_t Err;
   vTaskDelay(1000);
-
-  AprsLoginLen  = Format_String(AprsLoginLine, "user ");           // prepare the login line for the APRS server
-  AprsLoginLen += Parameters.getAprsCall(AprsLoginLine+AprsLoginLen);
-  uint16_t Pass = AprsCallPass(AprsLoginLine+5);
-  AprsLoginLen += Format_String(AprsLoginLine+AprsLoginLen, " pass ");
-  AprsLoginLen += Format_UnsDec(AprsLoginLine+AprsLoginLen, Pass);
-  AprsLoginLen += Format_String(AprsLoginLine+AprsLoginLen, " vers OGN-Tracker v0.0");
-  AprsLoginLine[AprsLoginLen++]='\n';
-  AprsLoginLine[AprsLoginLen]=0;
 
   Err=WIFI_Init();
 #ifdef DEBUG_PRINT
@@ -257,50 +280,63 @@ void vTaskWIFI(void* pvParameters)
 #endif
         if(Err) continue;                                     // if connection failed then give up
 
-        uint32_t LocalIP=0;
+        WIFI_LocalIP=0;
         for(uint8_t Idx=0; Idx<10; Idx++)                     // wait to obtain local IP from DHCP
         { vTaskDelay(1000);
-          LocalIP = WIFI_getLocalIP();
-          if(LocalIP) break; }
+          WIFI_LocalIP = WIFI_getLocalIP();
+          if(WIFI_LocalIP) break; }
 
 #ifdef DEBUG_PRINT
         xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
         Format_String(CONS_UART_Write, "LocalIP: ");
-        IP_Print(CONS_UART_Write, LocalIP);
-        // Format_Hex(CONS_UART_Write, LocalIP);
+        IP_Print(CONS_UART_Write, WIFI_LocalIP);
+        // Format_Hex(CONS_UART_Write, WIFI_LocalIP);
         Format_String(CONS_UART_Write, "\n");
         xSemaphoreGive(CONS_Mutex);
 #endif
-        if(LocalIP==0) { WIFI_Disconnect(); continue; }       // if getting local IP failed then give up
+        if(WIFI_LocalIP==0) { WIFI_Disconnect(); continue; }     // if getting local IP failed then give up
 
-        int ConnErr=AprsLink.Connect(AprsHost, AprsPort);     // connect to the APRS server
-        if(ConnErr>=0)                                        // if connection succesfull
+        int ConnErr=APRS_Socket.Connect(APRS_Host, APRS_Port);   // connect to the APRS server
+        if(ConnErr>=0)                                           // if connection succesfull
         {
+          uint8_t LoginLen = LoginLine(Line, 5);
 #ifdef DEBUG_PRINT
           xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
           Format_String(CONS_UART_Write, "Connected to ");
-          IP_Print(CONS_UART_Write, AprsLink.getIP());
-          Format_String(CONS_UART_Write, "\n");
-          Format_String(CONS_UART_Write, AprsLoginLine);
+          IP_Print(CONS_UART_Write, APRS_Socket.getIP());
+          Format_String(CONS_UART_Write, "\nAPRS <- ");
+          Format_String(CONS_UART_Write, Line);
           xSemaphoreGive(CONS_Mutex);
 #endif
-          AprsLink.setReceiveTimeout(5);
-          // AprsLink.setBlocking(0);
-          int Write=AprsLink.Send(AprsLoginLine, AprsLoginLen);  // send login to the APRS server
-          for(int Idx=0; Idx<20; Idx++)                          // wait for some time and watch what the server sends to us
-          { int Read=AprsLink.Receive(Line, 128);
-             if(Read>=0) Line[Read]=0;
+          APRS_Socket.setReceiveTimeout(1);                      // [sec] receive timeout
+          // APRS_Socket.setBlocking(0);
+          int Write=APRS_Socket.Send(Line, LoginLen);            // send login to the APRS server
+          int LinePtr=0;
+          for(int Idx=0; Idx<120; Idx++)                         // wait for some time and watch what the server sends to us
+          { int Left = MaxLineLen-LinePtr; if(Left<1) break;
+            int Read=APRS_Socket.Receive(Line+LinePtr, Left-1);
 #ifdef DEBUG_PRINT
-             xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-             Format_SignDec(CONS_UART_Write, Read);
-             // CONS_UART_Write('/');
-             // Format_SignDec(CONS_UART_Write, errno);
-             Format_String(CONS_UART_Write, ": ");
-             if(Read>=0) Format_String(CONS_UART_Write, Line);
-                    else Format_String(CONS_UART_Write, "\n");
-             xSemaphoreGive(CONS_Mutex);
+            xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+            Format_String(CONS_UART_Write, "APRS: ");
+            Format_SignDec(CONS_UART_Write, Read);
+            Format_String(CONS_UART_Write, "\n");
+            xSemaphoreGive(CONS_Mutex);
 #endif
-             if(Read<0) break;                                    // if an error reading from the APRS server
+            if(Read<0) break;                                    // if an error reading from the APRS server
+            if(Read==0) continue;                                // no more bytes: keep going
+            int LineLen = LinePtr+Read;
+            int MsgPtr = 0;
+            Line[LineLen]=0;
+            for(int Idx=LinePtr; Idx<LineLen; Idx++)
+            { char ch=Line[Idx]; if(ch==0) break;
+              if(ch=='\n')
+              { Line[Idx]=0; APRS_RxMsg(Line+MsgPtr); MsgPtr=Idx+1; }
+            }
+            if(MsgPtr>0)
+            { int Copy=LineLen-MsgPtr;
+              if(Copy>0)
+              { memcpy(Line, Line+MsgPtr, Copy); LinePtr=0; }
+            }
           }
         }
 #ifdef DEBUG_PRINT
@@ -311,9 +347,9 @@ void vTaskWIFI(void* pvParameters)
           Format_String(CONS_UART_Write, "\n");
           xSemaphoreGive(CONS_Mutex); }
 #endif
-        AprsLink.Disconnect();
+        APRS_Socket.Disconnect();
         vTaskDelay(5000);
-        WIFI_Disconnect();
+        WIFI_Disconnect(); WIFI_LocalIP=0;
         vTaskDelay(2000);
       }
     }
