@@ -107,6 +107,11 @@ class FlashParameters
    // char  BTpin[16];
 #endif
 
+#ifdef WITH_STRATUX
+   char StratuxWIFI[32];
+   char StratuxPass[32];
+#endif
+
 #ifdef WITH_WIFI
    static const uint8_t WIFInameLen = 32;
    static const uint8_t WIFIpassLen = 64;
@@ -209,6 +214,10 @@ class FlashParameters
 //    strcpy(BTname, "ESP32-OGN");
 // #endif
    // strcpy(BTpin, "1234");
+#endif
+#ifdef WITH_STRATUX
+   strcpy(StratuxWIFI, "stratux");
+   StratuxPass[0] = 0;
 #endif
 #ifdef WITH_WIFI
     for(uint8_t Idx=0; Idx<WIFIsets; Idx++)
@@ -522,6 +531,10 @@ class FlashParameters
 #ifdef WITH_BT_SPP
     if(strcmp(Name, "BTname")==0) return Read_String(BTname, Value, 16)<=0;
 #endif
+#ifdef WITH_STRATUX
+    if(strcmp(Name, "StratuxWIFI")==0) return Read_String(StratuxWIFI, Value, 32)<=0;
+    if(strcmp(Name, "StratuxPass")==0) return Read_String(StratuxPass, Value, 32)<=0;
+#endif
 #ifdef WITH_WIFI
     if(strcmp(Name, "WIFIname")==0) return Read_String(WIFIname[0], Value, WIFInameLen)<=0;
     if(strcmp(Name, "WIFIpass")==0) return Read_String(WIFIpass[0], Value, WIFIpassLen)<=0;
@@ -633,6 +646,10 @@ class FlashParameters
 #ifdef WITH_BT_SPP
     strcpy(Line, "BTname         = "); strcat(Line, BTname); strcat(Line, "; #  [char]\n"); if(fputs(Line, File)==EOF) return EOF;
 #endif
+#ifdef WITH_STRATUX
+    strcpy(Line, "StratuxWIFI    = "); strcat(Line, StratuxWIFI); strcat(Line, "; #  [char]\n"); if(fputs(Line, File)==EOF) return EOF;
+    strcpy(Line, "StratuxPass    = "); strcat(Line, StratuxPass); strcat(Line, "; #  [char]\n"); if(fputs(Line, File)==EOF) return EOF;
+#endif
 #ifdef WITH_WIFI
     for(uint8_t Idx=0; Idx<WIFIsets; Idx++)
     { if(WIFIname[Idx][0]==0) continue;
@@ -684,6 +701,10 @@ class FlashParameters
 #endif
     for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
     { Write_String (Line, OGN_Packet::InfoParmName(Idx), InfoParmValue(Idx)); strcat(Line, "; #  [char]\n"); Format_String(Output, Line); }
+#ifdef WITH_STRATUX
+    strcpy(Line, "StratuxWIFI    = "); strcat(Line, StratuxWIFI); strcat(Line, "; #  [char]\n"); Format_String(Output, Line);
+    strcpy(Line, "StratuxPass    = "); strcat(Line, StratuxPass); strcat(Line, "; #  [char]\n"); Format_String(Output, Line);
+#endif
 #ifdef WITH_WIFI
     for(uint8_t Idx=0; Idx<WIFIsets; Idx++)
     { if(WIFIname[Idx][0]==0) continue;
