@@ -43,6 +43,10 @@
 #include "fifo.h"
 #endif
 
+#ifdef WITH_STRATUX
+#include "stratux.h"
+#endif
+
 #ifdef WITH_BEEPER
 #include "driver/ledc.h"
 #include "fifo.h"
@@ -733,8 +737,8 @@ static int BT_SPP_Read (uint8_t &Byte)   // read a character from the BT serial 
 { // if(!BT_SPP_Conn) return 0;
   return BT_SPP_RxFIFO.Read(Byte); }
 
-static void BT_SPP_Write (char Byte)  // send a character to the BT serial port
-{ if(!BT_SPP_Conn) return;                                                                           // if BT connection is active
+static void BT_SPP_Write (char Byte)     // send a character to the BT serial port
+{ if(!BT_SPP_Conn) return;                                                                // if BT connection is active
   BT_SPP_TxFIFO.Write(Byte);                                                              // write the byte into the TxFIFO
   // TickType_t Behind = xTaskGetTickCount() - BT_SPP_LastTxPush;                         // [ms]
   // if(Behind>=20) BT_SPP_TxPush();
@@ -799,14 +803,19 @@ void CONS_UART_Write (char     Byte)
 #ifdef WITH_BT_SPP
   BT_SPP_Write(Byte);
 #endif
+#ifdef WITH_STRATUX
+  Stratux_Write(Byte);
+#endif
 }                                            // it appears the NL is translated into CR+NL
 int  CONS_UART_Read  (uint8_t &Byte)
 { int Ret=getchar(); if(Ret>=0) { Byte=Ret; return 1; }
 #ifdef WITH_BT_SPP
-  else return BT_SPP_Read(Byte);
-#else
-  else return Ret;
+  Ret=BT_SPP_Read(Byte); if(Ret>0) { return 1; }
 #endif
+#ifdef WITH_STRATUX
+  Ret=Stratux_Read(Byte); if(Ret>0) { return 1; }
+#endif
+  return Ret;
 }
 // int  CONS_UART_Free  (void)           { return UART2_Free(); }
 // int  CONS_UART_Full  (void)           { return UART2_Full(); }
