@@ -1,11 +1,14 @@
-extern uint32_t BatteryVoltage;       // [1/256 mV] averaged
-extern  int32_t BatteryVoltageRate;   // [1/256 mV] averaged
+#include "flight.h"
 
 #ifdef WITH_LOOKOUT                   // traffic awareness and warnings
 #include "lookout.h"
 extern LookOut Look;
 #endif
 
+extern uint32_t BatteryVoltage;       // [1/256 mV] averaged
+extern  int32_t BatteryVoltageRate;   // [1/256 mV] averaged
+
+extern FlightMonitor Flight;
 
 #ifdef WITH_ESP32
 const uint8_t RelayQueueSize = 32;

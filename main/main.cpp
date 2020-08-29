@@ -100,8 +100,8 @@ void app_main(void)
 #ifdef WITH_WIFI
     xTaskCreate(vTaskWIFI,  "WIFI",  4096, 0, tskIDLE_PRIORITY+2, 0);
 #endif
-#ifdef WITH_WIFI
-    xTaskCreate(vTaskSTX,  "STX",  4096, 0, tskIDLE_PRIORITY+2, 0);
+#ifdef WITH_STRATUX
+    xTaskCreate(vTaskSTX,  "STX",  4096, 0, tskIDLE_PRIORITY+3, 0);
 #endif
 #if defined(WITH_OLED) || defined(WITH_U8G2_OLED) || defined(WITH_ST7789) || defined(WITH_ILI9341)
     xTaskCreate(vTaskDISP,  "DISP",  2048, 0, tskIDLE_PRIORITY+2, 0);

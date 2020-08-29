@@ -1407,6 +1407,44 @@ class GPS_Position: public GPS_Time
    { int16_t LatAngle =  calcLatAngle16(Latitude);
        LatitudeCosine = calcLatCosine(LatAngle); }
 
+   int WriteAPRS(char *Out, const char *Call, const char *Icon, uint32_t ID)
+   { int Len=0;
+     Len+=Format_String(Out+Len, Call);                                       // Call
+     Len+=Format_String(Out+Len, ">APRS:/");
+     Len+=WriteHHMMSS(Out+Len);                                               // Time
+     Out[Len++]='h';
+     Len+=WriteIGCcoord(Out+Len, Latitude, 2, "NS");                          // [DDMM.MM] Latitude
+     char LatW = Out[Len-2];
+     Out[Len-2]=Out[Len-3]; Out[Len-3]=Out[Len-4]; Out[Len-4]='.';
+     Out[Len++]=Icon[0];
+     Len+=WriteIGCcoord(Out+Len, Longitude, 3, "EW");                         // [DDDMM.MM] Longitude
+     char LonW = Out[Len-2];
+     Out[Len-2]=Out[Len-3]; Out[Len-3]=Out[Len-4]; Out[Len-4]='.';
+     Out[Len++]=Icon[1];
+     Len+=Format_UnsDec(Out+Len, Heading/10, 3);                              // [deg] Heading
+     Out[Len++]='/';
+     Len+=Format_UnsDec(Out+Len, ((uint32_t)Speed*199+512)>>10, 3);           // [kt] speed
+     Out[Len++] = '/'; Out[Len++] = 'A'; Out[Len++] = '='; Len+=Format_UnsDec(Out+Len, (MetersToFeet(Altitude)+5)/10, 6); // [feet] altitude
+     Out[Len++]=' '; Out[Len++]='!'; Out[Len++]='W'; Out[Len++]=LatW; Out[Len++]=LonW; Out[Len++]='!'; // more accurate Lat/Lon
+     Out[Len++]=' '; Out[Len++]='i'; Out[Len++]='d'; Len+=Format_Hex(Out+Len, ID); // ID
+
+     Out[Len++] = ' '; Len+=Format_SignDec(Out+Len, ((int32_t)ClimbRate*10079+256)>>9, 3); Out[Len++] = 'f'; Out[Len++] = 'p'; Out[Len++] = 'm'; // [fpm]
+     Out[Len++] = ' '; Len+=Format_SignDec(Out+Len, TurnRate/3, 2, 1); Out[Len++] = 'r'; Out[Len++] = 'o'; Out[Len++] = 't'; // [ROT]
+
+     if(hasBaro)
+     { int32_t Alt=(StdAltitude+5)/10;                                       // [m] standard pressure altitude
+       if(Alt<0) Alt=0;
+       Out[Len++] = ' '; Out[Len++] = 'F'; Out[Len++] = 'L';
+       Len+=Format_UnsDec(Out+Len, MetersToFeet((uint32_t)Alt), 5, 2); }     // [feet] "Flight Level"
+
+     uint16_t DOP=PDOP; if(DOP==0) DOP=HDOP;
+     uint16_t HorPrec=(DOP*2+5)/10; if(HorPrec>63) HorPrec=63;               // [m]
+     uint16_t VerPrec=(DOP*3+5)/10; if(VerPrec>63) VerPrec=63;               // [m]
+     Out[Len++] = ' ';  Out[Len++] = 'g'; Out[Len++] = 'p'; Out[Len++] = 's';
+     Len+=Format_UnsDec(Out+Len, HorPrec); Out[Len++] = 'x'; Len+=Format_UnsDec(Out+Len, VerPrec);
+
+     Out[Len]=0; return Len; }
+
    static int WriteIGCcoord(char *Out, int32_t Coord, uint8_t DegSize, const char *SignChar)
    { int Len=0;
      bool Neg = Coord<0; if(Neg) Coord=(-Coord);
@@ -1417,15 +1455,18 @@ class GPS_Position: public GPS_Time
      Out[Len++]=SignChar[Neg];
      return Len; }
 
+   int WriteHHMMSS(char *Out)
+   { Format_UnsDec(Out  , Hour, 2);
+     Format_UnsDec(Out+2, Min , 2);
+     Format_UnsDec(Out+4, Sec , 2);
+     return 6; }
+
    int WriteIGC(char *Out)
    { // if(!isValid()) return 0;
      int Len=0;
      Out[Len++] = 'B';
-     if(isTimeValid())
-     { Len+=Format_UnsDec(Out+Len, Hour, 2);
-       Len+=Format_UnsDec(Out+Len, Min, 2);
-       Len+=Format_UnsDec(Out+Len, Sec, 2); }
-     else Len+=Format_String(Out+Len, "      ");
+     if(isTimeValid()) Len+=WriteHHMMSS(Out+Len);
+                  else Len+=Format_String(Out+Len, "      ");
      if(isValid())
      { Len+=WriteIGCcoord(Out+Len, Latitude, 2, "NS");
        Len+=WriteIGCcoord(Out+Len, Longitude, 3, "EW");

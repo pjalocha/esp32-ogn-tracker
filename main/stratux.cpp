@@ -1,16 +1,15 @@
+#include <ctype.h>
+
 #include "hal.h"
 
 #include "tcpip_adapter.h"
 #include "esp_wifi.h"
 #include "esp_event_loop.h"
 
-#include <ctype.h>
 #include "format.h"
-
+#include "fifo.h"
 #include "socket.h"
-
 #include "proc.h"
-
 #include "stratux.h"
 
 #define DEBUG_PRINT
@@ -19,9 +18,10 @@
 
 // ==============================================================================================
 
-wifi_config_t WIFI_Config;   // WIFI config: ESSID, etc.
-uint32_t WIFI_LocalIP = 0;   // WIFI local IP address
-bool WIFI_isConnected(void) { return WIFI_LocalIP!=0; }
+wifi_config_t WIFI_Config;        // WIFI config: ESSID, etc.
+tcpip_adapter_ip_info_t WIFI_IP = { 0, 0, 0 };  // WIFI local IP address, mask and gateway
+
+bool WIFI_isConnected(void) { return WIFI_IP.ip.addr!=0; }
 
 static esp_err_t WIFI_event_handler(void *ctx, system_event_t *event)
 {
@@ -104,9 +104,8 @@ static esp_err_t WIFI_Disconnect(void)                      // disconnect from W
 
 static uint32_t WIFI_getLocalIP(void)                       // get local IP, once DHCP phase is done
 { esp_err_t Err;
-  tcpip_adapter_ip_info_t Info;
-  Err=tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_STA, &Info); if(Err!=ESP_OK) return 0;
-  return Info.ip.addr; }
+  Err=tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_STA, &WIFI_IP); if(Err!=ESP_OK) return 0;
+  return WIFI_IP.ip.addr; }
 
 uint8_t IP_Print(char *Out, uint32_t IP)
 { uint8_t Len=0;
@@ -125,17 +124,33 @@ void IP_Print(void (*Output)(char), uint32_t IP)
 
 // ==============================================================================================
 
+static       char  Stratux_Host[32] = { 0 };
+static const char *Stratux_Port     = "30011";
+static Socket Stratux_Socket;
+
+static FIFO<char, 512> Stratux_TxFIFO;
+static FIFO<uint8_t, 256> Stratux_RxFIFO;
+
 bool Stratux_isConnected(void)
-{ return 0; }
+{ return WIFI_isConnected() && Stratux_Socket.isConnected(); }
 
  int Stratux_Read (uint8_t &Byte)
-{ return 0; }
+{ return Stratux_RxFIFO.Read(Byte); }
 
 void Stratux_Write (char Byte)
-{ }
+{ Stratux_TxFIFO.Write(Byte); }
+
+static int Stratux_TxPush(size_t MaxLen=256)                      // transmit part of the TxFIFO to the Stratux link
+{ char *Data; size_t Len=Stratux_TxFIFO.getReadBlock(Data);       // see how much data is there in the queue for transmission
+  if(Len==0) return 0;                                            // if block is empty then give up
+  if(Len>MaxLen) Len=MaxLen;                                      // limit the block size
+  int Ret=Stratux_Socket.Send(Data, Len);                         // write the block to the Stratux socket
+  if(Ret!=Len) return -1;                                         // if an error then give up
+  Stratux_TxFIFO.flushReadBlock(Len);                             // remove the transmitted block from the FIFO
+  return Len; }                                                   // return number of transmitted bytes
 
 extern "C"
-void vTaskWIFI(void* pvParameters)
+void vTaskSTX(void* pvParameters)
 { esp_err_t Err;
   vTaskDelay(1000);
 
@@ -161,7 +176,7 @@ void vTaskWIFI(void* pvParameters)
 
   for( ; ; )                                                       // main (endless) loop
   { vTaskDelay(1000);
-    if(Parameters.StratuxPass[0]==0) continue;
+    if(Parameters.StratuxWIFI[0]==0) continue;
     Err=WIFI_Connect(Parameters.StratuxWIFI, Parameters.StratuxPass);
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -177,24 +192,58 @@ void vTaskWIFI(void* pvParameters)
 #endif
     if(Err) { vTaskDelay(10000); continue; }
 
-    WIFI_LocalIP=0;
+    WIFI_IP.ip.addr = 0;
     for(uint8_t Idx=0; Idx<10; Idx++)                     // wait to obtain local IP from DHCP
     { vTaskDelay(1000);
-      WIFI_LocalIP = WIFI_getLocalIP();
-      if(WIFI_LocalIP) break; }
+      if(WIFI_getLocalIP()) break; }
 
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-    Format_String(CONS_UART_Write, "LocalIP: ");
-    IP_Print(CONS_UART_Write, WIFI_LocalIP);
-    // Format_Hex(CONS_UART_Write, WIFI_LocalIP);
+    Format_String(CONS_UART_Write, "Local IP: ");
+    IP_Print(CONS_UART_Write, WIFI_IP.ip.addr);
+    Format_String(CONS_UART_Write, " GW: ");
+    IP_Print(CONS_UART_Write, WIFI_IP.gw.addr);
     Format_String(CONS_UART_Write, "\n");
     xSemaphoreGive(CONS_Mutex);
 #endif
-    if(WIFI_LocalIP==0) { WIFI_Disconnect(); continue; }     // if getting local IP failed then give up
+    if(WIFI_IP.ip.addr==0) { WIFI_Disconnect(); continue; }     // if getting local IP failed then give up
 
+    Stratux_TxFIFO.Clear();
+
+    uint8_t Len=IP_Print(Stratux_Host, WIFI_IP.gw.addr); Stratux_Host[Len]=0;
+    int ConnErr=Stratux_Socket.Connect(Stratux_Host, Stratux_Port);   // connect to the Stratux GPS server
+    if(ConnErr>=0)                                                    // if connection succesfull
+    { Stratux_Socket.setReceiveTimeout(1);
+#ifdef DEBUG_PRINT
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, "Connected to ");
+      IP_Print(CONS_UART_Write, Stratux_Socket.getIP());
+      Format_String(CONS_UART_Write, "\n");
+      xSemaphoreGive(CONS_Mutex);
+#endif
+      for( ; ; )
+      { int Len=Stratux_TxPush(); if(Len<0) break;
+        if(Len==0) vTaskDelay(5);
+// #ifdef DEBUG_PRINT
+//         xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+//         Format_String(CONS_UART_Write, "Stratux_TxPush() => ");
+//         Format_SignDec(CONS_UART_Write, Len);
+//         Format_String(CONS_UART_Write, "\n");
+//         xSemaphoreGive(CONS_Mutex);
+// #endif
+      }
+
+      vTaskDelay(10000); }
+    else
+    { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, "Failed to connect to Stratux -> ");
+      Format_SignDec(CONS_UART_Write, ConnErr);
+      Format_String(CONS_UART_Write, "\n");
+      xSemaphoreGive(CONS_Mutex); }
+
+    Stratux_Socket.Disconnect();
     vTaskDelay(5000);
-    WIFI_Disconnect(); WIFI_LocalIP=0;
+    WIFI_Disconnect(); WIFI_IP.ip.addr=0;
     vTaskDelay(2000);
   }
 

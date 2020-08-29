@@ -37,6 +37,9 @@ class Socket
      if(Err!=0) { Disconnect(); return -3; }
      return Link; }
 
+   // int Connect()
+   // { Link = socket(AF_INET, SOCK_STREAM, IPPROTO_IP); }
+
    void Disconnect(void)
    { if(Link>=0) { close(Link); Link=(-1); }
      if(Host) { freeaddrinfo(Host); Host=0; }

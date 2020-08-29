@@ -152,14 +152,32 @@ class OGN1_Packet          // Packet structure for the OGN tracker
              (long int)HeaderWord, (long int)Data[0], (long int)Data[1],
              (long int)Data[2], (long int)Data[3] ); }
 
+   uint8_t Read(const char *Inp)
+   { uint8_t Len=0;
+     if(Inp[0]==' ') Inp++;
+     int Chars = Read_Hex(HeaderWord, Inp); if(Chars!=8) return 0;
+     Inp+=Chars; Len+=4;
+     for( uint8_t Idx=0; Idx<4; Idx++)
+     { if(Inp[0]==' ') Inp++;
+       int Chars = Read_Hex(Data[Idx], Inp); if(Chars!=8) return 0;
+       Inp+=Chars; Len+=4; }
+     return Len; }
+
+   uint8_t Dump(char *Out)
+   { uint8_t Len=0;
+     Len+=Format_Hex(Out+Len, HeaderWord);
+     for(int Idx=0; Idx<4; Idx++)
+     { Out[Len++]=' '; Len+=Format_Hex(Out+Len, Data[Idx]); }
+     return Len; }
+
    void DumpBytes(void) const
    { for(uint8_t Idx=0; Idx<Bytes; Idx++)
      { printf(" %02X", Byte()[Idx]); }
      printf("\n"); }
 
    int WriteDeviceStatus(char *Out)
-   { return sprintf(Out, " h%02X v%02X %dsat/%d %ldm %3.1fhPa %+4.1fdegC %3.1f%% %4.2fV %d/%+4.1fdBm %d/min",
-             Status.Hardware, Status.Firmware, Status.Satellites, Status.FixQuality, (long int)DecodeAltitude(),
+   { return sprintf(Out, " h%02X v%02X %dsat/%d/%ddB %ldm %3.1fhPa %+4.1fdegC %3.1f%% %4.2fV %d/%+4.1fdBm %d/min",
+             Status.Hardware, Status.Firmware, Status.Satellites, Status.FixQuality, 8+Status.SatSNR, (long int)DecodeAltitude(),
              0.08*Status.Pressure, 0.1*DecodeTemperature(), 0.1*DecodeHumidity(),
              (1.0/64)*DecodeVoltage(), Status.TxPower+4, -0.5*Status.RadioNoise, (1<<Status.RxRate)-1 );
    }
@@ -205,8 +223,8 @@ class OGN1_Packet          // Packet structure for the OGN tracker
    void PrintDeviceStatus(void) const
    { printf("%c:%06lX R%c%c %02ds:",
              '0'+Header.AddrType, (long int)Header.Address, '0'+Header.Relay, Header.Emergency?'E':' ', Status.Time);
-     printf(" h%02X v%02X %dsat/%d %ldm %3.1fhPa %+4.1fdegC %3.1f%% %4.2fV Tx:%ddBm Rx:%+4.1fdBm %d/min",
-             Status.Hardware, Status.Firmware, Status.Satellites, Status.FixQuality, (long int)DecodeAltitude(),
+     printf(" h%02X v%02X %dsat/%d/%ddB %ldm %3.1fhPa %+4.1fdegC %3.1f%% %4.2fV Tx:%ddBm Rx:%+4.1fdBm %d/min",
+             Status.Hardware, Status.Firmware, Status.Satellites, Status.FixQuality, 8+Status.SatSNR, (long int)DecodeAltitude(),
              0.08*Status.Pressure, 0.1*DecodeTemperature(), 0.1*DecodeHumidity(),
              (1.0/64)*DecodeVoltage(), Status.TxPower+4, -0.5*Status.RadioNoise, (1<<Status.RxRate)-1 );
      printf("\n");
@@ -219,7 +237,7 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      printf(" %d/%dD/%4.1f", (int)Position.FixQuality, (int)Position.FixMode+2, 0.1*(10+DecodeDOP()) );
      if(Position.Time<60) printf(" %02ds:", (int)Position.Time);
                  else printf(" ---:");
-     printf(" [%+10.6f, %+11.6f]deg %ldm",
+     printf(" [%+010.6f,%+011.6f]deg %ldm",
             0.0001/60*DecodeLatitude(), 0.0001/60*DecodeLongitude(), (long int)DecodeAltitude() );
      if(hasBaro())
      { printf("[%+dm]", (int)getBaroAltDiff() ); }
@@ -227,6 +245,64 @@ class OGN1_Packet          // Packet structure for the OGN tracker
             0.1*DecodeSpeed(), 0.1*DecodeHeading(), 0.1*DecodeClimbRate(), 0.1*DecodeTurnRate() );
      printf("\n");
    }
+
+   int WriteJSON(char *JSON) const
+   { int Len=0;
+     Len+=Format_String(JSON+Len, "\"addr\":\"");
+     Len+=Format_Hex(JSON+Len, (uint8_t) (Header.Address>>16));
+     Len+=Format_Hex(JSON+Len, (uint16_t)(Header.Address));
+     JSON[Len++]='\"';
+     JSON[Len++]=',';
+     Len+=Format_String(JSON+Len, "\"addr_type\":");
+     JSON[Len++] = HexDigit(Header.AddrType);
+     if(!Header.Encrypted && !Header.NonPos)                       // if non-encrypted position
+     { Len+=Format_String(JSON+Len, ",\"acft_type\":\"");
+       JSON[Len++] = HexDigit(Position.AcftType);
+       JSON[Len++]='\"';
+       Len+=Format_String(JSON+Len, ",\"acft_cat\":\"");           // GDL90 aircraft category
+                            // no-info, glider, tow, heli, parachute, drop-plane, hang-glider, para-glider, powered, jet, UFO, balloon, Zeppelin, UAV, ground vehicle, static } ; 
+       const uint8_t AcftCat[16] = { 0,      9,   1,    7,        11,          1,          12,          12,       1,   2,   0,      10,       10,  14, 18, 19 } ;
+       Len+=Format_Hex(JSON+Len, AcftCat[Position.AcftType]);
+       JSON[Len++]='\"';
+       Len+=Format_String(JSON+Len, ",\"stealth\":");
+       JSON[Len++] = '0'+Position.Stealth;
+       Len+=Format_String(JSON+Len, ",\"lat_deg\":");
+       Len+=Format_SignDec(JSON+Len, (int32_t)(((int64_t)50*DecodeLatitude()+1)/3), 8, 7, 1);
+       Len+=Format_String(JSON+Len, ",\"lon_deg\":");
+       Len+=Format_SignDec(JSON+Len, (int32_t)(((int64_t)50*DecodeLongitude()+1)/3), 8, 7, 1);
+       int32_t Altitude=DecodeAltitude();
+       Len+=Format_String(JSON+Len, ",\"alt_msl_m\":");
+       Len+=Format_UnsDec(JSON+Len, (uint32_t)Altitude);
+       if(hasBaro())
+       { Altitude+=getBaroAltDiff();
+         Len+=Format_String(JSON+Len, ",\"alt_std_m\":");
+         Len+=Format_SignDec(JSON+Len, Altitude, 1, 0, 1); }
+       Len+=Format_String(JSON+Len, ",\"track_deg\":");
+       Len+=Format_UnsDec(JSON+Len, DecodeHeading(), 2, 1);
+       Len+=Format_String(JSON+Len, ",\"speed_mps\":");
+       Len+=Format_UnsDec(JSON+Len, DecodeSpeed(), 2, 1);
+       Len+=Format_String(JSON+Len, ",\"climb_mps\":");
+       Len+=Format_SignDec(JSON+Len, DecodeClimbRate(), 2, 1, 1);
+       Len+=Format_String(JSON+Len, ",\"turn_dps\":");
+       Len+=Format_SignDec(JSON+Len, DecodeTurnRate(), 2, 1, 1);
+       Len+=Format_String(JSON+Len, ",\"DOP\":");
+       Len+=Format_UnsDec(JSON+Len, 10+DecodeDOP(), 2, 1); }
+     if(!Header.Encrypted && Header.NonPos)                         // non-encrypted status and info
+     { if(Status.ReportType==0)                                     // status
+       { }
+       if(Status.ReportType==1)                                     // info
+       { char Value[16];
+         uint8_t InfoType;
+         uint8_t Idx=0;
+         for( ; ; )
+         { uint8_t Chars = readInfo(Value, InfoType, Idx);
+           if(Chars==0) break;
+           if(InfoType<InfoParmNum)
+           { Len+=sprintf(JSON+Len, ",\"%s\":\"%s\"", InfoParmName(InfoType), Value); }
+           Idx+=Chars; }
+       }
+     }
+     return Len; }
 /*
    void Encode(MAV_ADSB_VEHICLE *MAV)
    { MAV->ICAO_address = HeaderWord&0x03FFFFFF;
@@ -459,7 +535,7 @@ class OGN1_Packet          // Packet structure for the OGN tracker
 
      Len+=Format_UnsDec(Msg+Len, (DecodeHeading()+5)/10, 3);
      Msg[Len++] = '/';
-     Len+=Format_UnsDec(Msg+Len, (199*DecodeSpeed()+512)>>10, 3);
+     Len+=Format_UnsDec(Msg+Len, ((uint32_t)DecodeSpeed()*199+512)>>10, 3);
      Msg[Len++] = '/'; Msg[Len++] = 'A'; Msg[Len++] = '='; Len+=Format_UnsDec(Msg+Len, MetersToFeet(DecodeAltitude()), 6);
 
      Msg[Len++] = ' ';
@@ -471,7 +547,7 @@ class OGN1_Packet          // Packet structure for the OGN tracker
 
      Msg[Len++] = ' '; Msg[Len++] = 'i'; Msg[Len++] = 'd'; Len+=Format_Hex(Msg+Len, ((uint32_t)Position.AcftType<<26) | ((uint32_t)Header.AddrType<<24) | Header.Address);
 
-     Msg[Len++] = ' '; Len+=Format_SignDec(Msg+Len, (10079*DecodeClimbRate()+256)>>9, 3); Msg[Len++] = 'f'; Msg[Len++] = 'p'; Msg[Len++] = 'm';
+     Msg[Len++] = ' '; Len+=Format_SignDec(Msg+Len, ((int32_t)DecodeClimbRate()*10079+256)>>9, 3); Msg[Len++] = 'f'; Msg[Len++] = 'p'; Msg[Len++] = 'm';
      Msg[Len++] = ' '; Len+=Format_SignDec(Msg+Len, DecodeTurnRate()/3, 2, 1); Msg[Len++] = 'r'; Msg[Len++] = 'o'; Msg[Len++] = 't';
 
      if(hasBaro())

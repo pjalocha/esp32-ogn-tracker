@@ -13,8 +13,6 @@
 
 #include "fifo.h"
 
-#include "flight.h"                   // flight status
-
 #ifdef WITH_FLASHLOG                  // log own track to unused Flash pages (STM32 only)
 #include "flashlog.h"
 #endif
@@ -87,22 +85,22 @@ FlightMonitor Flight;
 
 #ifdef WITH_LOG
 
-static int SPIFFSlog(OGN_RxPacket<OGN_Packet> *Packet, uint32_t Time)
-{ OGN_LogPacket<OGN_Packet> *LogPacket = LOG_FIFO.getWrite(); if(LogPacket==0) return -1; // allocate new packet in the LOG_FIFO
+static int FlashLog(OGN_RxPacket<OGN_Packet> *Packet, uint32_t Time)
+{ OGN_LogPacket<OGN_Packet> *LogPacket = FlashLog_FIFO.getWrite(); if(LogPacket==0) return -1; // allocate new packet in the LOG_FIFO
   LogPacket->Packet = Packet->Packet;                                                     // copy the packet
   LogPacket->Flags=0x80;
   LogPacket->setTime(Time);
   LogPacket->setCheck();
-  LOG_FIFO.Write();                                                                       // finalize the write
+  FlashLog_FIFO.Write();                                                                       // finalize the write
   return 1; }
 
-static int SPIFFSlog(OGN_TxPacket<OGN_Packet> *Packet, uint32_t Time)
-{ OGN_LogPacket<OGN_Packet> *LogPacket = LOG_FIFO.getWrite(); if(LogPacket==0) return -1;
+static int FlashLog(OGN_TxPacket<OGN_Packet> *Packet, uint32_t Time)
+{ OGN_LogPacket<OGN_Packet> *LogPacket = FlashLog_FIFO.getWrite(); if(LogPacket==0) return -1;
   LogPacket->Packet = Packet->Packet;
   LogPacket->Flags=0x00;
   LogPacket->setTime(Time);
   LogPacket->setCheck();
-  LOG_FIFO.Write();
+  FlashLog_FIFO.Write();
   return 1; }
 
 #endif // WITH_LOG
@@ -379,7 +377,7 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
 #ifdef WITH_LOG
      bool Signif = PrevRxPacket!=0;
      if(!Signif) Signif=OGN_isSignif(&(RxPacket->Packet), &(PrevRxPacket->Packet));
-     if(Signif) SPIFFSlog(RxPacket, RxTime);                                          // log only significant packets
+     if(Signif) FlashLog(RxPacket, RxTime);                                          // log only significant packets
 #endif
 #ifdef WITH_PFLAA
     if( Parameters.Verbose    // print PFLAA on the console for received packets
@@ -689,7 +687,7 @@ void vTaskPROC(void* pvParameters)
 #ifdef WITH_LOG
       bool isSignif = OGN_isSignif(&(PosPacket.Packet), &PrevLoggedPacket);
       if(isSignif)
-      { SPIFFSlog(&PosPacket, PosTime);
+      { FlashLog(&PosPacket, PosTime);
         PrevLoggedPacket = PosPacket.Packet; }
 #endif
     } else // if GPS position is not complete, contains no valid position, etc.
@@ -745,7 +743,7 @@ void vTaskPROC(void* pvParameters)
       if(doTx)
       {
 #ifdef WITH_LOG
-        SPIFFSlog(&StatPacket, PosTime);                         // log the status packet
+        FlashLog(&StatPacket, PosTime);                         // log the status packet
 #endif
        *StatusPacket = StatPacket;                               // copy status packet into the Tx queue
         StatusPacket->Packet.Whiten();                           // whiten for transmission

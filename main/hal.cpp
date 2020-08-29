@@ -1661,7 +1661,7 @@ void IO_Configuration(void)
 
 #ifdef WITH_M5_JACEK
   GPS_ANT_Dir();
-  GPS_ANT_Sel(1);                   // 0 = external entenna
+  GPS_ANT_Sel(0);                   // 0 = external entenna
 #endif
 
 #ifdef PIN_PERIPH_RST

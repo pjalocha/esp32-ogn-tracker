@@ -111,7 +111,7 @@ static void ListLogFile(void)
   Format_String(CONS_UART_Write, "\n");
   xSemaphoreGive(CONS_Mutex);
 #endif
-  uint32_t FileTime = SPIFFSlog_ReadShortFileTime((const char *)NMEA.ParmPtr(0), NMEA.ParmLen(0));
+  uint32_t FileTime = FlashLog_ReadShortFileTime((const char *)NMEA.ParmPtr(0), NMEA.ParmLen(0));
   if(FileTime==0) return;
 #ifdef DEBUG_PRINT
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -120,7 +120,7 @@ static void ListLogFile(void)
   Format_String(CONS_UART_Write, "\n");
   xSemaphoreGive(CONS_Mutex);
 #endif
-  SPIFFSlog_ListFile(FileTime);
+  FlashLog_ListFile(FileTime);
 }
 #endif
 
@@ -220,7 +220,7 @@ static void ProcessCtrlC(void)                                  // print system 
 static void ProcessCtrlL(void)                                    // print system state to the console
 {
 #ifdef WITH_SPIFFS
-  SPIFFSlog_ListFiles();
+  FlashLog_ListFiles();
 #endif
 }
 

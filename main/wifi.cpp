@@ -9,6 +9,8 @@
 
 #include "socket.h"
 
+#include "proc.h"
+
 #ifdef WITH_WIFI
 
 #define DEBUG_PRINT
@@ -79,7 +81,7 @@ static esp_err_t WIFI_ActiveScan(wifi_ap_record_t *AP, uint16_t &APs)
   Err = esp_wifi_scan_start(&Config, 1); if(Err!=ESP_OK) return Err;
   Err = esp_wifi_scan_get_ap_records(&APs, AP); return Err; }
 
-static esp_err_t WIFI_PassiveScan(wifi_ap_record_t *AP, uint16_t &APs)
+static esp_err_t WIFI_PassiveScan(wifi_ap_record_t *AP, uint16_t &APs) //
 { esp_err_t Err;
   wifi_scan_config_t Config = { ssid:0, bssid:0, channel:0, show_hidden:0,
                                 scan_type:WIFI_SCAN_TYPE_PASSIVE,
@@ -102,7 +104,7 @@ static esp_err_t WIFI_Connect(wifi_ap_record_t *AP, const char *Pass) // connect
   Err = esp_wifi_connect(); if(Err!=ESP_OK) return Err;
   return Err; }
 
-static esp_err_t WIFI_Disconnect(void)
+static esp_err_t WIFI_Disconnect(void)                      // disconnect from WiFi AP
 { esp_err_t Err=esp_wifi_disconnect();
   return Err; }
 
