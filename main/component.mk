@@ -8,7 +8,7 @@
 #
 
 #Compile image file(s) into the resulting firmware binary
-COMPONENT_EMBED_FILES := OGN_logo_240x240.jpg
+COMPONENT_EMBED_FILES := OGN_logo_240x240.jpg CKL_logo_240x240.jpg
 
 
 
