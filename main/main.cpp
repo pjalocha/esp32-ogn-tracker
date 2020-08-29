@@ -52,7 +52,7 @@ void app_main(void)
       if(Parameters.ReadFromFile("/sdcard/TRACKER.CFG")>0)    // try to read parameters from the TRACKER.CFG file
       { if(Parameters.SaveToFlash) Parameters.WriteToNVS(); } // if succesfull and SaveToFlash==1 then save them to flash
 // #ifdef WITH_SPIFFS
-//       SPIFFSlog_CopyToSD();                                   // copy all flash log files to the SD card
+//       FlashLog_CopyToSD();                                   // copy all flash log files to the SD card
 // #endif
     }
 #endif
