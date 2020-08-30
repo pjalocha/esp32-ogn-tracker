@@ -549,7 +549,10 @@ static void GPS_NMEA(void)                                                 // wh
 #endif
 #ifndef WITH_GPS_NMEA_PASS
   // these NMEA from GPS we want to pass to the console
-  if( NMEA.isP() || NMEA.isGxRMC() || NMEA.isGxGGA() || NMEA.isGxGSA() || NMEA.isGPTXT() )
+  static uint8_t Count=0;
+  bool RatePass=0;
+  Count++; if(Count>=5) { Count=0; RatePass=1; }
+  if( NMEA.isP() || NMEA.isGxRMC() || NMEA.isGxGGA() || NMEA.isGxGSA() || (RatePass && (NMEA.isGPTXT() || NMEA.isGxGSV())) )
   // we would need to patch the GGA here for the GPS which does not calc. nor correct for GeoidSepar
 #endif
   { if(Parameters.Verbose)
