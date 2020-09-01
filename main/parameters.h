@@ -110,6 +110,10 @@ class FlashParameters
 #ifdef WITH_STRATUX
    char StratuxWIFI[32];
    char StratuxPass[32];
+   char StratuxHost[32];
+ uint16_t StratuxPort;
+  int8_t StratuxMinSig;
+  int8_t StratuxTxPwr;
 #endif
 
 #ifdef WITH_WIFI
@@ -218,6 +222,10 @@ class FlashParameters
 #ifdef WITH_STRATUX
    strcpy(StratuxWIFI, "stratux");
    StratuxPass[0] = 0;
+   StratuxHost[0] = 0;
+   StratuxPort    = 30011;
+   StratuxMinSig  = -70; // [dBm]
+   StratuxTxPwr   =  40; // [0.25dBm]
 #endif
 #ifdef WITH_WIFI
     for(uint8_t Idx=0; Idx<WIFIsets; Idx++)
@@ -534,6 +542,21 @@ class FlashParameters
 #ifdef WITH_STRATUX
     if(strcmp(Name, "StratuxWIFI")==0) return Read_String(StratuxWIFI, Value, 32)<=0;
     if(strcmp(Name, "StratuxPass")==0) return Read_String(StratuxPass, Value, 32)<=0;
+    if(strcmp(Name, "StratuxHost")==0) return Read_String(StratuxHost, Value, 32)<=0;
+    if(strcmp(Name, "StratuxPort")==0)
+    { int32_t Port; if(Read_Int(Port, Value)<=0) return 0;
+      if(Port<=0 || Port>0xFFFF) Port=30011; StratuxPort=Port; return 1; }
+    if(strcmp(Name, "StratuxMinSig")==0)
+    { int32_t MinSig; if(Read_Int(MinSig, Value)<=0) return 0;
+      if(MinSig<=(-90)) MinSig=(-90);
+      if(MinSig>=0) MinSig=0;
+      StratuxMinSig=MinSig; return 1; }
+    if(strcmp(Name, "StratuxTxPwr")==0)
+    { int32_t TxPwr; if(Read_Float1(TxPwr, Value)<=0) return 0;
+      TxPwr=(TxPwr*4+5)/10;
+      if(TxPwr<=0) TxPwr=0;
+      if(TxPwr>=80) TxPwr=80;
+      StratuxTxPwr=TxPwr; return 1; }
 #endif
 #ifdef WITH_WIFI
     if(strcmp(Name, "WIFIname")==0) return Read_String(WIFIname[0], Value, WIFInameLen)<=0;
@@ -649,6 +672,10 @@ class FlashParameters
 #ifdef WITH_STRATUX
     strcpy(Line, "StratuxWIFI    = "); strcat(Line, StratuxWIFI); strcat(Line, "; #  [char]\n"); if(fputs(Line, File)==EOF) return EOF;
     strcpy(Line, "StratuxPass    = "); strcat(Line, StratuxPass); strcat(Line, "; #  [char]\n"); if(fputs(Line, File)==EOF) return EOF;
+    strcpy(Line, "StratuxHost    = "); strcat(Line, StratuxHost); strcat(Line, "; #  [char]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_UnsDec (Line, "StratuxPort"  ,  (uint32_t)StratuxPort ); strcat(Line, " #  [port]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_Float1(Line, "StratuxTxPwr"  ,  (int32_t)10*StratuxTxPwr/4); strcat(Line, " #  [ dBm]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_SignDec(Line, "StratuxMinSig",   (int32_t)StratuxMinSig); strcat(Line, " #  [ dBm]\n"); if(fputs(Line, File)==EOF) return EOF;
 #endif
 #ifdef WITH_WIFI
     for(uint8_t Idx=0; Idx<WIFIsets; Idx++)
@@ -692,7 +719,7 @@ class FlashParameters
 #endif
     Write_Hex    (Line, "Verbose"  ,      (uint32_t)Verbose,   2); strcat(Line, " #  [ 0..3]\n"); Format_String(Output, Line);
     Write_Hex    (Line, "PageMask" ,      (uint32_t)PageMask,  4); strcat(Line, " #  [ mask]\n"); Format_String(Output, Line);
-    Write_UnsDec (Line, "PPSdelay"  ,(uint32_t)PPSdelay         ); strcat(Line, " #  [   ms]\n"); Format_String(Output, Line);
+    Write_UnsDec (Line, "PPSdelay"  ,     (uint32_t)PPSdelay    ); strcat(Line, " #  [   ms]\n"); Format_String(Output, Line);
 #ifdef WITH_BT_PWR
     Write_UnsDec (Line, "Bluetooth" ,          BT_ON            ); strcat(Line, " #  [  1|0]\n"); Format_String(Output, Line);
 #endif
@@ -704,6 +731,10 @@ class FlashParameters
 #ifdef WITH_STRATUX
     strcpy(Line, "StratuxWIFI    = "); strcat(Line, StratuxWIFI); strcat(Line, "; #  [char]\n"); Format_String(Output, Line);
     strcpy(Line, "StratuxPass    = "); strcat(Line, StratuxPass); strcat(Line, "; #  [char]\n"); Format_String(Output, Line);
+    strcpy(Line, "StratuxHost    = "); strcat(Line, StratuxHost); strcat(Line, "; #  [char]\n"); Format_String(Output, Line);
+    Write_UnsDec (Line, "StratuxPort", (uint32_t)StratuxPort    ); strcat(Line, " #  [port]\n"); Format_String(Output, Line);
+    Write_Float1 (Line, "StratuxTxPwr", (int32_t)10*StratuxTxPwr/4); strcat(Line, " #  [ dBm]\n"); Format_String(Output, Line);
+    Write_SignDec (Line, "StratuxMinSig", (int32_t)StratuxMinSig); strcat(Line, " #  [ dBm]\n"); Format_String(Output, Line);
 #endif
 #ifdef WITH_WIFI
     for(uint8_t Idx=0; Idx<WIFIsets; Idx++)
