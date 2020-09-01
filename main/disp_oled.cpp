@@ -522,6 +522,17 @@ void OLED_DrawBattery(u8g2_t *OLED, GPS_Position *GPS) // draw battery status pa
   Line[15]=0; u8g2_DrawStr(OLED, 0, 50, Line);
 */
 #endif
+
+#ifdef WITH_AXP
+  uint16_t InpCurr=AXP.readBatteryInpCurrent(); // [mA]
+  uint16_t OutCurr=AXP.readBatteryOutCurrent(); // [mA]
+   int16_t Current = InpCurr-OutCurr;
+  // uint8_t Charging = Current>0;
+  u8g2_SetFont(OLED, u8g2_font_6x10_tr);
+  strcpy(Line, "    mA ");
+  Format_SignDec(Line, Current, 3);
+  u8g2_DrawStr(OLED, 60, 28, Line);
+#endif
 }
 
 void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS)   // status bar on top of the OLED
@@ -536,6 +547,14 @@ void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS)   // status bar on top 
 #ifdef WITH_BQ
   uint8_t Status = BQ.readStatus();
   Charging = (Status>>4)&0x03;
+#endif
+#ifdef WITH_AXP
+  uint16_t InpCurr=AXP.readBatteryInpCurrent(); // [mA]
+  uint16_t OutCurr=AXP.readBatteryOutCurrent(); // [mA]
+   int16_t Current = InpCurr-OutCurr;
+  Charging = Current>0;
+#endif
+#if defined(WITH_BQ) || defined(WITH_AXP)
   static uint8_t DispLev = 0;
   if(Charging==1 || Charging==2) { DispLev++; if(DispLev>5) DispLev = BattLev?BattLev-1:0; }
                            else  { DispLev = BattLev; }
