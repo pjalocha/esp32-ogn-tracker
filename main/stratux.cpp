@@ -21,33 +21,49 @@
 wifi_config_t WIFI_Config;        // WIFI config: ESSID, etc.
 tcpip_adapter_ip_info_t WIFI_IP = { 0, 0, 0 };  // WIFI local IP address, mask and gateway
 
-bool WIFI_isConnected(void) { return WIFI_IP.ip.addr!=0; }
+static union
+{ uint32_t Flags;
+  struct
+  { uint8_t isON       : 2;
+    uint8_t isConnected: 2;
+    uint8_t hasIP      : 2;
+  } ;
+} WIFI_State;
+
+bool WIFI_isConnected(void) { return WIFI_IP.ip.addr!=0; }  // return "connected" status when IP from DHCP is there
 
 static esp_err_t WIFI_event_handler(void *ctx, system_event_t *event)
 {
 #ifdef DEBUG_PRINT
+  const char *EventName[9] = { 0, 0, "STA_START", "STA_STOP", "STA_CONN", "STA_DISCONN", 0, "GOT_IP", "LOST_IP" } ;
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   Format_String(CONS_UART_Write, "WIFI_event_handler => ");
-  Format_SignDec(CONS_UART_Write, event->event_id);
+  if(event->event_id>=0 && event->event_id<9 && EventName[event->event_id])
+    Format_String(CONS_UART_Write, EventName[event->event_id]);
+  else
+    Format_SignDec(CONS_UART_Write, event->event_id);
   Format_String(CONS_UART_Write, "\n");
   xSemaphoreGive(CONS_Mutex);
 #endif
-
   switch (event->event_id)
-  { case SYSTEM_EVENT_STA_START:        // #2
-      // esp_wifi_connect();
+  { case SYSTEM_EVENT_STA_START:        // #2 after WIFI_Start()
+      WIFI_State.isON=3;
       break;
-    case SYSTEM_EVENT_STA_STOP:         // #3
+    case SYSTEM_EVENT_STA_STOP:         // #3 after WIFI_Stop()
+      WIFI_State.isON=1;
       break;
-    case SYSTEM_EVENT_STA_CONNECTED:    // #4
+    case SYSTEM_EVENT_STA_CONNECTED:    // #4 after WIFI_Connect();
+      WIFI_State.isConnected=3;
       break;
-    case SYSTEM_EVENT_STA_DISCONNECTED: // #5
-      // esp_wifi_connect();
+    case SYSTEM_EVENT_STA_DISCONNECTED: // #5 after WIFI_Connect();
+      WIFI_State.isConnected=1;
       break;
     case SYSTEM_EVENT_STA_GOT_IP:       // #7
       // ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip)
+      WIFI_State.hasIP=3;
       break;
     case SYSTEM_EVENT_STA_LOST_IP:      // #8
+      WIFI_State.hasIP=1;
       break;
     default:
       break;
@@ -63,15 +79,22 @@ static esp_err_t WIFI_Init(void)
   Err = esp_wifi_set_storage(WIFI_STORAGE_RAM);
   return Err; }
 
+static esp_err_t WIFI_setPowerSave(bool ON)
+{ return esp_wifi_set_ps(ON?WIFI_PS_MAX_MODEM:WIFI_PS_MIN_MODEM); }
+
 static esp_err_t WIFI_Start(void)
 { esp_err_t Err;
   Err = esp_wifi_set_mode(WIFI_MODE_STA); if(Err!=ESP_OK) return Err;
-  Err = esp_wifi_start(); return Err; }
+  Err = esp_wifi_start();
+  return Err; }
 
 static esp_err_t WIFI_Stop(void)
 { return esp_wifi_stop(); }
 
-static esp_err_t WIFI_Connect(wifi_ap_record_t *AP, const char *Pass) // connect to given Access Point with gicen password
+static esp_err_t WIFI_setTxPower(int8_t TxPwr=40) // [0.25dBm] 80:L0=20dBm, 76:L1, 74:L2, 70:L3, 64:L4, 56:L5, 50:L5-2dBm, 0:L5-14dBm
+{ return esp_wifi_set_max_tx_power(TxPwr); }
+
+static esp_err_t WIFI_Connect(wifi_ap_record_t *AP, const char *Pass, int8_t MinSig=(-90)) // connect to given Access Point with gicen password
 { esp_err_t Err;
   memcpy(WIFI_Config.sta.ssid, AP->ssid, 32);
   if(Pass) strncpy((char *)WIFI_Config.sta.password, Pass, 64);
@@ -81,19 +104,19 @@ static esp_err_t WIFI_Connect(wifi_ap_record_t *AP, const char *Pass) // connect
   WIFI_Config.sta.channel = AP->primary;
   WIFI_Config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
   WIFI_Config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
-  WIFI_Config.sta.threshold.rssi = -127;
+  WIFI_Config.sta.threshold.rssi = MinSig;
   Err = esp_wifi_set_config(ESP_IF_WIFI_STA, &WIFI_Config); if(Err!=ESP_OK) return Err;
   Err = esp_wifi_connect(); if(Err!=ESP_OK) return Err;
   return Err; }
 
-static esp_err_t WIFI_Connect(const char *SSID, const char *Pass)
+static esp_err_t WIFI_Connect(const char *SSID, const char *Pass, int8_t MinSig=(-90))
 { esp_err_t Err;
   strncpy((char *)WIFI_Config.sta.ssid, SSID, 32);
   if(Pass && Pass[0]) strncpy((char *)WIFI_Config.sta.password, Pass, 64);
                 else  WIFI_Config.sta.password[0]=0;
   WIFI_Config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
   WIFI_Config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
-  WIFI_Config.sta.threshold.rssi = -80;
+  WIFI_Config.sta.threshold.rssi = MinSig;
   Err = esp_wifi_set_config(ESP_IF_WIFI_STA, &WIFI_Config); if(Err!=ESP_OK) return Err;
   Err = esp_wifi_connect(); if(Err!=ESP_OK) return Err;
   return Err; }
@@ -124,8 +147,8 @@ void IP_Print(void (*Output)(char), uint32_t IP)
 
 // ==============================================================================================
 
-static       char  Stratux_Host[32] = { 0 };
-static const char *Stratux_Port     = "30011";
+static char   Stratux_Host[32] = { 0 };
+static char   Stratux_Port[8];
 static Socket Stratux_Socket;
 
 static FIFO<char, 512> Stratux_TxFIFO;
@@ -154,6 +177,7 @@ void vTaskSTX(void* pvParameters)
 { esp_err_t Err;
   vTaskDelay(1000);
 
+  WIFI_State.Flags=0;
   Err=WIFI_Init();
 #ifdef DEBUG_PRINT
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -164,20 +188,24 @@ void vTaskSTX(void* pvParameters)
   xSemaphoreGive(CONS_Mutex);
 #endif
 
-  Err=WIFI_Start();                                              // start WiFi
-#ifdef DEBUG_PRINT
-  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-  Format_String(CONS_UART_Write, "WIFI_Start() => ");
-  if(Err>=ESP_ERR_WIFI_BASE) Err-=ESP_ERR_WIFI_BASE;
-  Format_SignDec(CONS_UART_Write, Err);
-  Format_String(CONS_UART_Write, "\n");
-  xSemaphoreGive(CONS_Mutex);
-#endif
-
   for( ; ; )                                                       // main (endless) loop
   { vTaskDelay(1000);
     if(Parameters.StratuxWIFI[0]==0) continue;
-    Err=WIFI_Connect(Parameters.StratuxWIFI, Parameters.StratuxPass);
+
+    Err=WIFI_Start();                                              // start WiFi
+    WIFI_setTxPower(Parameters.StratuxTxPwr);
+    WIFI_setPowerSave(1);
+#ifdef DEBUG_PRINT
+    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    Format_String(CONS_UART_Write, "WIFI_Start() => ");
+    if(Err>=ESP_ERR_WIFI_BASE) Err-=ESP_ERR_WIFI_BASE;
+    Format_SignDec(CONS_UART_Write, Err);
+    Format_String(CONS_UART_Write, "\n");
+    xSemaphoreGive(CONS_Mutex);
+#endif
+
+    WIFI_State.isConnected=2;
+    Err=WIFI_Connect(Parameters.StratuxWIFI, Parameters.StratuxPass, Parameters.StratuxMinSig);
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
     Format_String(CONS_UART_Write, Parameters.StratuxWIFI);
@@ -190,13 +218,13 @@ void vTaskSTX(void* pvParameters)
     Format_String(CONS_UART_Write, "\n");
     xSemaphoreGive(CONS_Mutex);
 #endif
-    if(Err) { vTaskDelay(10000); continue; }
+    if(Err) { WIFI_Disconnect(); WIFI_Stop(); vTaskDelay(20000); continue; }
 
     WIFI_IP.ip.addr = 0;
     for(uint8_t Idx=0; Idx<10; Idx++)                     // wait to obtain local IP from DHCP
     { vTaskDelay(1000);
+      if(WIFI_State.isConnected==1) break;
       if(WIFI_getLocalIP()) break; }
-
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
     Format_String(CONS_UART_Write, "Local IP: ");
@@ -206,24 +234,27 @@ void vTaskSTX(void* pvParameters)
     Format_String(CONS_UART_Write, "\n");
     xSemaphoreGive(CONS_Mutex);
 #endif
-    if(WIFI_IP.ip.addr==0) { WIFI_Disconnect(); continue; }     // if getting local IP failed then give up
+    if(WIFI_IP.ip.addr==0) { WIFI_Disconnect(); WIFI_Stop(); vTaskDelay(20000); continue; }     // if getting local IP failed then give up
 
     Stratux_TxFIFO.Clear();
 
-    uint8_t Len=IP_Print(Stratux_Host, WIFI_IP.gw.addr); Stratux_Host[Len]=0;
-    int ConnErr=Stratux_Socket.Connect(Stratux_Host, Stratux_Port);   // connect to the Stratux GPS server
-    if(ConnErr>=0)                                                    // if connection succesfull
+    uint8_t Len=Format_UnsDec(Stratux_Port, Parameters.StratuxPort); Stratux_Port[Len]=0;                 // port number in ASCII form
+    const char *Host = Parameters.StratuxHost;
+    if(Host[0]==0) { Len=IP_Print(Stratux_Host, WIFI_IP.gw.addr); Stratux_Host[Len]=0; Host=Stratux_Host; } // if internal host: gateway IP in ASCII form
+    int ConnErr=Stratux_Socket.Connect(Host, Stratux_Port);                                               // connect to the Stratux
+    if(ConnErr>=0)                                                                                        // if connection succesfull
     { Stratux_Socket.setReceiveTimeout(1);
-#ifdef DEBUG_PRINT
+// #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_String(CONS_UART_Write, "Connected to ");
       IP_Print(CONS_UART_Write, Stratux_Socket.getIP());
       Format_String(CONS_UART_Write, "\n");
       xSemaphoreGive(CONS_Mutex);
-#endif
+// #endif
       for( ; ; )
       { int Len=Stratux_TxPush(); if(Len<0) break;
         if(Len==0) vTaskDelay(5);
+        if(WIFI_State.isConnected!=3 || WIFI_State.hasIP!=3) break;
 // #ifdef DEBUG_PRINT
 //         xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
 //         Format_String(CONS_UART_Write, "Stratux_TxPush() => ");
@@ -232,8 +263,7 @@ void vTaskSTX(void* pvParameters)
 //         xSemaphoreGive(CONS_Mutex);
 // #endif
       }
-
-      vTaskDelay(10000); }
+    }
     else
     { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_String(CONS_UART_Write, "Failed to connect to Stratux -> ");
@@ -242,8 +272,8 @@ void vTaskSTX(void* pvParameters)
       xSemaphoreGive(CONS_Mutex); }
 
     Stratux_Socket.Disconnect();
-    vTaskDelay(5000);
-    WIFI_Disconnect(); WIFI_IP.ip.addr=0;
+    vTaskDelay(2000);
+    WIFI_Disconnect(); WIFI_Stop(); WIFI_IP.ip.addr=0;
     vTaskDelay(2000);
   }
 
