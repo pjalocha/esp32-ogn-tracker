@@ -303,7 +303,7 @@ static void GPS_BurstStart(void)                                           // wh
         CFG_PRT.portID=1;
         CFG_PRT.reserved1=0x00;
         CFG_PRT.txReady=0x0000;
-        CFG_PRT.mode=0x08D0;
+        CFG_PRT.mode=0x08D0;                       // some sources say 0x08C0 if baud=9600
         CFG_PRT.baudRate=GPS_TargetBaudRate;
         CFG_PRT.inProtoMask=3;
         CFG_PRT.outProtoMask=3;
@@ -316,7 +316,12 @@ static void GPS_BurstStart(void)                                           // wh
         Format_String(CONS_UART_Write, "\n");
 #endif
         UBX_RxMsg::Send(0x06, 0x00, GPS_UART_Write);                     // send the query for the port config to have a template configuration packet
+#ifdef DEBUG_PRINT
+        Format_String(CONS_UART_Write, "GPS <- CFG-PRT: ");
+        UBX_RxMsg::Send(0x06, 0x00, CONS_HexDump);                       // send the query for the port config to have a template configuration packet
+        Format_String(CONS_UART_Write, "\n");
 #endif
+#endif // WITH_GPS_UBX
 #ifdef WITH_GPS_MTK
         { strcpy(GPS_Cmd, "$PMTK251,");                                        // MTK command to change the baud rate
           uint8_t Len = strlen(GPS_Cmd);
@@ -603,7 +608,7 @@ static void GPS_UBX(void)                                                       
   { class UBX_CFG_PRT *CFG = (class UBX_CFG_PRT *)UBX.Word;                       // create pointer to the packet content
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-    Format_String(CONS_UART_Write, "CFG_PRT: ");
+    Format_String(CONS_UART_Write, "CFG-PRT: ");
     DumpUBX();
     Format_Hex(CONS_UART_Write, CFG->portID);
     CONS_UART_Write(':');
@@ -630,7 +635,7 @@ static void GPS_UBX(void)                                                       
   { class UBX_CFG_NAV5 *CFG = (class UBX_CFG_NAV5 *)UBX.Word;
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-    Format_String(CONS_UART_Write, "CFG_NAV5: ");
+    Format_String(CONS_UART_Write, "CFG-NAV5: ");
     Format_Hex(CONS_UART_Write, CFG->dynModel);
     Format_String(CONS_UART_Write, "\n");
     xSemaphoreGive(CONS_Mutex);
