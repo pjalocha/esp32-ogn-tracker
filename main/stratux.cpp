@@ -35,7 +35,7 @@ bool WIFI_isConnected(void) { return WIFI_IP.ip.addr!=0; }  // return "connected
 static esp_err_t WIFI_event_handler(void *ctx, system_event_t *event)
 {
 #ifdef DEBUG_PRINT
-  const char *EventName[9] = { 0, 0, "STA_START", "STA_STOP", "STA_CONN", "STA_DISCONN", 0, "GOT_IP", "LOST_IP" } ;
+  const char *EventName[9] = { "WIFI_READY", "SCAN_DONE", "STA_START", "STA_STOP", "STA_CONN", "STA_DISCONN", "AUTHMODE", "GOT_IP", "LOST_IP" } ;
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   Format_String(CONS_UART_Write, "WIFI_event_handler => ");
   if(event->event_id>=0 && event->event_id<9 && EventName[event->event_id])
@@ -153,6 +153,7 @@ static Socket Stratux_Socket;
 
 static FIFO<char, 512> Stratux_TxFIFO;
 static FIFO<uint8_t, 256> Stratux_RxFIFO;
+static uint32_t Stratux_ConnectDelay = 2000;
 
 bool Stratux_isConnected(void)
 { return WIFI_isConnected() && Stratux_Socket.isConnected(); }
@@ -189,7 +190,8 @@ void vTaskSTX(void* pvParameters)
 #endif
 
   for( ; ; )                                                       // main (endless) loop
-  { vTaskDelay(1000);
+  { Stratux_ConnectDelay*=2; if(Stratux_ConnectDelay>60000) Stratux_ConnectDelay=60000;
+    vTaskDelay(Stratux_ConnectDelay);
     if(Parameters.StratuxWIFI[0]==0) continue;
 
     Err=WIFI_Start();                                              // start WiFi
@@ -218,7 +220,7 @@ void vTaskSTX(void* pvParameters)
     Format_String(CONS_UART_Write, "\n");
     xSemaphoreGive(CONS_Mutex);
 #endif
-    if(Err) { WIFI_Disconnect(); WIFI_Stop(); vTaskDelay(20000); continue; }
+    if(Err) { WIFI_Disconnect(); WIFI_Stop(); continue; }
 
     WIFI_IP.ip.addr = 0;
     for(uint8_t Idx=0; Idx<10; Idx++)                     // wait to obtain local IP from DHCP
@@ -234,7 +236,7 @@ void vTaskSTX(void* pvParameters)
     Format_String(CONS_UART_Write, "\n");
     xSemaphoreGive(CONS_Mutex);
 #endif
-    if(WIFI_IP.ip.addr==0) { WIFI_Disconnect(); WIFI_Stop(); vTaskDelay(20000); continue; }     // if getting local IP failed then give up
+    if(WIFI_IP.ip.addr==0) { WIFI_Disconnect(); WIFI_Stop(); continue; }     // if getting local IP failed then give up
 
     Stratux_TxFIFO.Clear();
 
@@ -251,6 +253,7 @@ void vTaskSTX(void* pvParameters)
       Format_String(CONS_UART_Write, "\n");
       xSemaphoreGive(CONS_Mutex);
 // #endif
+      Stratux_ConnectDelay = 2000;
       for( ; ; )
       { int Len=Stratux_TxPush(); if(Len<0) break;
         if(Len==0) vTaskDelay(5);
