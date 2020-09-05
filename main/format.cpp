@@ -12,7 +12,8 @@ void Format_Bytes( void (*Output)(char), const uint8_t *Bytes, uint8_t Len)
 }
 
 void Format_String( void (*Output)(char), const char *String)
-{ for( ; ; )
+{ if(String==0) return;
+  for( ; ; )
   { uint8_t ch = (*String++); if(ch==0) break;
 #ifdef WITH_AUTOCR
     if(ch=='\n') (*Output)('\r');
@@ -21,7 +22,8 @@ void Format_String( void (*Output)(char), const char *String)
 }
 
 uint8_t Format_String(char *Out, const char *String)
-{ uint8_t OutLen=0;
+{ if(String==0) return 0;
+  uint8_t OutLen=0;
   for( ; ; )
   { char ch = (*String++); if(ch==0) break;
 #ifdef WITH_AUTOCR
@@ -32,7 +34,8 @@ uint8_t Format_String(char *Out, const char *String)
   return OutLen; }
 
 void Format_String( void (*Output)(char), const char *String, uint8_t MinLen, uint8_t MaxLen)
-{ if(MaxLen<MinLen) MaxLen=MinLen;
+{ if(String==0) return;
+  if(MaxLen<MinLen) MaxLen=MinLen;
   uint8_t Idx;
   for(Idx=0; Idx<MaxLen; Idx++)
   { char ch = String[Idx]; if(ch==0) break;
@@ -45,7 +48,8 @@ void Format_String( void (*Output)(char), const char *String, uint8_t MinLen, ui
 }
 
 uint8_t Format_String(char *Out, const char *String, uint8_t MinLen, uint8_t MaxLen)
-{ if(MaxLen<MinLen) MaxLen=MinLen;
+{ if(String==0) return 0;
+  if(MaxLen<MinLen) MaxLen=MinLen;
   uint8_t OutLen=0;
   uint8_t Idx;
   for(Idx=0; Idx<MaxLen; Idx++)
