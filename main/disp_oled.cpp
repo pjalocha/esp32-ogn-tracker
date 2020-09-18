@@ -731,10 +731,10 @@ void OLED_DrawID(u8g2_t *OLED, GPS_Position *GPS)
 void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
 { uint8_t Len=0;
 
-  // Altitude
-  if(GPS && GPS->hasBaro)
-    //Len+=Format_UnsDec(Line+Len, (95634+5)/10, 1, 0);
-    Len+=Format_UnsDec(Line+Len, (GPS->StdAltitude+5)/10, 1, 0);
+  // Standard Pressure Altitude
+  if(GPS && (GPS->hasBaro || GPS->isValid()))
+  { if(GPS->hasBaro) Len+=Format_SignDec(Line+Len, (GPS->StdAltitude+5)/10, 1, 0, 1);
+                else Len+=Format_SignDec(Line+Len, (GPS->Altitude+5)/10, 1, 0, 1); }
   else
     Len+=Format_String(Line+Len, "----");
   Line[Len]=0;
@@ -748,30 +748,28 @@ void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
   u8g2_SetFont(OLED, u8g2_font_9x15_tr);
   u8g2_DrawStr(OLED, 84, 40, Line);
 
-
   // Climb Rate
   Len=0;
-  if(GPS && GPS->hasBaro) {
-    //int16_t vario_value = 129;
-    int16_t vario_value = GPS->ClimbRate;
-    if(vario_value<0) { 
-      vario_value=(-vario_value);
-      #define minus_width 10
-      #define minus_height 17
-      static unsigned char minus_bits[] = {
-         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-         0x00, 0x00, 0xfe, 0x01, 0xfe, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-      u8g2_DrawXBM(OLED,0,47,minus_width, minus_height, minus_bits);
-    }
-    else {
-      #define plus_width 10
-      #define plus_height 17
-      static unsigned char plus_bits[] = {
-         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x30, 0x00, 0x30, 0x00,
-         0x30, 0x00, 0xfe, 0x01, 0xfe, 0x01, 0x30, 0x00, 0x30, 0x00, 0x30, 0x00,
-         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-      u8g2_DrawXBM(OLED,0,47,plus_width, plus_height, plus_bits);
+  if(GPS && (GPS->hasBaro || GPS->isValid()))
+  { int16_t vario_value = GPS->ClimbRate;        // [0.1m/s]
+    if(vario_value<0)
+    { vario_value=(-vario_value);
+      const int minus_width=10;
+      const int minus_height=17;
+      static unsigned char minus_bits[] =
+      { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0xfe, 0x01, 0xfe, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+      u8g2_DrawXBM(OLED, 0, 47, minus_width, minus_height, minus_bits); }
+    else
+    {
+      const int plus_width=10;
+      const int plus_height=17;
+      static unsigned char plus_bits[] =
+      { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x30, 0x00, 0x30, 0x00,
+        0x30, 0x00, 0xfe, 0x01, 0xfe, 0x01, 0x30, 0x00, 0x30, 0x00, 0x30, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+      u8g2_DrawXBM(OLED, 0, 47, plus_width, plus_height, plus_bits);
     }
     Len+=Format_UnsDec(Line+Len, vario_value, 2, 1);
   }
@@ -782,39 +780,33 @@ void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
   uint8_t Vario_width = u8g2_GetStrWidth(OLED, Line);
   u8g2_DrawStr(OLED, 54-Vario_width, 64, Line);
 
-  #define ms_width 7
-  #define ms_height 17
-  static unsigned char ms_bits[] = {
-     0x00, 0x00, 0x16, 0x2a, 0x2a, 0x2a, 0x2a, 0x00, 0x7f, 0x00, 0x1c, 0x22,
-     0x02, 0x1c, 0x20, 0x22, 0x1c };
-
-
-  u8g2_DrawXBM(OLED,58,47,ms_width, ms_height, ms_bits);
-
+  const int ms_width=7;
+  const int ms_height=17;
+  static unsigned char ms_bits[] =
+  { 0x00, 0x00, 0x16, 0x2a, 0x2a, 0x2a, 0x2a, 0x00, 0x7f, 0x00, 0x1c, 0x22,
+    0x02, 0x1c, 0x20, 0x22, 0x1c };
+  u8g2_DrawXBM(OLED, 58, 47, ms_width, ms_height, ms_bits);
 
   // Speed
   Len=0;
-  if(GPS) {
-    uint16_t speed = round(GPS->Speed * 0.36f); // Speed is in 0.1m/s
-    Len+=Format_UnsDec(Line+Len, speed, 1, 0);
-    //Len+=Format_UnsDec(Line+Len, 623, 1, 0);
-  }
+  if(GPS && GPS->isValid())
+  { // uint16_t speed = round(GPS->Speed * 0.36f); // Speed is in 0.1m/s
+    uint16_t speed = (GPS->Speed*9+12)/25;
+    Len+=Format_UnsDec(Line+Len, speed, 1, 0); }
   else
-    Len+=Format_String(Line+Len, "-");
+    Len+=Format_String(Line+Len, "--");
   Line[Len]=0;
   u8g2_SetFont(OLED, u8g2_font_fub17_tr);
   uint8_t Speed_width = u8g2_GetStrWidth(OLED, Line);
   u8g2_DrawStr(OLED, 114-Speed_width, 64, Line);
 
-  #define kmh_width 10
-  #define kmh_height 17
-  static unsigned char kmh_bits[] = {
-     0x01, 0x00, 0x01, 0x00, 0x69, 0x01, 0xa5, 0x02, 0xa3, 0x02, 0xa5, 0x02,
-     0xa9, 0x02, 0x00, 0x00, 0xff, 0x03, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00,
-     0x08, 0x00, 0x38, 0x00, 0x48, 0x00, 0x48, 0x00, 0x48, 0x00 };
-
-  u8g2_DrawXBM(OLED,118,47,kmh_width, kmh_height, kmh_bits);
-
+  const int kmh_width=10;
+  const int kmh_height=17;
+  static unsigned char kmh_bits[] =
+  { 0x01, 0x00, 0x01, 0x00, 0x69, 0x01, 0xa5, 0x02, 0xa3, 0x02, 0xa5, 0x02,
+    0xa9, 0x02, 0x00, 0x00, 0xff, 0x03, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00,
+    0x08, 0x00, 0x38, 0x00, 0x48, 0x00, 0x48, 0x00, 0x48, 0x00 };
+  u8g2_DrawXBM(OLED, 118, 47, kmh_width, kmh_height, kmh_bits);
 }
 
 #endif

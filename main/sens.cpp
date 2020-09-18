@@ -211,6 +211,7 @@ static void ProcBaro(void)
       if(PosPtr)                                                     // if found:
       { PosPtr->Pressure    = Pressure;                              // [0.25Pa]
         PosPtr->StdAltitude = StdAltitude;                           // store standard pressure altitude
+        PosPtr->ClimbRate   = ClimbRate/10;                          // [0.1m/s]
         PosPtr->Temperature = Baro.Temperature;                      // and temperature in the GPS record
 #ifdef WITH_BME280
         if(Baro.hasHumidity())
