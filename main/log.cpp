@@ -174,7 +174,7 @@ int FlashLog_ListFiles(void)                            //
   return Files; }
 */
 
-int FlashLog_ListFile(const char *FileName, uint32_t FileTime)    // print the content, thue every packet of the given log file in APRS format
+int FlashLog_ListFile(const char *FileName, uint32_t FileTime)    // print the content, thus every packet of the given log file in APRS format
 { char Line[128];
   // xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   // Format_String(CONS_UART_Write, "FlashLog_ListFile(");
@@ -187,10 +187,11 @@ int FlashLog_ListFile(const char *FileName, uint32_t FileTime)    // print the c
   for( ; ; )
   { if(fread(&Packet, Packet.Bytes, 1, File)!=1) break;          // read the next packet
     if(!Packet.isCorrect()) continue;
-    if(Packet.Packet.Header.NonPos) continue;                    // skip non-position packets (although we could print them too)
+    // if(Packet.Packet.Header.NonPos) continue;                    // skip non-position packets (although we could print them too)
     uint32_t Time = Packet.getTime(FileTime);                    // [sec] get exact time from short time in the packet and the file start time
-    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
     uint8_t Len=Packet.Packet.WriteAPRS(Line, Time);             // print the packet in the APRS format
+    if(Len==0) continue;                                         // if cannot be printed for whatever reason
+    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
     Format_String(CONS_UART_Write, Line, 0, Len);                // send the APRS to the console
     xSemaphoreGive(CONS_Mutex);
     vTaskDelay(10);                                              // limit the printout to some 100 packet/sec
