@@ -56,6 +56,7 @@ uint32_t getUniqueAddress(void);           // get unique 24-bit address for the 
 #include "parameters.h"
 extern FlashParameters Parameters;
 
+void CONS_UART_Init       (void);
 int  CONS_UART_Read       (uint8_t &Byte); // non-blocking
 void CONS_UART_Write      (char     Byte); // blocking
 int  CONS_UART_Free       (void);          // how many bytes can be written to the transmit buffer
@@ -172,8 +173,8 @@ bool BT_SPP_isConnected(void);
 #endif
 
 #ifdef WITH_SPIFFS
-int  SPIFFS_Register(const char *Path="/spiffs", const char *Label=0, size_t MaxOpenFiles=5);
-int  SPIFFS_Info(size_t &Total, size_t &Used, const char *Label=0);
+int  SPIFFS_Register(const char *Path="/spiffs", const char *Label="intlog", size_t MaxOpenFiles=5);
+int  SPIFFS_Info(size_t &Total, size_t &Used, const char *Label="intlog");
 #endif
 
 uint8_t I2C_Read (uint8_t Bus, uint8_t Addr, uint8_t Reg, uint8_t *Data, uint8_t Len, uint8_t Wait=10);

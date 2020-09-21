@@ -411,14 +411,14 @@ void vTaskCTRL(void* pvParameters)
 #endif
 
     int32_t PressRelease=Button_TimerCheck();         // 0 = no change
-// #ifdef DEBUG_PRINT
+#ifdef DEBUG_PRINT
     if(PressRelease!=0)
     { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_String(CONS_UART_Write, "Button: ");
       Format_SignDec(CONS_UART_Write, PressRelease);
       Format_String(CONS_UART_Write, "ms\n");
       xSemaphoreGive(CONS_Mutex); }
-// #endif
+#endif
     if(PressRelease>0)
     { if(PressRelease<=700)                                            // short button push: switch pages
       { KeyBuffer.Write(0x01); }

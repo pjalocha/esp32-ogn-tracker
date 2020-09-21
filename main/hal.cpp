@@ -6,6 +6,7 @@
 
 #include "driver/gpio.h"
 #include "driver/uart.h"
+#include "esp_vfs_dev.h"
 #include "driver/spi_master.h"
 #include "driver/i2c.h"
 
@@ -23,6 +24,7 @@
 #include "nvs_flash.h"
 
 #ifdef WITH_SPIFFS
+// #include "esp_vfs_fat.h"
 #include "esp_spiffs.h"
 #endif
 
@@ -787,6 +789,22 @@ int BT_SPP_Init(void)
 
 SemaphoreHandle_t CONS_Mutex;
 
+void CONS_UART_Init(void)
+{ setvbuf(stdin, NULL, _IONBF, 0); // Disable buffering on stdin
+  esp_vfs_dev_uart_set_rx_line_endings(ESP_LINE_ENDINGS_CR);
+  esp_vfs_dev_uart_set_tx_line_endings(ESP_LINE_ENDINGS_CRLF);
+  const uart_config_t UARTconfig =
+  { .baud_rate = DEFAULT_CONbaud,
+    .data_bits = UART_DATA_8_BITS,
+    .parity = UART_PARITY_DISABLE,
+    .stop_bits = UART_STOP_BITS_1,
+    .use_ref_tick = true
+  };
+  uart_param_config(CONS_UART, &UARTconfig);
+  uart_driver_install(CONS_UART, 1024, 0, 0, NULL, 0);
+  esp_vfs_dev_uart_use_driver(CONS_UART);
+}
+
 /*
 bool CONS_InpReady(void)
 { struct timeval tv = { tv_sec:0, tv_usec:0} ;
@@ -798,8 +816,10 @@ bool CONS_InpReady(void)
 */
 // int  CONS_UART_Read       (uint8_t &Byte) { return uart_read_bytes  (CONS_UART, &Byte, 1, 0); }  // non-blocking
 // void CONS_UART_Write      (char     Byte) {        uart_write_bytes (CONS_UART, &Byte, 1);    }  // blocking ?
+
 void CONS_UART_Write (char     Byte)
-{ putchar(Byte);
+{ uart_write_bytes (CONS_UART, &Byte, 1);
+  // putchar(Byte);
 #ifdef WITH_BT_SPP
   BT_SPP_Write(Byte);
 #endif
@@ -807,8 +827,10 @@ void CONS_UART_Write (char     Byte)
   Stratux_Write(Byte);
 #endif
 }                                            // it appears the NL is translated into CR+NL
+
 int  CONS_UART_Read  (uint8_t &Byte)
-{ int Ret=getchar(); if(Ret>=0) { Byte=Ret; return 1; }
+{ int Ret=uart_read_bytes  (CONS_UART, &Byte, 1, 0); if(Ret==1) return 1;
+  // int Ret=getchar(); if(Ret>=0) { Byte=Ret; return 1; }
 #ifdef WITH_BT_SPP
   Ret=BT_SPP_Read(Byte); if(Ret>0) { return 1; }
 #endif
@@ -820,7 +842,7 @@ int  CONS_UART_Read  (uint8_t &Byte)
 // int  CONS_UART_Free  (void)           { return UART2_Free(); }
 // int  CONS_UART_Full  (void)           { return UART2_Full(); }
 
-void  CONS_UART_SetBaudrate(int BaudRate)  {        uart_set_baudrate(CONS_UART, BaudRate);    }
+void  CONS_UART_SetBaudrate(int BaudRate)  { uart_set_baudrate(CONS_UART, BaudRate); }
 
 //--------------------------------------------------------------------------------------------------------
 // ADS-B UART
@@ -1932,6 +1954,20 @@ int NVS_Init(void)
 // ======================================================================================================
 
 #ifdef WITH_SPIFFS
+/*
+// this part is for the FAT filesystem in the internal flash
+int SPIFFS_Register(const char *Path, const char *Label, size_t MaxOpenFiles)
+{ esp_vfs_fat_mount_config_t FSconf;
+  FSconf.max_files = MaxOpenFiles;
+  FSconf.format_if_mount_failed = true;
+  FSconf.allocation_unit_size = 4096;
+  static wl_handle_t Handle = WL_INVALID_HANDLE;
+  return esp_vfs_fat_spiflash_mount(Path, Label, &FSconf, &Handle); }
+
+int SPIFFS_Info(size_t &Total, size_t &Used, const char *Label)
+{ Total=0; Used=0; return 0; }
+*/
+
 int SPIFFS_Register(const char *Path, const char *Label, size_t MaxOpenFiles)
 { esp_vfs_spiffs_conf_t FSconf =
   { base_path: Path,
@@ -1942,6 +1978,7 @@ int SPIFFS_Register(const char *Path, const char *Label, size_t MaxOpenFiles)
 
 int SPIFFS_Info(size_t &Total, size_t &Used, const char *Label)
 { return esp_spiffs_info(Label, &Total, &Used); }
+
 #endif
 
 // ======================================================================================================
