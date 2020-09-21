@@ -540,6 +540,9 @@ void vTaskPROC(void* pvParameters)
               else { SatSNR=0; }
       StatPacket.Packet.Status.SatSNR = SatSNR; }
 
+    if(Position && Position->isTimeValid() && Position->isDateValid()) PosTime=Position->getUnixTime();
+                                                                 else  PosTime=0;
+
     if( Position && Position->isReady && (!Position->Sent) && Position->isValid() )
     { int16_t AverSpeed=GPS_AverageSpeed();                             // [0.1m/s] average speed, including the vertical speed
       if(Parameters.FreqPlan==0)
@@ -553,7 +556,7 @@ void vTaskPROC(void* pvParameters)
       Format_String(CONS_UART_Write, " -> Sent\n");
       xSemaphoreGive(CONS_Mutex);
 #endif
-      PosTime=Position->getUnixTime();
+      // PosTime=Position->getUnixTime();
       PosPacket.Packet.HeaderWord=0;
       PosPacket.Packet.Header.Address    = Parameters.Address;         // set address
       PosPacket.Packet.Header.AddrType   = Parameters.AddrType;        // address-type
