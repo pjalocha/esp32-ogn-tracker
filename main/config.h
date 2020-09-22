@@ -10,7 +10,6 @@
 // #define WITH_TTGO                          // TTGO module: PCB LED on GPIO2, GPIO25 free to use as DAC2 output
 // #define WITH_TBEAM                          // T-Beam module
 #define WITH_TBEAM_V10                      // T-Beam module
-// #define WITH_JACEK                         // JACEK ESP32 OGN-Tracker
 // #define WITH_M5_JACEK                         // JACEK M5 ESP32 OGN-Tracker
 // #define WITH_FollowMe                         // by Avionix
 
@@ -19,10 +18,8 @@
 // #define WITH_TFT_LCD                       // TFT LCD
 // #define WITH_OLED                          // OLED display on the I2C: some TTGO modules are without OLED display
 // #define WITH_OLED2                         // 2nd OLED display, I2C address next higher
-#define WITH_U8G2_OLED                     // I2C OLED through the U8g2 library
+// #define WITH_U8G2_OLED                     // I2C OLED through the U8g2 library
 // #define WITH_U8G2_SH1106
-#define U8G2_OLED_PAGES_ENABLED   0b0001111111  // use if WITH_U8G2_OLED is on, 10 pages currently, see end of disp.ccp for the list of pages
-
 
 #define WITH_RFM95                         // RF chip selection:  both HELTEC and TTGO use sx1276 which is same as RFM95
 
@@ -48,7 +45,7 @@
 
 // #define WITH_BMP180                        // BMP180 pressure sensor
 // #define WITH_BMP280                        // BMP280 pressure sensor
-#define WITH_BME280                        // BMP280 with humidity (but still works with BMP280)
+// #define WITH_BME280                        // BMP280 with humidity (but still works with BMP280)
 // #define WITH_MS5607                        // MS5607 pressure sensor
 // #define WITH_MS5611                        // MS5611 pressure sensor
 
@@ -65,6 +62,7 @@
 // #define WITH_VARIO
 
 // #define WITH_SD                            // use the SD card in SPI mode and FAT file system
+#define WITH_SPIFFS_FAT
 #define WITH_SPIFFS                        // use SPIFFS file system in Flash
 #define WITH_LOG                           // log own positions and other received to SPIFFS and possibly to uSD
 
@@ -72,5 +70,5 @@
 // #define WITH_WIFI                          // attempt to connect to the wifi router for uploading the log files
 // #define WITH_SPIFFS_LOG                    // log transmitted and received packets to SPIFFS
 
-#define WITH_ENCRYPT                       // Encrypt (optionally) the position
+// #define WITH_ENCRYPT                       // Encrypt (optionally) the position
 

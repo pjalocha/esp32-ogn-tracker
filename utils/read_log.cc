@@ -39,7 +39,7 @@ static int List(void)
   { char Byte;
     if(Port.Read(Byte)<=0)                                            // get a byte from the serial port
     { double Now=getTime();                                           // if non, then check time
-      if((Now-Start)>=10.0) break;                                     // if idle for more than 4 sec then stop recording the log files
+      if((Now-Start)>=5.0) break;                                     // if idle for more than 4 sec then stop recording the log files
       usleep(1000); continue; }                                       // if no new bytes on the serial port sleep a little
     // printf("%3d: %02X %c\n", LineIdx, Byte, Byte<=' '?' ':Byte);
     if(Byte<' ')                                                      // if a control (non-printable) character
@@ -80,7 +80,7 @@ static int Download(uint32_t LogFile)
   { char Byte;
     if(Port.Read(Byte)<=0)
     { double Now=getTime();
-      if((Now-Start)>=8.0) break;
+      if((Now-Start)>=4.0) break;
       usleep(1000); continue; }                                       // if no new bytes on the serial port sleep a little
     if(Byte<' ')                                                      // if a control (non-printable) character
     { Line[LineIdx]=0;

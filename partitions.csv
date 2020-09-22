@@ -1,7 +1,11 @@
 # Espressif ESP32 Partition Table
 # Name, Type, SubType, Offset, Size, Flags
+# for parameter storage
 nvs,data,nvs,0x9000,24K,
 phy_init,data,phy,0xf000,4K,
+# application (code)
 factory,app,factory,0x10000,1800K,
-intlog,data,spiffs,,0x1F0000,
-# intlog,data,fat,,0x1F0000,
+# SPIFFS in Flash
+# intlog,data,spiffs,,0x1F0000,
+# FAT in Flash
+intlog,data,fat,,0x1F0000,

@@ -24,7 +24,7 @@
 #include "nvs_flash.h"
 
 #ifdef WITH_SPIFFS
-// #include "esp_vfs_fat.h"
+#include "esp_vfs_fat.h"
 #include "esp_spiffs.h"
 #endif
 
@@ -1954,8 +1954,9 @@ int NVS_Init(void)
 // ======================================================================================================
 
 #ifdef WITH_SPIFFS
-/*
-// this part is for the FAT filesystem in the internal flash
+
+#ifdef WITH_SPIFFS_FAT // FAT replaces SPIFFS, hopefully no performace and reliability issues
+
 int SPIFFS_Register(const char *Path, const char *Label, size_t MaxOpenFiles)
 { esp_vfs_fat_mount_config_t FSconf;
   FSconf.max_files = MaxOpenFiles;
@@ -1965,8 +1966,19 @@ int SPIFFS_Register(const char *Path, const char *Label, size_t MaxOpenFiles)
   return esp_vfs_fat_spiflash_mount(Path, Label, &FSconf, &Handle); }
 
 int SPIFFS_Info(size_t &Total, size_t &Used, const char *Label)
-{ Total=0; Used=0; return 0; }
-*/
+{ FATFS *FS=0;
+  Total=0; Used=0;
+  size_t FreeClusters;
+  int Ret = f_getfree("0:", &FreeClusters, &FS);
+  // if(Ret=!FR_OK) return Ret;
+  if(FS==0) return 0;
+  size_t TotalSectors = (FS->n_fatent-2) * FS->csize;
+  size_t FreeSectors = FreeClusters * FS->csize;
+  Total = TotalSectors * FS->ssize;
+  Used  = (TotalSectors-FreeSectors) * FS->ssize;
+  return 0; }
+
+#else // SPIFFS: gives troubles when more than few files are open
 
 int SPIFFS_Register(const char *Path, const char *Label, size_t MaxOpenFiles)
 { esp_vfs_spiffs_conf_t FSconf =
@@ -1979,6 +1991,7 @@ int SPIFFS_Register(const char *Path, const char *Label, size_t MaxOpenFiles)
 int SPIFFS_Info(size_t &Total, size_t &Used, const char *Label)
 { return esp_spiffs_info(Label, &Total, &Used); }
 
+#endif
 #endif
 
 // ======================================================================================================

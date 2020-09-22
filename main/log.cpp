@@ -26,12 +26,16 @@ static void AddPath(char *Name, const char *FileName, const char *Path)
 static const char *SDcard_Path = "/sdcard/TLG";   // with sub-directory which is created if does not exist
 static const char *FlashLog_Path = "/spiffs";     // path to log files
 static const char *FlashLog_Ext  = ".TLG";        // extension for log files, could be as well .TLA
-static const uint32_t FlashLog_MaxTime = 7200;    // 2 hour max. per single log file
-static const uint32_t FlashLog_MaxSize = 0x20000; // 128KB max. per single log file
-// static uint32_t FlashLog_OldestTime;
-uint32_t FlashLog_FileTime=0;
+static const uint32_t FlashLog_MaxTime = 3600;    // 1 hour max. per single log file
+static const uint32_t FlashLog_MaxSize = 0x10000; // 64KB max. per single log file
+#ifdef WITH_SPIFFS_FAT
+static const uint32_t FlashLog_FlushSize = 4096;  // 4kB file flush step
+#endif
+
+uint32_t FlashLog_FileTime=0;                     // [sec] UTC time corresponding to the log file
 char FlashLog_FileName[32];                       // current log file name if open
 static FILE *FlashLog_File=0;                     // current log file if open
+static uint32_t FlashLog_FileFlush=0;             // track where the log file has been forced to be written to flash
 
 FIFO<OGN_LogPacket<OGN_Packet>, 32> FlashLog_FIFO;
 
@@ -237,12 +241,12 @@ static int FlashLog_CleanEmpty(int MinSize=0)                 // delete empty fi
     vTaskDelay(1); }
   return DelFiles; }
 
-static int FlashLog_Clean(size_t MinFree)                          // clean oldest file when running short in space
+static int FlashLog_Clean(size_t MinFree=0)                          // clean oldest file when running short in space
 { size_t Total, Used;
   if(SPIFFS_Info(Total, Used)!=0) return -1;                        // check SPIFFS status, give up if not possible
   size_t Free = Total-Used;                                         // [B] amount of free space
   if(MinFree) { if(Free>= MinFree ) return 0; }                     // give up if enough space
-         else { if(Free>=(Total/2)) return 0; }                     // if MinFree not specified, take Total/4
+         else { if(Free>=(Total/4)) return 0; }                     // if MinFree not specified, take Total/4
   uint32_t Oldest=0xFFFFFFFF;
   int Files=FlashLog_FindOldestFile(Oldest, 0);                    // find the oldest file
   if(Files<0) return Files;
@@ -268,13 +272,14 @@ static int FlashLog_Clean(size_t MinFree, int Loops)                // repeat th
     vTaskDelay(1); Count++; }
   return Count; }
 
-static int FlashLog_Open(uint32_t Time)                             // open a new log file for given start time
-{ if(FlashLog_File) { fclose(FlashLog_File); FlashLog_File=0; }   // if a file open already, close it
-  FlashLog_CleanEmpty(32);                                          // remove empty files or shorter than 32 bytes
-  FlashLog_Clean(2*FlashLog_MaxSize, 8);                           // clean files to get free space at least twice the max. file sie
+static int FlashLog_Open(uint32_t Time)                            // open a new log file for given start time
+{ if(FlashLog_File) { fclose(FlashLog_File); FlashLog_File=0; }    // if a file open already, close it
+  FlashLog_CleanEmpty(32);                                         // remove empty files or shorter than 32 bytes
+  FlashLog_Clean(2*FlashLog_MaxSize, 2);                           // clean files to get free space at least twice the max. file size
   FlashLog_FullFileName(FlashLog_FileName, Time);                  // name of the new log file
-  FlashLog_FileTime=Time;                                           // record the time of the log file
+  FlashLog_FileTime=Time;                                          // record the time of the log file
   FlashLog_File = fopen(FlashLog_FileName, "wb");                  // open the new file
+  FlashLog_FileFlush = 0;
 #ifdef DEBUG_PRINT
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   Format_String(CONS_UART_Write, "FlashLog_Open() ");
@@ -282,13 +287,15 @@ static int FlashLog_Open(uint32_t Time)                             // open a ne
   Format_String(CONS_UART_Write, "\n");
   xSemaphoreGive(CONS_Mutex);
 #endif
-  if(FlashLog_File==0) FlashLog_Clean(0, 8);                       // if the file cannot be open clean again
+  if(FlashLog_File==0) FlashLog_Clean(0, 4);                       // if the file cannot be open clean again
   return FlashLog_File!=0; }                                        // 1=success, 0=failure: new log file could not be open
 
 static int FlashLog(OGN_LogPacket<OGN_Packet> *Packet, int Packets, uint32_t Time)      // log a batch of OGN packets
 { if(FlashLog_File)                                                          // if log file already open
   { uint32_t TimeSinceStart = Time-FlashLog_FileTime;                        // [sec] for how long this file is open already ?
-    if( (TimeSinceStart>=FlashLog_MaxTime) || (ftell(FlashLog_File)>=FlashLog_MaxSize) ) // is it too long in time or in size ?
+    uint32_t WritePos = ftell(FlashLog_File);
+    uint32_t WriteSize = Packets*sizeof(OGN_LogPacket<OGN_Packet>);
+    if( (TimeSinceStart>=FlashLog_MaxTime) || ((WritePos+WriteSize)>FlashLog_MaxSize) ) // is it too long in time or in size ?
     { fclose(FlashLog_File); FlashLog_File=0; }                              // decide to close the current log file
   }
   if(FlashLog_File==0)
@@ -299,7 +306,14 @@ static int FlashLog(OGN_LogPacket<OGN_Packet> *Packet, int Packets, uint32_t Tim
     FlashLog_Open(Time); }                                                   // if file closed, then attempt to open a new one
   if(FlashLog_File==0) return -1;                                            // if file still not open, then give up
   if(fwrite(Packet, Packet->Bytes, Packets, FlashLog_File)!=Packets)         // write the packet to the log file
-  { fclose(FlashLog_File); FlashLog_File=0; FlashLog_Clean(0, 8); return -1; } // if failure then close the log file and report error
+  { fclose(FlashLog_File); FlashLog_File=0; FlashLog_Clean(0, 4); return -1; } // if failure then close the log file and report error
+#ifdef WITH_SPIFFS_FAT
+  uint32_t WritePos = ftell(FlashLog_File);
+  if(WritePos-FlashLog_FileFlush>FlashLog_FlushSize)
+  { fclose(FlashLog_File);
+    FlashLog_File = fopen(FlashLog_FileName, "ab");
+    FlashLog_FileFlush=WritePos; }
+#endif
   return Packets; }                                                          // report success
 #endif // WITH_SPIFFS
 
@@ -310,8 +324,8 @@ static int Copy(void)                                              // copy the p
   uint32_t Time = TimeSync_Time();                                 // Time is to create new log file
 #ifdef WITH_SPIFFS
   int Err=FlashLog(Packet, Packets, Time);                         // log the batch of packets
-  if(Err<0) { FlashLog_Clean(0, 8); Err=FlashLog(Packet, Packets, Time); } // if failed: give it another try
-  // if(Err<0) FlashLog_Clean(0, 8);
+  if(Err<0) { FlashLog_Clean(0, 4); Err=FlashLog(Packet, Packets, Time); } // if failed: give it another try
+  // if(Err<0) FlashLog_Clean(0, 4);
 #ifdef DEBUG_PRINT
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   Format_String(CONS_UART_Write, "vTaskLOG() ");
