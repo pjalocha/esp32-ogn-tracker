@@ -32,6 +32,7 @@ static const uint32_t FlashLog_MaxSize = 0x10000; // 64KB max. per single log fi
 static const uint32_t FlashLog_FlushSize = 4096;  // 4kB file flush step
 #endif
 
+bool FlashLog_SaveReq=0;                          // request to save the log right away, like after landing or before shutdown
 uint32_t FlashLog_FileTime=0;                     // [sec] UTC time corresponding to the log file
 char FlashLog_FileName[32];                       // current log file name if open
 static FILE *FlashLog_File=0;                     // current log file if open
@@ -290,7 +291,14 @@ static int FlashLog_Open(uint32_t Time)                            // open a new
   if(FlashLog_File==0) FlashLog_Clean(0, 4);                       // if the file cannot be open clean again
   return FlashLog_File!=0; }                                        // 1=success, 0=failure: new log file could not be open
 
-static int FlashLog(OGN_LogPacket<OGN_Packet> *Packet, int Packets, uint32_t Time)      // log a batch of OGN packets
+static void FlashLog_Save(void)
+{ if(FlashLog_File)
+  { fclose(FlashLog_File);
+    FlashLog_File = fopen(FlashLog_FileName, "ab");
+    FlashLog_FileFlush = ftell(FlashLog_File); }
+  FlashLog_SaveReq=0; }
+
+static int FlashLog_Record(OGN_LogPacket<OGN_Packet> *Packet, int Packets, uint32_t Time)      // log a batch of OGN packets
 { if(FlashLog_File)                                                          // if log file already open
   { uint32_t TimeSinceStart = Time-FlashLog_FileTime;                        // [sec] for how long this file is open already ?
     uint32_t WritePos = ftell(FlashLog_File);
@@ -309,10 +317,7 @@ static int FlashLog(OGN_LogPacket<OGN_Packet> *Packet, int Packets, uint32_t Tim
   { fclose(FlashLog_File); FlashLog_File=0; FlashLog_Clean(0, 4); return -1; } // if failure then close the log file and report error
 #ifdef WITH_SPIFFS_FAT
   uint32_t WritePos = ftell(FlashLog_File);
-  if(WritePos-FlashLog_FileFlush>FlashLog_FlushSize)
-  { fclose(FlashLog_File);
-    FlashLog_File = fopen(FlashLog_FileName, "ab");
-    FlashLog_FileFlush=WritePos; }
+  if(WritePos-FlashLog_FileFlush>FlashLog_FlushSize) FlashLog_Save();
 #endif
   return Packets; }                                                          // report success
 #endif // WITH_SPIFFS
@@ -323,8 +328,10 @@ static int Copy(void)                                              // copy the p
   if(Packets==0) return 0;                                         // if none: give up
   uint32_t Time = TimeSync_Time();                                 // Time is to create new log file
 #ifdef WITH_SPIFFS
-  int Err=FlashLog(Packet, Packets, Time);                         // log the batch of packets
-  if(Err<0) { FlashLog_Clean(0, 4); Err=FlashLog(Packet, Packets, Time); } // if failed: give it another try
+  int Err=FlashLog_Record(Packet, Packets, Time);                  // log the batch of packets
+  if(Err<0)
+  { FlashLog_Clean(0, 4);
+    Err=FlashLog_Record(Packet, Packets, Time); } // if failed: give it another try
   // if(Err<0) FlashLog_Clean(0, 4);
 #ifdef DEBUG_PRINT
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -376,6 +383,7 @@ void vTaskLOG(void* pvParameters)
   TickType_t PrevTick = 0;
   for( ; ; )
   { // vTaskDelay(200);                                           // wait idle 0.2sec
+    if(FlashLog_SaveReq) FlashLog_Save();                         // if requested then save the current log (close + reopen)
     TickType_t Tick=xTaskGetTickCount();                          // system tick count now
     size_t Packets = FlashLog_FIFO.Full();                        // how many packets in the queue ?
 // #ifdef DEBUG_PRINT
@@ -392,7 +400,7 @@ void vTaskLOG(void* pvParameters)
     if(Packets==0) { PrevTick=Tick; vTaskDelay(100); continue; } // if none: then give up
     if(Packets>=8) { Copy(); PrevTick=Tick; continue; }          // if 8 or more packets then copy them to the log file
     TickType_t Diff = Tick-PrevTick;                             // time since last log action
-    if(Diff>=8000) { Copy(); PrevTick=Tick; continue; }          // if more than 4.0sec than copy the packets
+    if(Diff>=8000) { Copy(); PrevTick=Tick; continue; }          // if more than 8.0sec than copy the packets
     vTaskDelay(100); }
 
 }
