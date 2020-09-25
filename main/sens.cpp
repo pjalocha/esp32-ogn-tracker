@@ -135,13 +135,15 @@ static void ProcBaro(void)
                  InitBaro(); // try to recover I2C bus and baro
 		 return; }
 
+    TickType_t End=Start;
     for(uint8_t Idx=0; Idx<16; Idx++)
     { uint8_t Err=Baro.AcquireRawPressure();                              // take pressure measurement
       if(Err==0) { Baro.CalcPressure(); AverPress+=Baro.Pressure; AverCount++; } // sum-up average pressure
-      TickType_t Time=xTaskGetTickCount()-Start; if(Time>=200) break; }   // but no longer than 250ms to fit into 0.5 second slot
-
-    if(AverCount==0) { PipeCount=0; return ; }                          // and we summed-up some measurements
-    AverPress = ( (AverPress<<2) + (AverCount>>1) )/AverCount;          // [0.25Pa]] make the average
+      End=xTaskGetTickCount();
+      TickType_t Time = End-Start; if(Time>=200) break; }                   // but no longer than 250ms to fit into 0.5 second slot
+    TickType_t MeasTick = Start + (End-Start)/2;
+    if(AverCount==0) { PipeCount=0; return ; }                              // and we summed-up some measurements
+    AverPress = ( (AverPress<<2) + (AverCount>>1) )/AverCount;              // [0.25Pa]] make the average
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
     Format_String(CONS_UART_Write, "BMP180: ");
@@ -153,7 +155,10 @@ static void ProcBaro(void)
 #endif
 #endif
 #if defined(WITH_BMP280) || defined(WITH_MS5607) || defined(WITH_BME280) || defined(WITH_MS5611)
+    TickType_t Start=xTaskGetTickCount();
     uint8_t Err=Baro.Acquire();
+    TickType_t End=xTaskGetTickCount();
+    TickType_t MeasTick = Start + (End-Start)/2;
     if(Err==0) { Baro.Calculate(); }
           else { PipeCount=0; return; }
     AverPress = Baro.Pressure;
@@ -192,6 +197,9 @@ static void ProcBaro(void)
     int32_t AltDiff = (PressDiff*(PLR>>4))/250;                      // [0.1 m]
     int32_t Altitude=((AltAver.Out+2048)>>12)+AltDiff;               // [0.1 m]
 
+    uint32_t   Time = TimeSync_Time(MeasTick);              // effective time of the pressure measurement
+    uint16_t msTime = TimeSync_msTime(MeasTick);
+
     uint8_t Frac = Sec%10;                                           // [0.1s]
     if(Frac==0)
     { GPS_Position *PosPtr = GPS_getPosition(Sec/10);                // get GPS position record for this second
@@ -224,7 +232,10 @@ static void ProcBaro(void)
 
     uint8_t Len=0;                                                   // start preparing the barometer NMEA sentence
     Len+=Format_String(Line+Len, "$POGNB,");
-    Len+=Format_UnsDec(Line+Len, Sec, 3, 1);                         // [sec] measurement time
+    Len+=Format_UnsDec(Line+Len, Time%60, 2);
+    Line[Len++]='.';
+    Len+=Format_UnsDec(Line+Len, msTime/10, 2);
+    // Len+=Format_UnsDec(Line+Len, Sec, 3, 1);                         // [sec] measurement time
     Line[Len++]=',';
     Len+=Format_SignDec(Line+Len, Baro.Temperature, 2, 1);           // [degC] temperature
     Line[Len++]=',';
