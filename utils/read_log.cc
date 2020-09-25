@@ -106,8 +106,17 @@ int main(int argc, char *argv[])
     { case 'h': Help=1; break;
       case 'l': ListOnly=1; break;
       case 'f': SelectFile=strtol(Val+2, 0, 16); break;
+      default: Help=1; break;
     }
   }
+
+  if(Help)
+  { printf("Usage: %s [options] <serial-port:baudrate>\n\
+Options: -h                this help\n\
+         -l                only list the log files stored in the OGN-Tracker\n\
+         -f<UTC-hex-time>  download the selected file: use the UTC time\n\
+", argv[0]);
+    return 0; }
 
   if(arg<argc)
   { char *Colon = strchr(argv[arg],':');

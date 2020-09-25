@@ -81,18 +81,18 @@ extern "C"
 { Log_FIFO.Clear();
 
   for( ; ; )
-  { if(!SD_isMounted())
-    { vTaskDelay(5000); SD_Mount(); continue; }
-    if(!LogFile)
-    { Log_Open();
-      if(!LogFile) { SD_Unmount(); vTaskDelay(1000); continue; }
+  { if(!SD_isMounted())                                              // if SD ia not mounted:
+    { vTaskDelay(5000); SD_Mount(); continue; }                      // try to (Re)mount it after a delay of 5sec
+    if(!LogFile)                                                     // when SD mounted and log file not open:
+    { Log_Open();                                                    // try to (re)open it
+      if(!LogFile) { SD_Unmount(); vTaskDelay(1000); continue; }     // if can't be open then unmount the SD and retry at a delay of 1sec
     }
-    if(Log_FIFO.Full()<FIFOsize/4) { vTaskDelay(100); }
+    if(Log_FIFO.Full()<FIFOsize/4) { vTaskDelay(100); }              // if little data to copy, then wait 0.1sec for more data
     int Write;
-    do { Write=WriteLog(); } while(Write>0);
-    if(Write<0) { SD_Unmount(); vTaskDelay(1000); continue; }
+    do { Write=WriteLog(); } while(Write>0);                         // write the console output to the log file
+    if(Write<0) { SD_Unmount(); vTaskDelay(1000); continue; }        // if write fails then unmount the SD card and (re)try after a delay of 1sec
     // if(Write==0) vTaskDelay(100);
-    Log_Check(); }
+    Log_Check(); }                                                   // make sure the log is well saved by regular close-reopen
 }
 
 #endif // WITH_SDLOG

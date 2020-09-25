@@ -7,15 +7,15 @@
 
 class FlightMonitor
 { public:
-   GPS_Position Takeoff;
-   GPS_Position Landing;
-   GPS_Position MaxAltitude;
+   GPS_Position Takeoff;                // est. takeoff position
+   GPS_Position Landing;                // est. landing position
+   GPS_Position MaxAltitude;            // est. positon at peak altitude
    // GPS_Position Recent;
    // const char *IGCpath;
-   static const uint8_t MinHold = 5;   // [sec]
-   static const uint16_t MinSpeed = 60; // [0.1m/s]
+   static const uint8_t  MinHold  = 5;  // [sec] minimum hold time before takeoff declared
+   static const uint16_t MinSpeed = 60; // [0.1m/s] minimum speed to trigger the takeoff
    uint8_t HoldTime;
-   uint8_t TakeoffCount;
+   uint8_t TakeoffCount;                // count take-off/landing cycles for the IGC file name
 
   public:
 
@@ -28,66 +28,66 @@ class FlightMonitor
      HoldTime=0;
      TakeoffCount=0; }
 
-   static char NameCode(int Num)
+   static char NameCode(int Num)       // coding of numbers in IGC file names
    { if(Num<=0) return '0';
      if(Num<10) return '0'+Num;
      if(Num<36) return 'A'+(Num-10);
      return '_'; }
 
-   int ShortName(char *Name, const char *Serial) const
+   int ShortName(char *Name, const char *Serial) const // produce short IGC file name (a three-character Serial)
    { int Len=0;
-     Name[Len++]='0'+Takeoff.Year%10;
-     Name[Len++]=NameCode(Takeoff.Month);
-     Name[Len++]=NameCode(Takeoff.Day);
-     Name[Len++]='O';
-     Len+=Format_String(Name+Len, Serial);
-     Name[Len++]=NameCode(TakeoffCount);
-     Len+=Format_String(Name+Len, ".IGC");
+     Name[Len++]='0'+Takeoff.Year%10;                  // Year (last digit)
+     Name[Len++]=NameCode(Takeoff.Month);              // encoded month
+     Name[Len++]=NameCode(Takeoff.Day);                // encoded day
+     Name[Len++]='O';                                  // OGN
+     Len+=Format_String(Name+Len, Serial);             // three-digit serial
+     Name[Len++]=NameCode(TakeoffCount);               // flight of the day
+     Len+=Format_String(Name+Len, ".IGC");             // extension
      Name[Len]=0;
      // printf("ShortName[%d]: %s\n", Len, Name);
      return Len; }
 
-   int LongName(char *Name, const char *Serial) const
+   int LongName(char *Name, const char *Serial) const // produce short IGC file name
    { int Len=0;
      Name[Len]=0; return 0; }
 
-   static int FlightThresh(const GPS_Position &Position, uint16_t MinSpeed)
+   static int FlightThresh(const GPS_Position &Position, uint16_t MinSpeed) // does the GPS position meed the  in-flight criteria ?
    { if(!Position.isValid()) return -1;
-     uint16_t Speed=Position.Speed;                            // [0.1m/s]
-     int16_t Climb=Position.ClimbRate;                         // [0.1m/s]
-     uint8_t DOP=Position.PDOP; if(DOP==0) DOP=Position.HDOP;  // [0.1]
-     Speed+=4*abs(Climb);
+     uint16_t Speed=Position.Speed;                            // [0.1m/s]  Horizontal speed
+     int16_t Climb=Position.ClimbRate;                         // [0.1m/s]  Vertical speed
+     uint8_t DOP=Position.PDOP; if(DOP==0) DOP=Position.HDOP;  // [0.1]     Dilution of Precision
+     Speed += 4*abs(Climb);                                    // [0.1m/s] take horizontal speed and four times the (absolute) vertical speed
      if(DOP>10) { Speed = (Speed*10)/DOP; }
      return Speed>=MinSpeed; }
 
    bool inFlight(void) const { return Takeoff.isValid() && !Landing.isValid(); }
 
-   int Process(const GPS_Position &Position)
+   int Process(const GPS_Position &Position)                   // precess the GPS positions
    { // Position.Print();
-     if(inFlight())
-     { int Det=FlightThresh(Position, MinSpeed/2); // printf("FlightThres() => %d\n", Det);
-       if(Det<=0)
-       { HoldTime++;
-         if(HoldTime>=2*MinHold)
-         { Landing=Position; HoldTime=0;
-           char Name[16]; ShortName(Name, "XXX");
-           printf("Landing #%d: %s\n", TakeoffCount, Name);
+     if(inFlight())                                            // if already in flight
+     { int Det=FlightThresh(Position, MinSpeed/2);             // check in-flight criteria with half the limit
+       if(Det<=0)                                              // if fail
+       { HoldTime++;                                           // count the holding time
+         if(HoldTime>=2*MinHold)                               // if over twice the limit
+         { Landing=Position; HoldTime=0;                       // then declare landing, store landing position
+           // char Name[16]; ShortName(Name, "XXX");
+           // printf("Landing #%d: %s\n", TakeoffCount, Name);
          }
        }
-       else HoldTime=0;
+       else HoldTime=0;                                        // if in-flight criteria satisfied then clear the holding time
      }
-     else
-     { int Det=FlightThresh(Position, MinSpeed); // printf("FlightThres() => %d\n", Det);
-       if(Det>0)
-       { HoldTime++;
-         if(HoldTime>=MinHold)
-         { Takeoff=Position; TakeoffCount++;
-           Landing.Clear(); HoldTime=0;
-           char Name[16]; ShortName(Name, "XXX");
-           printf("Takeoff #%d: %s\n", TakeoffCount, Name);
+     else                                                      // if not in flight yet
+     { int Det=FlightThresh(Position, MinSpeed);               // check in-flight criteria with normal limits
+       if(Det>0)                                               // if criteria satisfied
+       { HoldTime++;                                           // count the holding time
+         if(HoldTime>=MinHold)                                 // if enough
+         { Takeoff=Position; TakeoffCount++;                   // declare takeoff
+           Landing.Clear(); HoldTime=0;                        // clear the landing position
+           // char Name[16]; ShortName(Name, "XXX");
+           // printf("Takeoff #%d: %s\n", TakeoffCount, Name);
          }
        }
-       else HoldTime=0;
+       else HoldTime=0;                                        // if takeoff criteria not met, then clear the holding time and wait
      }
      return inFlight(); }
 
