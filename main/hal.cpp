@@ -496,6 +496,10 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 #endif
 
 // ======================================================================================================
+
+FIFO<uint8_t, 8> KeyBuffer;
+
+// ======================================================================================================
 // 48-bit unique ID of the chip
 
 uint64_t getUniqueID(void)
@@ -1594,7 +1598,7 @@ void vApplicationIdleHook(void) // when RTOS is idle: should call "sleep until a
 
 extern "C"
 void vApplicationTickHook(void) // RTOS timer tick hook
-{ LED_TimerCheck();
+{ // LED_TimerCheck(1);
 }
 */
 
@@ -1936,6 +1940,38 @@ void IO_Configuration(void)
 }
 
 // ======================================================================================================
+
+extern "C"
+void vTaskTICK(void* pvParameters)
+{
+  for( ; ; )
+  { vTaskDelay(1);
+    LED_TimerCheck(1);
+
+#ifdef WITH_BEEPER
+    Play_TimerCheck();                                // update the LED flashes
+#endif
+
+    int32_t PressRelease=Button_TimerCheck();         // 0 = no change
+#ifdef DEBUG_PRINT
+    if(PressRelease!=0)
+    { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, "Button: ");
+      Format_SignDec(CONS_UART_Write, PressRelease);
+      Format_String(CONS_UART_Write, "ms\n");
+      xSemaphoreGive(CONS_Mutex); }
+#endif
+    if(PressRelease>0)
+    { if(PressRelease<=700)                                            // short button push: switch pages
+      { KeyBuffer.Write(0x01); }
+      else if(PressRelease<=3000)                                      // longer button push: some page action
+      { KeyBuffer.Write(0x41); }
+      else                                                             // very long push
+      { }
+    }
+
+  }
+}
 
 // ======================================================================================================
 

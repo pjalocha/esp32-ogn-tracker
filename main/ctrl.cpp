@@ -30,7 +30,7 @@
 
 static char Line[128];
 
-FIFO<uint8_t, 8> KeyBuffer;
+// FIFO<uint8_t, 8> KeyBuffer;
 
 // ========================================================================================================================
 
@@ -225,7 +225,12 @@ static void ProcessCtrlL(void)                                    // print syste
 }
 
 void SleepIn(void)
-{ xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+{
+#ifdef WITH_SPIFFS
+  FlashLog_SaveReq=1;
+  vTaskDelay(1000);
+#endif
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   Format_String(CONS_UART_Write, "Sleep-in\n");
   xSemaphoreGive(CONS_Mutex);
 
@@ -262,7 +267,7 @@ void SleepIn(void)
 
   PowerMode=0;
   for(int Idx=0; Idx<1500; Idx++)
-  { LED_TimerCheck(1);
+  { // LED_TimerCheck(1);
     vTaskDelay(1); }
 
 }
@@ -327,7 +332,13 @@ static void ProcessInput(void)
     if(Byte==0x03) ProcessCtrlC();                                // if Ctrl-C received: print parameters
     if(Byte==0x0C) ProcessCtrlL();                                // if Ctrl-L received: list log files
     if(Byte==0x16) ProcessCtrlV();                                // if Ctrl-L received: suspend (verbose) printout
-    if(Byte==0x18) esp_restart() ;                                // if Ctrl-X received then restart
+    if(Byte==0x18)
+    {
+#ifdef WITH_SPIFFS
+      FlashLog_SaveReq=1;
+#endif
+      vTaskDelay(1000);
+      esp_restart(); }                                            // if Ctrl-X received then restart
     // if(Byte==0x19) Shutdown();                                    // if Ctrl-Y receiver: shutdown
 #endif
     NMEA.ProcessByte(Byte);                                       // pass the byte through the NMEA processor
@@ -368,6 +379,9 @@ void vTaskCTRL(void* pvParameters)
     bool PowerOffRequest = AXP.readLongPressIRQ() /* || AXP.readShortPressIRQ() */ ;
     if(PowerOffRequest)
     { PowerMode=0;
+#ifdef WITH_SPIFFS
+      FlashLog_SaveReq=1;
+#endif
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_String(CONS_UART_Write, "Power-Off Request\n");
       xSemaphoreGive(CONS_Mutex);
@@ -405,11 +419,11 @@ void vTaskCTRL(void* pvParameters)
       AXP.clearIRQ(); }
 #endif
 
-    LED_TimerCheck(1);                                // update the LED flashes
-#ifdef WITH_BEEPER
-    Play_TimerCheck();                                // update the LED flashes
-#endif
-
+    // LED_TimerCheck(1);                                // update the LED flashes
+// #ifdef WITH_BEEPER
+//     Play_TimerCheck();                                // update the LED flashes
+// #endif
+/*
     int32_t PressRelease=Button_TimerCheck();         // 0 = no change
 #ifdef DEBUG_PRINT
     if(PressRelease!=0)
@@ -427,7 +441,7 @@ void vTaskCTRL(void* pvParameters)
       else                                                             // very long push
       { }
     }
-
+*/
     uint32_t Time=TimeSync_Time();
     bool TimeChange = Time!=PrevTime;
     uint32_t Sec = (Time-1)%60;
