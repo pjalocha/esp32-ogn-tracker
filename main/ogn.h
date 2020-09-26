@@ -1455,13 +1455,13 @@ class GPS_Position: public GPS_Time
      Out[Len++]=SignChar[Neg];
      return Len; }
 
-   int WriteHHMMSS(char *Out)
+   int WriteHHMMSS(char *Out) const
    { Format_UnsDec(Out  , Hour, 2);
      Format_UnsDec(Out+2, Min , 2);
      Format_UnsDec(Out+4, Sec , 2);
      return 6; }
 
-   int WriteIGC(char *Out)
+   int WriteIGC(char *Out) const
    { // if(!isValid()) return 0;
      int Len=0;
      Out[Len++] = 'B';
@@ -1482,7 +1482,7 @@ class GPS_Position: public GPS_Time
        if(Alt<0) { Alt = (-Alt); Out[Len++] = '-'; Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 4); }
             else { Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 5); }
      } else Len+=Format_String(Out+Len, "     ");
-     Out[Len]=0; return Len; }
+     Out[Len++]='\n'; Out[Len]=0; return Len; }
 
   private:
 

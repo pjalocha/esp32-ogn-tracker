@@ -11,6 +11,8 @@
 #include "timesync.h"
 #include "fifo.h"
 
+// ============================================================================================
+
 static char  LogFileName[32];
 static FILE *LogFile = 0;
 
@@ -74,6 +76,96 @@ static int WriteLog(size_t MaxBlock=FIFOsize/2)                    // process th
     Count+=Write; }
   return Count; }
 
+// ============================================================================================
+
+const char   *IGC_Path = "/sdcard/IGC";
+const int     IGC_PathLen = 11;
+// constexpr int IGC_PathLen = strlen(IGC_Path);
+const char   *IGC_Serial = "XXX";
+      char    IGC_FileName[32];
+static FILE  *IGC_File=0;
+      uint8_t IGC_FlightNum=0;
+
+static void IGC_Close(void)
+{ if(IGC_File)                                                      // if a file open, then close it and increment the flight number
+  { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    Format_String(CONS_UART_Write, "IGC_Close: ");
+    Format_String(CONS_UART_Write, IGC_FileName);
+    Format_String(CONS_UART_Write, "\n");
+    xSemaphoreGive(CONS_Mutex);
+    fclose(IGC_File); IGC_File=0; IGC_FlightNum++; }
+}
+
+static int IGC_Open(void)
+{ IGC_Close();                                                      // close the previous file, if open
+  if(!SD_isMounted()) return -1;                                    // -1 => SD not mounted
+  memcpy(IGC_FileName, IGC_Path, IGC_PathLen);                      // copy path
+  IGC_FileName[IGC_PathLen]='/';                                    // slash after the path
+  Flight.ShortName(IGC_FileName+IGC_PathLen+1, IGC_FlightNum, IGC_Serial); // full name
+  IGC_File=fopen(IGC_FileName, "rt");                               // attempt to open for read, just to try if the file is already there
+  if(IGC_File) { IGC_Close(); return -2; }                          // -2 => file already exists
+  IGC_File=fopen(IGC_FileName, "wt");                               // open for write
+  if(IGC_File==0)                                                   // failed: maybe sub-dir does not exist ?
+  { if(mkdir(IGC_Path, 0777)<0) return -3;                          // -3 => can't create sub-dir
+    IGC_File=fopen(IGC_FileName, "wt"); }                           // retry to open for write
+  if(IGC_File)
+  { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    Format_String(CONS_UART_Write, "IGC_Open: ");
+    Format_String(CONS_UART_Write, IGC_FileName);
+    Format_String(CONS_UART_Write, "\n");
+    xSemaphoreGive(CONS_Mutex); }
+  return IGC_File ? 0:-4; }                                         // -4 => can't open for write
+
+static char Line[192];
+
+static int IGC_Header(void)                                         // write the top of the IGC file
+{
+  return 0; }
+
+static int IGC_Log(const GPS_Position &Pos)                         // log GPS position as B-record
+{ int Len=Pos.WriteIGC(Line);
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, Line);
+  xSemaphoreGive(CONS_Mutex);
+#endif
+  int Written=fwrite(Line, 1, Len, IGC_File);
+  if(Written!=Len) IGC_Close();
+  return Written; }
+
+static void IGC_Check(void)                                          // check if new GPS position
+{ static uint8_t PrevPosIdx=0;
+  if(GPS_PosIdx==PrevPosIdx) return;
+  PrevPosIdx=GPS_PosIdx;
+  const  uint8_t PosPipeIdxMask = GPS_PosPipeSize-1;                 // get the GPS position just before in the pipe
+  uint8_t PosIdx = GPS_PosIdx-1; PosIdx&=PosPipeIdxMask;
+  bool inFlight = Flight.inFlight();                                 // in-flight or on-the-ground ?
+#ifdef DEBUG_PRINT
+  GPS_Pos[PosIdx].PrintLine(Line);
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "IGC_Check() [");
+  CONS_UART_Write('0'+GPS_PosIdx);
+  CONS_UART_Write(inFlight?'^':'_');
+  Format_String(CONS_UART_Write, "] ");
+  Format_String(CONS_UART_Write, Line);
+  xSemaphoreGive(CONS_Mutex);
+#endif
+  if(IGC_File)                                                       // if IGC file already open
+  { IGC_Log(GPS_Pos[PosIdx]);                                        // log position
+    if(!inFlight)                                                    // if no longer in flight
+    { IGC_Close(); }                                                 // then close the IGC file
+  }
+  else                                                               // if IGC file is not open
+  { if(inFlight)                                                     // and in-flight
+    { for(int Try=0; Try<8; Try++)
+      { int Err=IGC_Open(); if(Err!=(-2)) break; }                   // try to open a new IGC file but don't overwrite the old ones
+      if(IGC_File) { IGC_Header(); IGC_Log(GPS_Pos[PosIdx]); }       // if open succesfully then write header and first B-record
+    }
+  }
+}
+
+// ============================================================================================
+
 #ifdef WITH_SDLOG
 
 extern "C"
@@ -82,17 +174,36 @@ extern "C"
 
   for( ; ; )
   { if(!SD_isMounted())                                              // if SD ia not mounted:
-    { vTaskDelay(5000); SD_Mount(); continue; }                      // try to (Re)mount it after a delay of 5sec
+    { vTaskDelay(5000); SD_Mount(); IGC_Check(); continue; }         // try to (Re)mount it after a delay of 5sec
+
+    // if(GPS_Event)
+    // { EventBits_t GPSevt = xEventGroupWaitBits(GPS_Event, GPSevt_NewPos, pdTRUE, pdFALSE, 100);
+    //   if(GPSevt&GPSevt_NewPos) LogIGC(); }
+
     if(!LogFile)                                                     // when SD mounted and log file not open:
     { Log_Open();                                                    // try to (re)open it
-      if(!LogFile) { SD_Unmount(); vTaskDelay(1000); continue; }     // if can't be open then unmount the SD and retry at a delay of 1sec
+      if(!LogFile) { IGC_Check(); SD_Unmount(); vTaskDelay(1000); continue; }  // if can't be open then unmount the SD and retry at a delay of 1sec
     }
-    if(Log_FIFO.Full()<FIFOsize/4) { vTaskDelay(100); }              // if little data to copy, then wait 0.1sec for more data
+
+    if(Log_FIFO.Full()<FIFOsize/4) { IGC_Check(); vTaskDelay(50); }  // if little data to copy, then wait 0.1sec for more data
     int Write;
     do { Write=WriteLog(); } while(Write>0);                         // write the console output to the log file
     if(Write<0) { SD_Unmount(); vTaskDelay(1000); continue; }        // if write fails then unmount the SD card and (re)try after a delay of 1sec
     // if(Write==0) vTaskDelay(100);
+    IGC_Check();
     Log_Check(); }                                                   // make sure the log is well saved by regular close-reopen
 }
+
+/*
+extern "C"
+ void vTaskIGC(void* pvParameters)
+{
+  for( ; ; )
+  { EventBits_t GPSevt = xEventGroupWaitBits(GPS_Event, GPSevt_NewPos, pdTRUE, pdFALSE, 2000);
+    if((GPSevt&GPSevt_NewPos)==0) continue;
+
+  }
+}
+*/
 
 #endif // WITH_SDLOG

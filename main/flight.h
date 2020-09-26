@@ -15,7 +15,7 @@ class FlightMonitor
    static const uint8_t  MinHold  = 5;  // [sec] minimum hold time before takeoff declared
    static const uint16_t MinSpeed = 60; // [0.1m/s] minimum speed to trigger the takeoff
    uint8_t HoldTime;
-   uint8_t TakeoffCount;                // count take-off/landing cycles for the IGC file name
+   // uint8_t TakeoffCount;                // count take-off/landing cycles for the IGC file name
 
   public:
 
@@ -26,7 +26,8 @@ class FlightMonitor
      // Recent.Clear();
      // IGCpath=0;
      HoldTime=0;
-     TakeoffCount=0; }
+     // TakeoffCount=0;
+   }
 
    static char NameCode(int Num)       // coding of numbers in IGC file names
    { if(Num<=0) return '0';
@@ -34,14 +35,17 @@ class FlightMonitor
      if(Num<36) return 'A'+(Num-10);
      return '_'; }
 
-   int ShortName(char *Name, const char *Serial) const // produce short IGC file name (a three-character Serial)
+   int ShortName(char *Name, uint8_t TakeoffNum, const char *Serial) const // produce short IGC file name (a three-character Serial)
+   { return ShortName(Name, Takeoff, TakeoffNum, Serial); }
+
+   static int ShortName(char *Name, const GPS_Position &Takeoff, uint8_t TakeoffNum, const char *Serial)
    { int Len=0;
      Name[Len++]='0'+Takeoff.Year%10;                  // Year (last digit)
      Name[Len++]=NameCode(Takeoff.Month);              // encoded month
      Name[Len++]=NameCode(Takeoff.Day);                // encoded day
      Name[Len++]='O';                                  // OGN
      Len+=Format_String(Name+Len, Serial);             // three-digit serial
-     Name[Len++]=NameCode(TakeoffCount);               // flight of the day
+     Name[Len++]=NameCode(TakeoffNum);                 // flight of the day
      Len+=Format_String(Name+Len, ".IGC");             // extension
      Name[Len]=0;
      // printf("ShortName[%d]: %s\n", Len, Name);
@@ -81,7 +85,7 @@ class FlightMonitor
        if(Det>0)                                               // if criteria satisfied
        { HoldTime++;                                           // count the holding time
          if(HoldTime>=MinHold)                                 // if enough
-         { Takeoff=Position; TakeoffCount++;                   // declare takeoff
+         { Takeoff=Position; // TakeoffCount++;                // declare takeoff
            Landing.Clear(); HoldTime=0;                        // clear the landing position
            // char Name[16]; ShortName(Name, "XXX");
            // printf("Takeoff #%d: %s\n", TakeoffCount, Name);

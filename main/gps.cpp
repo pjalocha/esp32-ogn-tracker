@@ -41,13 +41,13 @@ static UBX_RxMsg   UBX;                  // UBX messages catcher
 static MAV_RxMsg   MAV;                  // MAVlink message catcher
 #endif
 
-uint16_t GPS_PosPeriod = 0;                // [0.01s] time between succecive GPS readouts
+uint16_t GPS_PosPeriod = 0;                    // [0.01s] time between succecive GPS readouts
 
-// uint8_t  GPS_PowerMode = 2;                // 0=shutdown, 1=reduced power, 2=normal
+// uint8_t  GPS_PowerMode = 2;                    // 0=shutdown, 1=reduced power, 2=normal
 
 const  uint8_t PosPipeIdxMask = GPS_PosPipeSize-1;
-static uint8_t      PosIdx;                // Pipe index, increments with every GPS position received
-static GPS_Position Position[GPS_PosPipeSize]; // GPS position pipe
+uint8_t      GPS_PosIdx;                   // Pipe index, increments with every GPS position received
+GPS_Position GPS_Pos[GPS_PosPipeSize];     // GPS position pipe
 
 static   TickType_t PPS_Tick;              // [msec] System Tick when the PPS arrived
 static   TickType_t Burst_Tick;            // [msec] System Tick when the data burst from GPS started
@@ -93,6 +93,10 @@ uint16_t MAVLINK_BattVolt = 0;   // [mV]
 uint16_t MAVLINK_BattCurr = 0;   // [10mA]
 uint8_t  MAVLINK_BattCap  = 0;   // [%]
 #endif
+
+EventGroupHandle_t GPS_Event = 0;
+
+FlightMonitor Flight;
 
 // ----------------------------------------------------------------------------
 
@@ -158,7 +162,7 @@ int16_t GPS_AverageSpeed(void)                        // get average speed based
 { uint8_t Count=0;
   int16_t Speed=0;
   for(uint8_t Idx=0; Idx<GPS_PosPipeSize; Idx++)      // loop over GPS positions
-  { GPS_Position *Pos = Position+Idx;
+  { GPS_Position *Pos = GPS_Pos+Idx;
     if( !Pos->hasGPS || !Pos->isValid() ) continue;   // skip invalid positions
     Speed += Pos->Speed +abs(Pos->ClimbRate); Count++;
   }
@@ -363,7 +367,7 @@ static void GPS_Random_Update(uint8_t Bit)
 { GPS_Random = (GPS_Random<<1) | (Bit&1); }
 
 static void GPS_Random_Update(GPS_Position *Pos)
-{ if(Position==0) return;
+{ if(Pos==0) return;
   GPS_Random_Update(Pos->Altitude);
   GPS_Random_Update(Pos->Speed);
   GPS_Random_Update(Pos->Latitude);
@@ -374,7 +378,7 @@ static void GPS_Random_Update(GPS_Position *Pos)
 static void GPS_BurstComplete(void)                                        // when GPS has sent the essential data for position fix
 {
 #ifdef WITH_MAVLINK
-  GPS_Position *GPS = Position+PosIdx;
+  GPS_Position *GPS = GPS_Pos+GPS_PosIdx;
   if(GPS->hasTime && GPS->hasGPS && GPS->hasBaro)
   { int32_t StdAlt1 = Atmosphere::StdAltitude((GPS->Pressure+2)/4);   // [0.1m] we try to fix the cheap chinese ArduPilot with baro chip cs5607 instead of cs5611
     int32_t StdAlt2 = Atmosphere::StdAltitude((GPS->Pressure+1)/2);   // [0.1m] the cx5607 is very close but gives pressure is twice as larger units
@@ -386,7 +390,7 @@ static void GPS_BurstComplete(void)                                        // wh
   }
 #endif
 #ifdef DEBUG_PRINT
-  Position[PosIdx].PrintLine(Line);                                   // print out the GPS position in a single-line format
+  GPS_Pos[GPS_PosIdx].PrintLine(Line);                                   // print out the GPS position in a single-line format
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60, 2);
   CONS_UART_Write('.');
@@ -394,19 +398,19 @@ static void GPS_BurstComplete(void)                                        // wh
   Format_String(CONS_UART_Write, " -> GPS_BurstComplete() GPS:");
   Format_Hex(CONS_UART_Write, GPS_Status.Flags);
   Format_String(CONS_UART_Write, "\nGPS[");
-  CONS_UART_Write('0'+PosIdx); CONS_UART_Write(']'); CONS_UART_Write(' ');
+  CONS_UART_Write('0'+GPS_PosIdx); CONS_UART_Write(']'); CONS_UART_Write(' ');
   Format_String(CONS_UART_Write, Line);
   xSemaphoreGive(CONS_Mutex);
 #endif
-  GPS_Random_Update(Position+PosIdx);
-  if(Position[PosIdx].hasGPS)                                              // GPS position data complete
-  { Position[PosIdx].isReady=1;                                            // mark this record as ready for processing => producing packets for transmission
-    if(Position[PosIdx].isTimeValid())                                     // if time is valid already
-    { if(Position[PosIdx].isDateValid())                                   // if date is valid as well
-      { uint32_t UnixTime=Position[PosIdx].getUnixTime();
-        GPS_FatTime=Position[PosIdx].getFatTime();
+  GPS_Random_Update(GPS_Pos+GPS_PosIdx);
+  if(GPS_Pos[GPS_PosIdx].hasGPS)                                              // GPS position data complete
+  { GPS_Pos[GPS_PosIdx].isReady=1;                                            // mark this record as ready for processing => producing packets for transmission
+    if(GPS_Pos[GPS_PosIdx].isTimeValid())                                     // if time is valid already
+    { if(GPS_Pos[GPS_PosIdx].isDateValid())                                   // if date is valid as well
+      { uint32_t UnixTime=GPS_Pos[GPS_PosIdx].getUnixTime();
+        GPS_FatTime=GPS_Pos[GPS_PosIdx].getFatTime();
 #ifndef WITH_MAVLINK                                                       // with MAVlink we sync. with the SYSTEM_TIME message
-        int32_t msDiff = Position[PosIdx].FracSec;
+        int32_t msDiff = GPS_Pos[GPS_PosIdx].FracSec;
         if(msDiff>=50) { msDiff-=100; UnixTime++; }                        // [0.01s]
         msDiff*=10;                                                        // [ms]
         // if(abs(msDiff)<=200)                                               // if (almost) full-second burst
@@ -418,35 +422,35 @@ static void GPS_BurstComplete(void)                                        // wh
 #endif
       }
     }
-    if(Position[PosIdx].isValid())                                         // position is complete and locked
+    if(GPS_Pos[GPS_PosIdx].isValid())                                         // position is complete and locked
     { if(Parameters.manGeoidSepar)                                         // if GeoidSepar is "manual" - this implies the GPS does not correct for it
-      { Position[PosIdx].GeoidSeparation = Parameters.GeoidSepar;          // copy the manually set GeoidSepar
-        Position[PosIdx].Altitude -= Parameters.GeoidSepar; }              // correct the Altitude - we likely need a separate flag for this
-      Position[PosIdx].calcLatitudeCosine();
+      { GPS_Pos[GPS_PosIdx].GeoidSeparation = Parameters.GeoidSepar;          // copy the manually set GeoidSepar
+        GPS_Pos[GPS_PosIdx].Altitude -= Parameters.GeoidSepar; }              // correct the Altitude - we likely need a separate flag for this
+      GPS_Pos[GPS_PosIdx].calcLatitudeCosine();
       GPS_TimeSinceLock++;
-      GPS_Altitude=Position[PosIdx].Altitude;
-      GPS_Latitude=Position[PosIdx].Latitude;
-      GPS_Longitude=Position[PosIdx].Longitude;
-      GPS_GeoidSepar=Position[PosIdx].GeoidSeparation;
-      GPS_LatCosine=Position[PosIdx].LatitudeCosine;
-      // GPS_FreqPlan=Position[PosIdx].getFreqPlan();
+      GPS_Altitude=GPS_Pos[GPS_PosIdx].Altitude;
+      GPS_Latitude=GPS_Pos[GPS_PosIdx].Latitude;
+      GPS_Longitude=GPS_Pos[GPS_PosIdx].Longitude;
+      GPS_GeoidSepar=GPS_Pos[GPS_PosIdx].GeoidSeparation;
+      GPS_LatCosine=GPS_Pos[GPS_PosIdx].LatitudeCosine;
+      // GPS_FreqPlan=GPS_Pos[GPS_PosIdx].getFreqPlan();
       if(GPS_TimeSinceLock==1)                                            // if we just acquired the lock a moment ago
       { GPS_LockStart(); }
       if(GPS_TimeSinceLock>1)                                             // if the lock is more persistant
-      { uint8_t PrevIdx=(PosIdx+PosPipeIdxMask)&PosPipeIdxMask;
-        int16_t TimeDiff = Position[PosIdx].calcTimeDiff(Position[PrevIdx]);
+      { uint8_t PrevIdx=(GPS_PosIdx+PosPipeIdxMask)&PosPipeIdxMask;
+        int16_t TimeDiff = GPS_Pos[GPS_PosIdx].calcTimeDiff(GPS_Pos[PrevIdx]);
         for( ; ; )
         { if(TimeDiff>=95) break;
           uint8_t PrevIdx2=(PrevIdx+PosPipeIdxMask)&PosPipeIdxMask;
-          if(PrevIdx2==PosIdx) break;
-          if(!Position[PrevIdx2].isValid()) break;
-          TimeDiff = Position[PosIdx].calcTimeDiff(Position[PrevIdx2]);
+          if(PrevIdx2==GPS_PosIdx) break;
+          if(!GPS_Pos[PrevIdx2].isValid()) break;
+          TimeDiff = GPS_Pos[GPS_PosIdx].calcTimeDiff(GPS_Pos[PrevIdx2]);
           PrevIdx=PrevIdx2; }
-        TimeDiff=Position[PosIdx].calcDifferentials(Position[PrevIdx]);
+        TimeDiff=GPS_Pos[GPS_PosIdx].calcDifferentials(GPS_Pos[PrevIdx]);
 #ifdef DEBUG_PRINT
         xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
         Format_String(CONS_UART_Write, "calcDiff() => ");
-        Format_UnsDec(CONS_UART_Write, (uint16_t)PosIdx);
+        Format_UnsDec(CONS_UART_Write, (uint16_t)GPS_PosIdx);
         Format_String(CONS_UART_Write, "->");
         Format_UnsDec(CONS_UART_Write, (uint16_t)PrevIdx);
         CONS_UART_Write(' ');
@@ -461,7 +465,7 @@ static void GPS_BurstComplete(void)                                        // wh
     }
 // #ifdef WITH_MAVLINK
 //     static MAV_GPS_RAW_INT MAV_Position;
-//     Position[PosIdx].Encode(MAV_Position);
+//     GPS_Pos[GPS_PosIdx].Encode(MAV_Position);
 //     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
 //     MAV_RxMsg::Send(sizeof(MAV_Position), MAV_Seq++, MAV_SysID, MAV_COMP_ID_GPS, MAV_ID_GPS_RAW_INT, (const uint8_t *)&MAV_Position, CONS_UART_Write);
 //     xSemaphoreGive(CONS_Mutex);
@@ -470,31 +474,33 @@ static void GPS_BurstComplete(void)                                        // wh
   else                                                                    // posiiton not complete, no GPS lock
   { if(GPS_TimeSinceLock) { GPS_LockEnd(); GPS_TimeSinceLock=0; }
   }
-  uint8_t NextPosIdx = (PosIdx+1)&PosPipeIdxMask;                         // next position to be recorded
-  if( Position[PosIdx].isTimeValid() && Position[NextPosIdx].isTimeValid() )
-  { int32_t Period = Position[PosIdx].calcTimeDiff(Position[NextPosIdx]);
+  uint8_t NextPosIdx = (GPS_PosIdx+1)&PosPipeIdxMask;                         // next position to be recorded
+  if( GPS_Pos[GPS_PosIdx].isTimeValid() && GPS_Pos[NextPosIdx].isTimeValid() )
+  { int32_t Period = GPS_Pos[GPS_PosIdx].calcTimeDiff(GPS_Pos[NextPosIdx]);
     if(Period>0) GPS_PosPeriod = (Period+GPS_PosPipeSize/2)/(GPS_PosPipeSize-1);
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
     Format_String(CONS_UART_Write,"GPS[");
-    CONS_UART_Write('0'+PosIdx); CONS_UART_Write(']'); CONS_UART_Write(' ');
-    Format_UnsDec(CONS_UART_Write, (uint16_t)Position[PosIdx].Sec, 2);
+    CONS_UART_Write('0'+GPS_PosIdx); CONS_UART_Write(']'); CONS_UART_Write(' ');
+    Format_UnsDec(CONS_UART_Write, (uint16_t)GPS_Pos[GPS_PosIdx].Sec, 2);
     CONS_UART_Write('.');
-    Format_UnsDec(CONS_UART_Write, (uint16_t)Position[PosIdx].FracSec, 2);
+    Format_UnsDec(CONS_UART_Write, (uint16_t)GPS_Pos[GPS_PosIdx].FracSec, 2);
     Format_String(CONS_UART_Write, "s ");
     Format_UnsDec(CONS_UART_Write, GPS_PosPeriod, 3, 2);
     Format_String(CONS_UART_Write, "s\n");
     xSemaphoreGive(CONS_Mutex);
 #endif
   }
-  Position[NextPosIdx].Clear();                                           // clear the next position
-  // int8_t Sec = Position[PosIdx].Sec;                                      //
+  GPS_Pos[NextPosIdx].Clear();                                           // clear the next position
+  // int8_t Sec = GPS_Pos[GPS_PosIdx].Sec;                                      //
   // Sec++; if(Sec>=60) Sec=0;
-  // Position[NextPosIdx].Sec=Sec;                                           // set the correct time for the next position
-  Position[NextPosIdx].copyTime(Position[PosIdx]);                        // copy time from current position
-  Position[NextPosIdx].incrTime();                                        // increment time by 1 sec
-  // Position[NextPosIdx].copyDate(Position[PosIdx]);
-  PosIdx=NextPosIdx;                                                      // advance the index
+  // GPS_Pos[NextPosIdx].Sec=Sec;                                           // set the correct time for the next position
+  GPS_Pos[NextPosIdx].copyTime(GPS_Pos[GPS_PosIdx]);                        // copy time from current position
+  GPS_Pos[NextPosIdx].incrTime();                                        // increment time by 1 sec
+  Flight.Process(GPS_Pos[GPS_PosIdx]);
+  // GPS_Pos[NextPosIdx].copyDate(GPS_Pos[GPS_PosIdx]);
+  GPS_PosIdx=NextPosIdx;                                                      // advance the index
+  xEventGroupSetBits(GPS_Event, GPSevt_NewPos);
 }
 
 static void GPS_BurstEnd(void)                                             // when GPS stops sending the data on the serial port
@@ -506,28 +512,28 @@ GPS_Position *GPS_getPosition(uint8_t &BestIdx, int16_t &BestRes, int8_t Sec, in
 { int16_t TargetTime = Frac+(int16_t)Sec*100;                            // target time including the seconds
   BestIdx=0; BestRes=0x7FFF;
   for(uint8_t Idx=0; Idx<GPS_PosPipeSize; Idx++)                         // run through the GPS positions stored in the pipe
-  { GPS_Position *Pos=Position+Idx;
+  { GPS_Position *Pos=GPS_Pos+Idx;
     if(!Pos->isReady) continue;                                          // skip those not-ready yet
     int16_t Diff = TargetTime - (Pos->FracSec + (int16_t)Pos->Sec*100);  // difference from the target time
     if(Diff<(-3000)) Diff+=6000;                                         // wrap-around 60 sec
     else if(Diff>=3000) Diff-=6000;
     if(abs(Diff)<abs(BestRes)) { BestRes=Diff; BestIdx=Idx; }          // store the smallest difference from target
   }
-  return BestRes==0x7FFF ? 0:Position+BestIdx; }
+  return BestRes==0x7FFF ? 0:GPS_Pos+BestIdx; }
 
 GPS_Position *GPS_getPosition(void)                                       // return most recent GPS_Position which has time/position data
-{ uint8_t PrevIdx=PosIdx;
-  GPS_Position *PrevPos = Position+PrevIdx;
+{ uint8_t PrevIdx=GPS_PosIdx;
+  GPS_Position *PrevPos = GPS_Pos+PrevIdx;
   if(PrevPos->isReady) return PrevPos;
   PrevIdx=(PrevIdx+PosPipeIdxMask)&PosPipeIdxMask;
-  PrevPos = Position+PrevIdx;
+  PrevPos = GPS_Pos+PrevIdx;
   if(PrevPos->isReady) return PrevPos;
   return 0; }
 
 GPS_Position *GPS_getPosition(int8_t Sec)                                // return the GPS_Position which corresponds to given Sec (may be incomplete and not valid)
 { for(uint8_t Idx=0; Idx<GPS_PosPipeSize; Idx++)
-  { int8_t PosSec = Position[Idx].Sec; if(Position[Idx].FracSec>=50) { PosSec++; if(PosSec>=60) PosSec-=60; }
-    if(Sec==PosSec) return Position+Idx; }
+  { int8_t PosSec = GPS_Pos[Idx].Sec; if(GPS_Pos[Idx].FracSec>=50) { PosSec++; if(PosSec>=60) PosSec-=60; }
+    if(Sec==PosSec) return GPS_Pos+Idx; }
   return 0; }
 
 // ----------------------------------------------------------------------------
@@ -537,7 +543,7 @@ static void GPS_NMEA(void)                                                 // wh
   GPS_Status.BaudConfig = (GPS_getBaudRate() == GPS_TargetBaudRate);
   LED_PCB_Flash(10);                                                        // Flash the LED for 2 ms
   if(NMEA.isGxGSV()) ProcessGSV(NMEA);                                      // process satellite data
-  Position[PosIdx].ReadNMEA(NMEA);                                          // read position elements from NMEA
+  GPS_Pos[GPS_PosIdx].ReadNMEA(NMEA);                                          // read position elements from NMEA
   if(NMEA.isGxRMC()) GPS_Burst.GxRMC=1;
   if(NMEA.isGxGGA()) GPS_Burst.GxGGA=1;
   if(NMEA.isGxGSA()) GPS_Burst.GxGSA=1;
@@ -593,7 +599,7 @@ static void GPS_UBX(void)                                                       
   GPS_Status.BaudConfig = (GPS_getBaudRate() == GPS_TargetBaudRate);
   LED_PCB_Flash(10);
   // DumpUBX();
-  // Position[PosIdx].ReadUBX(UBX);
+  // GPS_Pos[GPS_PosIdx].ReadUBX(UBX);
 #ifdef WITH_GPS_UBX_PASS
   { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);                                    // send ther UBX packet to the console
     UBX.Send(CONS_UART_Write);
@@ -719,8 +725,8 @@ static void GPS_MAV(void)                                                  // wh
   uint8_t MsgID = MAV.getMsgID();
   uint64_t UnixTime_ms = MAV_getUnixTime();                                   // get the time from the MAVlink message
   if( (MsgID!=MAV_ID_SYSTEM_TIME) && UnixTime_ms)
-  { if(Position[PosIdx].hasTime)
-    { uint64_t PrevUnixTime_ms = Position[PosIdx].getUnixTime_ms();
+  { if(GPS_Pos[GPS_PosIdx].hasTime)
+    { uint64_t PrevUnixTime_ms = GPS_Pos[GPS_PosIdx].getUnixTime_ms();
       int32_t TimeDiff_ms = UnixTime_ms-PrevUnixTime_ms;
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -761,21 +767,21 @@ static void GPS_MAV(void)                                                  // wh
 #endif
   } else if(MsgID==MAV_ID_GLOBAL_POSITION_INT)                            // position based on GPS and inertial sensors
   { const MAV_GLOBAL_POSITION_INT *Pos = (const MAV_GLOBAL_POSITION_INT *)MAV.getPayload();
-    Position[PosIdx].Read(Pos, UnixTime_ms);                              // read position/altitude/speed/etc. into GPS_Position structure
+    GPS_Pos[GPS_PosIdx].Read(Pos, UnixTime_ms);                              // read position/altitude/speed/etc. into GPS_Position structure
 #ifdef DEBUG_PRINT
-    Position[PosIdx].PrintLine(Line);
+    GPS_Pos[GPS_PosIdx].PrintLine(Line);
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
     Format_String(CONS_UART_Write, "MAV_GLOBAL_POSITION_INT: ");
     Format_UnsDec(CONS_UART_Write, UnixTime_ms, 13, 3);
-    Format_String(CONS_UART_Write, "\nGPS"); CONS_UART_Write('0'+PosIdx); CONS_UART_Write(':'); CONS_UART_Write(' ');
+    Format_String(CONS_UART_Write, "\nGPS"); CONS_UART_Write('0'+GPS_PosIdx); CONS_UART_Write(':'); CONS_UART_Write(' ');
     Format_String(CONS_UART_Write, Line);
     xSemaphoreGive(CONS_Mutex);
 #endif
   } else if(MsgID==MAV_ID_GPS_RAW_INT)                                    // position form the GPS
   { const MAV_GPS_RAW_INT *RawGPS = (const MAV_GPS_RAW_INT *)MAV.getPayload();
-    Position[PosIdx].Read(RawGPS, UnixTime_ms);                           // read position/altitude/speed/etc. into GPS_Position structure
+    GPS_Pos[GPS_PosIdx].Read(RawGPS, UnixTime_ms);                           // read position/altitude/speed/etc. into GPS_Position structure
 #ifdef DEBUG_PRINT
-    Position[PosIdx].PrintLine(Line);
+    GPS_Pos[GPS_PosIdx].PrintLine(Line);
     uint32_t UnixTime = (UnixTime_ms+500)/1000;
      int32_t TimeDiff = (int64_t)UnixTime_ms-(int64_t)UnixTime*1000;
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -784,20 +790,20 @@ static void GPS_MAV(void)                                                  // wh
     CONS_UART_Write(' ');
     Format_SignDec(CONS_UART_Write, TimeDiff, 4, 3);
     CONS_UART_Write(abs(TimeDiff)<250 ? '*':' ');
-    Format_String(CONS_UART_Write, "\nGPS"); CONS_UART_Write('0'+PosIdx); CONS_UART_Write(':'); CONS_UART_Write(' ');
+    Format_String(CONS_UART_Write, "\nGPS"); CONS_UART_Write('0'+GPS_PosIdx); CONS_UART_Write(':'); CONS_UART_Write(' ');
     Format_String(CONS_UART_Write, Line);
     xSemaphoreGive(CONS_Mutex);
 #endif
   } else if(MsgID==MAV_ID_SCALED_PRESSURE)
   { const MAV_SCALED_PRESSURE *Press = (const MAV_SCALED_PRESSURE *)MAV.getPayload();
     // uint64_t UnixTime_ms = Press->time_boot_ms + MAV_TimeOfs_ms;
-    Position[PosIdx].Read(Press, UnixTime_ms);
+    GPS_Pos[GPS_PosIdx].Read(Press, UnixTime_ms);
 #ifdef DEBUG_PRINT
-    Position[PosIdx].PrintLine(Line);
+    GPS_Pos[GPS_PosIdx].PrintLine(Line);
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
     Format_String(CONS_UART_Write, "MAV_SCALED_PRESSURE: ");
     Format_UnsDec(CONS_UART_Write, UnixTime_ms, 13, 3);
-    Format_String(CONS_UART_Write, "\nGPS"); CONS_UART_Write('0'+PosIdx); CONS_UART_Write(':'); CONS_UART_Write(' ');
+    Format_String(CONS_UART_Write, "\nGPS"); CONS_UART_Write('0'+GPS_PosIdx); CONS_UART_Write(':'); CONS_UART_Write(' ');
     Format_String(CONS_UART_Write, Line);
     xSemaphoreGive(CONS_Mutex);
 #endif
@@ -868,6 +874,7 @@ static void GPS_MAV(void)                                                  // wh
 #endif
 void vTaskGPS(void* pvParameters)
 {
+  GPS_Event = xEventGroupCreate();
   GPS_Status.Flags = 0;
 
   // PPS_TickCount=0;
@@ -892,8 +899,8 @@ void vTaskGPS(void* pvParameters)
   MAV.Clear();
 #endif
   for(uint8_t Idx=0; Idx<4; Idx++)
-    Position[Idx].Clear();
-  PosIdx=0;
+    GPS_Pos[Idx].Clear();
+  GPS_PosIdx=0;
 
   TickType_t RefTick = xTaskGetTickCount();
   for( ; ; )                                                              // main task loop: every milisecond (RTOS time tick)

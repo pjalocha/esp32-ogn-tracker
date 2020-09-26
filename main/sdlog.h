@@ -14,4 +14,10 @@ extern SemaphoreHandle_t Log_Mutex;
 #endif
  void vTaskSDLOG(void* pvParameters);
 
+/*
+#ifdef __cplusplus
+  extern "C"
+#endif
+ void vTaskIGC(void* pvParameters);
+*/
 #endif // __SDLOG_H__

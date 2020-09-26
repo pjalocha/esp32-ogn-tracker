@@ -2,10 +2,11 @@
 #include "hal.h"
 
 #include "timesync.h"
-
 #include "ogn.h"
-
 #include "lowpass2.h"
+#include "flight.h"
+
+// extern uint8_t GPS_PowerMode;               // 0=shutdown, 1=reduced, 2=normal
 
 #ifdef WITH_ESP32
 const  uint8_t GPS_PosPipeSize         =  8; // number of GPS positions held in a pipe
@@ -13,7 +14,8 @@ const  uint8_t GPS_PosPipeSize         =  8; // number of GPS positions held in 
 const  uint8_t GPS_PosPipeSize         =  4; // number of GPS positions held in a pipe
 #endif
 
-// extern uint8_t GPS_PowerMode;               // 0=shutdown, 1=reduced, 2=normal
+extern uint8_t      GPS_PosIdx;                   // Pipe index, increments with every GPS position received
+extern GPS_Position GPS_Pos[GPS_PosPipeSize];    // GPS position pipe
 
 extern          uint32_t GPS_FatTime;       // [2 sec] UTC time in FAT format (for FatFS)
 extern           int32_t GPS_Altitude;      // [0.1m] altitude (height above Geoid)
@@ -55,6 +57,12 @@ extern uint16_t MAVLINK_BattVolt;   // [mV]
 extern uint16_t MAVLINK_BattCurr;   // [10mA]
 extern uint8_t  MAVLINK_BattCap;    // [%]
 #endif
+
+extern EventGroupHandle_t GPS_Event;
+const EventBits_t GPSevt_PPS    = 0x01;
+const EventBits_t GPSevt_NewPos = 0x02;
+
+extern FlightMonitor Flight;
 
 #ifdef __cplusplus
   extern "C"

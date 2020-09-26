@@ -76,15 +76,18 @@ void app_main(void)
     }
 #endif
 
-    xTaskCreate(vTaskRF,    "RF",    2048, 0, tskIDLE_PRIORITY+4, 0);
-#ifdef WITH_LOG
-    xTaskCreate(vTaskLOG ,  "LOG",   4096, 0, tskIDLE_PRIORITY+1, 0);
-#endif
 #ifdef WITH_SDLOG
     Log_Mutex = xSemaphoreCreateMutex();
     xTaskCreate(vTaskSDLOG, "SDLOG", 4096, 0, tskIDLE_PRIORITY+1, 0);
 #endif
+
+#ifdef WITH_LOG
+    xTaskCreate(vTaskLOG ,  "LOG",   4096, 0, tskIDLE_PRIORITY+1, 0);
+#endif
+
+    xTaskCreate(vTaskRF,    "RF",    2048, 0, tskIDLE_PRIORITY+4, 0);
     xTaskCreate(vTaskPROC,  "PROC",  2048, 0, tskIDLE_PRIORITY+3, 0);
+
     xTaskCreate(vTaskGPS,   "GPS",   2048, 0, tskIDLE_PRIORITY+4, 0);
 #if defined(WITH_BMP180) || defined(WITH_BMP280) || defined(WITH_BME280) || defined(WITH_MS5607) || defined(WITH_MS5611)
     xTaskCreate(vTaskSENS,  "SENS",  2048, 0, tskIDLE_PRIORITY+4, 0);
@@ -92,6 +95,7 @@ void app_main(void)
 #ifdef WITH_BMX055
     xTaskCreate(vTaskIMU,   "IMU",   2048, 0, tskIDLE_PRIORITY+4, 0);
 #endif
+
 #ifdef WITH_KNOB
     xTaskCreate(vTaskKNOB,  "KNOB",  2048, 0, tskIDLE_PRIORITY+3, 0);
 #endif

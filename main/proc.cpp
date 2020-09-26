@@ -77,7 +77,7 @@ static char           Line[128];      // for printing out to the console, etc.
 
 static LDPC_Decoder     Decoder;      // decoder and error corrector for the OGN Gallager/LDPC code
 
-FlightMonitor Flight;
+// FlightMonitor Flight;
 
 // #define DEBUG_PRINT
 
@@ -531,7 +531,7 @@ void vTaskPROC(void* pvParameters)
 #endif
     if(Position)
     { Position->EncodeStatus(StatPacket.Packet);             // encode GPS altitude and pressure/temperature/humidity
-      Flight.Process(*Position); }                           // flight monitor: takeoff/landing
+      /* Flight.Process(*Position); */ }                     // flight monitor: takeoff/landing
     else
     { StatPacket.Packet.Status.FixQuality=0; StatPacket.Packet.Status.Satellites=0; } // or lack of the GPS lock
 
