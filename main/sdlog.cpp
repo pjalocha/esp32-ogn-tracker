@@ -93,7 +93,15 @@ static void IGC_Close(void)
     Format_String(CONS_UART_Write, IGC_FileName);
     Format_String(CONS_UART_Write, "\n");
     xSemaphoreGive(CONS_Mutex);
-    fclose(IGC_File); IGC_File=0; IGC_FlightNum++; }
+    fclose(IGC_File); IGC_File=0; IGC_FlightNum++;
+    uint32_t Time = TimeSync_Time();
+    struct stat FileStat;
+    struct utimbuf FileTime;
+    if(stat(IGC_FileName, &FileStat)>=0)                            // get file attributes (maybe not needed really ?
+    { FileTime.actime  = Time;                                      // set access and modification tim$
+      FileTime.modtime = Time;
+      utime(IGC_FileName, &FileTime); }                             // write to the FAT
+  }
 }
 
 static int IGC_Open(void)
