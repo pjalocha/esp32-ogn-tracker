@@ -29,7 +29,8 @@ static const char *FlashLog_Ext  = ".TLG";        // extension for log files, co
 static const uint32_t FlashLog_MaxTime = 3600;    // 1 hour max. per single log file
 static const uint32_t FlashLog_MaxSize = 0x10000; // 64KB max. per single log file
 #ifdef WITH_SPIFFS_FAT
-static const uint32_t FlashLog_FlushSize = 4096;  // 4kB file flush step
+static const uint32_t FlashLog_SavePeriod = 30;   // [sec] reopen the file every 30sec
+static const uint32_t FlashLog_SaveSize = 4096;  // [bytes] reopen the file every 4KB
 #endif
 
 bool FlashLog_SaveReq=0;                          // request to save the log right away, like after landing or before shutdown
@@ -291,7 +292,7 @@ static int FlashLog_Open(uint32_t Time)                            // open a new
   if(FlashLog_File==0) FlashLog_Clean(0, 4);                       // if the file cannot be open clean again
   return FlashLog_File!=0; }                                        // 1=success, 0=failure: new log file could not be open
 
-static void FlashLog_Save(void)
+static void FlashLog_Reopen(void)
 { if(FlashLog_File)
   { fclose(FlashLog_File);
     FlashLog_File = fopen(FlashLog_FileName, "ab");
@@ -317,7 +318,7 @@ static int FlashLog_Record(OGN_LogPacket<OGN_Packet> *Packet, int Packets, uint3
   { fclose(FlashLog_File); FlashLog_File=0; FlashLog_Clean(0, 4); return -1; } // if failure then close the log file and report error
 #ifdef WITH_SPIFFS_FAT
   uint32_t WritePos = ftell(FlashLog_File);
-  if(WritePos-FlashLog_FileFlush>FlashLog_FlushSize) FlashLog_Save();
+  if(WritePos-FlashLog_FileFlush>FlashLog_SaveSize) FlashLog_Reopen();
 #endif
   return Packets; }                                                          // report success
 #endif // WITH_SPIFFS
@@ -383,7 +384,7 @@ void vTaskLOG(void* pvParameters)
   TickType_t PrevTick = 0;
   for( ; ; )
   { // vTaskDelay(200);                                           // wait idle 0.2sec
-    if(FlashLog_SaveReq) FlashLog_Save();                         // if requested then save the current log (close + reopen)
+    if(FlashLog_SaveReq) FlashLog_Reopen();                       // if requested then save the current log (close + reopen)
     TickType_t Tick=xTaskGetTickCount();                          // system tick count now
     size_t Packets = FlashLog_FIFO.Full();                        // how many packets in the queue ?
 // #ifdef DEBUG_PRINT

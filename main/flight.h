@@ -29,7 +29,7 @@ class FlightMonitor
      // TakeoffCount=0;
    }
 
-   static char NameCode(int Num)       // coding of numbers in IGC file names
+   static char Code36(int Num)       // coding of numbers in IGC file names
    { if(Num<=0) return '0';
      if(Num<10) return '0'+Num;
      if(Num<36) return 'A'+(Num-10);
@@ -41,11 +41,11 @@ class FlightMonitor
    static int ShortName(char *Name, const GPS_Position &Takeoff, uint8_t TakeoffNum, const char *Serial)
    { int Len=0;
      Name[Len++]='0'+Takeoff.Year%10;                  // Year (last digit)
-     Name[Len++]=NameCode(Takeoff.Month);              // encoded month
-     Name[Len++]=NameCode(Takeoff.Day);                // encoded day
+     Name[Len++]=Code36(Takeoff.Month);                // encoded month
+     Name[Len++]=Code36(Takeoff.Day);                  // encoded day
      Name[Len++]='O';                                  // OGN
-     Len+=Format_String(Name+Len, Serial);             // three-digit serial
-     Name[Len++]=NameCode(TakeoffNum);                 // flight of the day
+     Len+=Format_String(Name+Len, Serial);             // three-letter serial
+     Name[Len++]=Code36(TakeoffNum);                   // flight of the day
      Len+=Format_String(Name+Len, ".IGC");             // extension
      Name[Len]=0;
      // printf("ShortName[%d]: %s\n", Len, Name);

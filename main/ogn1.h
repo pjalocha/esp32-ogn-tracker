@@ -139,10 +139,10 @@ class OGN1_Packet          // Packet structure for the OGN tracker
 
    // void recvBytes(const uint8_t *SrcPacket) { memcpy(Byte(), SrcPacket, Bytes); } // load data bytes e.g. from a demodulator
 
-   static const uint8_t InfoParmNum = 14; // [int]  number of info-parameters and their names
+   static const uint8_t InfoParmNum = 15; // [int]  number of info-parameters and their names
    static const char *InfoParmName(uint8_t Idx) { static const char *Name[InfoParmNum] =
                                                   { "Pilot", "Manuf", "Model", "Type", "SN", "Reg", "ID", "Class",
-                                                    "Task" , "Base" , "ICE"  , "PilotID", "Hard", "Soft" } ;
+                                                    "Task" , "Base" , "ICE"  , "PilotID", "Hard", "Soft", "Crew" } ;
                                                   return Idx<InfoParmNum ? Name[Idx]:0; }
 
 #ifndef __AVR__

@@ -18,7 +18,7 @@ static FILE *LogFile = 0;
 
 static   uint16_t  LogDate = 0;                                   // [~days] date = FatTime>>16
 static TickType_t  LogOpenTime;                                   // [msec] when was the log file (re)open
-static const  TickType_t  LogReopen = 30000;                      // [msec] when to close and re-open the log file
+static const  TickType_t  LogReopen = 20000;                      // [msec] when to close and re-open the log file
 
 const size_t FIFOsize = 16384;
 static FIFO<char, FIFOsize> Log_FIFO;                             // 16K buffer for SD-log
@@ -80,11 +80,22 @@ static int WriteLog(size_t MaxBlock=FIFOsize/2)                    // process th
 
 const char   *IGC_Path = "/sdcard/IGC";
 const int     IGC_PathLen = 11;
+const uint32_t IGC_SavePeriod = 20;
 // constexpr int IGC_PathLen = strlen(IGC_Path);
-const char   *IGC_Serial = "XXX";
+      char    IGC_Serial[4] = { 0, 0, 0, 0 };
       char    IGC_FileName[32];
 static FILE  *IGC_File=0;
-      uint8_t IGC_FlightNum=0;
+static uint32_t IGC_SaveTime=0;
+       uint16_t IGC_FlightNum=0;
+
+static void IGC_TimeStamp(void)
+{ struct stat FileStat;
+  struct utimbuf FileTime;
+  if(stat(IGC_FileName, &FileStat)>=0)                            // get file attributes (maybe not needed really ?
+  { FileTime.actime  = IGC_SaveTime;                              // set access and modification tim$
+    FileTime.modtime = IGC_SaveTime;
+    utime(IGC_FileName, &FileTime); }                             // write to the FAT
+}
 
 static void IGC_Close(void)
 { if(IGC_File)                                                      // if a file open, then close it and increment the flight number
@@ -93,16 +104,19 @@ static void IGC_Close(void)
     Format_String(CONS_UART_Write, IGC_FileName);
     Format_String(CONS_UART_Write, "\n");
     xSemaphoreGive(CONS_Mutex);
-    fclose(IGC_File); IGC_File=0; IGC_FlightNum++;
-    uint32_t Time = TimeSync_Time();
+    fclose(IGC_File); IGC_File=0; IGC_FlightNum++; }
+}
+/*
+    IGC_SaveTime = TimeSync_Time();
     struct stat FileStat;
     struct utimbuf FileTime;
     if(stat(IGC_FileName, &FileStat)>=0)                            // get file attributes (maybe not needed really ?
-    { FileTime.actime  = Time;                                      // set access and modification tim$
-      FileTime.modtime = Time;
+    { FileTime.actime  = IGC_SaveTime;                                      // set access and modification tim$
+      FileTime.modtime = IGC_SaveTime;
       utime(IGC_FileName, &FileTime); }                             // write to the FAT
   }
 }
+*/
 
 static int IGC_Open(void)
 { IGC_Close();                                                      // close the previous file, if open
@@ -117,17 +131,58 @@ static int IGC_Open(void)
   { if(mkdir(IGC_Path, 0777)<0) return -3;                          // -3 => can't create sub-dir
     IGC_File=fopen(IGC_FileName, "wt"); }                           // retry to open for write
   if(IGC_File)
-  { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  { IGC_SaveTime = TimeSync_Time();
+    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
     Format_String(CONS_UART_Write, "IGC_Open: ");
     Format_String(CONS_UART_Write, IGC_FileName);
     Format_String(CONS_UART_Write, "\n");
     xSemaphoreGive(CONS_Mutex); }
   return IGC_File ? 0:-4; }                                         // -4 => can't open for write
 
+static void IGC_Reopen(void)
+{ if(IGC_File)
+  { fclose(IGC_File);
+    IGC_SaveTime = TimeSync_Time();
+    IGC_TimeStamp();
+    IGC_File=fopen(IGC_FileName, "at"); }
+}
+
 static char Line[192];
 
-static int IGC_Header(void)                                         // write the top of the IGC file
-{
+static int IGC_HeadParm(const char *Name, const char *Parm)
+{ int Len=Format_String(Line, Name);
+  Len+=Format_String(Line+Len, Parm);
+  Line[Len++]='\n'; Line[Len]=0;
+  fputs(Line, IGC_File);
+  return 0; }
+
+static int IGC_Header(const GPS_Position &Pos)                      // write the top of the IGC file
+{ fputs("AGNE001Tracker\n", IGC_File);
+  { int Len=Format_String(Line, "HFDTEDate:");                      // date
+    Len+=Format_UnsDec(Line+Len, (uint16_t)Pos.Day  , 2);
+    Len+=Format_UnsDec(Line+Len, (uint16_t)Pos.Month, 2);
+    Len+=Format_UnsDec(Line+Len, (uint16_t)Pos.Year , 2);
+    Line[Len++]=',';
+    Len+=Format_UnsDec(Line+Len, (uint16_t)IGC_FlightNum, 2);
+    Line[Len++]='\n'; Line[Len]=0;
+    fputs(Line, IGC_File); }
+  IGC_HeadParm("HFPLTPilotincharge:", Parameters.Pilot);
+  IGC_HeadParm("HFGTYGliderType:",    Parameters.Type);
+  IGC_HeadParm("HFGIDGliderID:",      Parameters.Reg);
+  IGC_HeadParm("HFCM2Crew2:",         Parameters.Crew);
+  IGC_HeadParm("HFCCLCompetitionClass:", Parameters.Class);
+  IGC_HeadParm("HFCIDCompetitionID:", Parameters.ID);
+  { int Len=Format_String(Line, "HFGIDGliderid:");                  // unique ID
+    uint64_t ID = getUniqueID();                                    // 48-bit ID
+    Len+=Format_Hex(Line+Len, (uint16_t)(ID>>32));
+    Len+=Format_Hex(Line+Len, (uint32_t)ID);
+    Line[Len++]=',';
+    Len+=Format_Hex(Line+Len, Parameters.AcftID);                   // stealth, no-track, aircraft-type, address-type, address
+    Line[Len++]='\n'; Line[Len]=0;
+    fputs(Line, IGC_File); }
+  fputs("HFRFWFirmwareVersion:" __DATE__ " " __TIME__ "\n", IGC_File);
+  fputs("HFGPSReceiver:L80\n", IGC_File);                           // GPS sensor
+  fputs("HFPRSPressAltSensor:BMP280\n", IGC_File);                  // pressure sensor
   return 0; }
 
 static int IGC_Log(const GPS_Position &Pos)                         // log GPS position as B-record
@@ -161,13 +216,18 @@ static void IGC_Check(void)                                          // check if
   if(IGC_File)                                                       // if IGC file already open
   { IGC_Log(GPS_Pos[PosIdx]);                                        // log position
     if(!inFlight)                                                    // if no longer in flight
-    { IGC_Close(); }                                                 // then close the IGC file
+    { IGC_Close(); IGC_TimeStamp(); }                                                 // then close the IGC file
+    else
+    { uint32_t Time=TimeSync_Time();
+      if(Time-IGC_SaveTime>=IGC_SavePeriod)
+      { IGC_Reopen(); }
+    }
   }
   else                                                               // if IGC file is not open
   { if(inFlight)                                                     // and in-flight
     { for(int Try=0; Try<8; Try++)
       { int Err=IGC_Open(); if(Err!=(-2)) break; }                   // try to open a new IGC file but don't overwrite the old ones
-      if(IGC_File) { IGC_Header(); IGC_Log(GPS_Pos[PosIdx]); }       // if open succesfully then write header and first B-record
+      if(IGC_File) { IGC_Header(GPS_Pos[PosIdx]); IGC_Log(GPS_Pos[PosIdx]); }       // if open succesfully then write header and first B-record
     }
   }
 }
@@ -178,7 +238,12 @@ static void IGC_Check(void)                                          // check if
 
 extern "C"
  void vTaskSDLOG(void* pvParameters)
-{ Log_FIFO.Clear();
+{ uint32_t ID = getUniqueAddress();
+  IGC_Serial[2] = Flight.Code36(ID%36); ID/=36;
+  IGC_Serial[1] = Flight.Code36(ID%36); ID/=36;
+  IGC_Serial[0] = Flight.Code36(ID%36);
+
+  Log_FIFO.Clear();
 
   for( ; ; )
   { if(!SD_isMounted())                                              // if SD ia not mounted:

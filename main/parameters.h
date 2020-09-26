@@ -75,7 +75,7 @@ class FlashParameters
   uint8_t  FreqPlan;         // force given frequency hopping plan
 
    static const uint8_t InfoParmLen = 16; // [char] max. size of an infp-parameter
-   static const uint8_t InfoParmNum = 14; // [int]  number of info-parameters
+   static const uint8_t InfoParmNum = 15; // [int]  number of info-parameters
          char *InfoParmValue(uint8_t Idx)      { return Idx<InfoParmNum ? Pilot + Idx*InfoParmLen:0; }
       uint8_t  InfoParmValueLen(uint8_t Idx)   { return strlen(InfoParmValue(Idx)); }
 //    const char *InfoParmName(uint8_t Idx) const { static const char *Name[InfoParmNum] =
@@ -96,6 +96,7 @@ class FlashParameters
      char PilotID[InfoParmLen];                // Pilot ID based on his BT or WiFi MAC
      char    Hard[InfoParmLen];                // Hardware
      char    Soft[InfoParmLen];                // Software
+     char    Crew[InfoParmLen];                // Crew/2nd pilot name
 
    // char Copilot[16]
    // char Category[16]
