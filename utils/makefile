@@ -4,6 +4,9 @@ read_log:	read_log.cc
 aprs2igc:	aprs2igc.cc
 	g++ -Wall -Wno-misleading-indentation -O2 -o aprs2igc aprs2igc.cc format.cpp
 
+serial_dump:	serial_dump.cc
+	g++ -Wall -Wno-misleading-indentation -O2 -o serial_dump serial_dump.cc format.cpp
+
 clean:
-	rm read_log aprs2igc
+	rm read_log aprs2igc serial_dump
 
