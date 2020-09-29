@@ -24,6 +24,11 @@ sudo apt-get install libffi-dev
 pip install --upgrade virtualenv==16.7.9
 ```
 
+If you see errors about openssl/opensslv.h then you need:
+```
+sudo apt-get install libssl-dev
+```
+
 Then, in order to be able to *make* projects you need to run
 ```
 source ~/esp-idf/export.sh
