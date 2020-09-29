@@ -159,30 +159,42 @@ static int IGC_HeadParm(const char *Name, const char *Parm)
 static int IGC_Header(const GPS_Position &Pos)                      // write the top of the IGC file
 { fputs("AGNE001Tracker\n", IGC_File);
   { int Len=Format_String(Line, "HFDTEDate:");                      // date
-    Len+=Format_UnsDec(Line+Len, (uint16_t)Pos.Day  , 2);
+    Len+=Format_UnsDec(Line+Len, (uint16_t)Pos.Day  , 2);           // from the GPS position
     Len+=Format_UnsDec(Line+Len, (uint16_t)Pos.Month, 2);
     Len+=Format_UnsDec(Line+Len, (uint16_t)Pos.Year , 2);
     Line[Len++]=',';
-    Len+=Format_UnsDec(Line+Len, (uint16_t)IGC_FlightNum, 2);
+    Len+=Format_UnsDec(Line+Len, (uint16_t)IGC_FlightNum, 2);       // flight number of the day
     Line[Len++]='\n'; Line[Len]=0;
     fputs(Line, IGC_File); }
-  IGC_HeadParm("HFPLTPilotincharge:", Parameters.Pilot);
-  IGC_HeadParm("HFGTYGliderType:",    Parameters.Type);
-  IGC_HeadParm("HFGIDGliderID:",      Parameters.Reg);
-  IGC_HeadParm("HFCM2Crew2:",         Parameters.Crew);
-  IGC_HeadParm("HFCCLCompetitionClass:", Parameters.Class);
-  IGC_HeadParm("HFCIDCompetitionID:", Parameters.ID);
-  { int Len=Format_String(Line, "HFGIDGliderid:");                  // unique ID
-    uint64_t ID = getUniqueID();                                    // 48-bit ID
-    Len+=Format_Hex(Line+Len, (uint16_t)(ID>>32));
-    Len+=Format_Hex(Line+Len, (uint32_t)ID);
-    Line[Len++]=',';
-    Len+=Format_Hex(Line+Len, Parameters.AcftID);                   // stealth, no-track, aircraft-type, address-type, address
+  IGC_HeadParm("HFPLTPilotincharge:", Parameters.Pilot);            // Pilot
+  IGC_HeadParm("HFGTYGliderType:",    Parameters.Type);             // aircraft type like ASK-21
+  IGC_HeadParm("HFGIDGliderID:",      Parameters.Reg);              // aircraft registration like D-8329
+  IGC_HeadParm("HFCM2Crew2:",         Parameters.Crew);             // Crew member
+  IGC_HeadParm("HFCCLCompetitionClass:", Parameters.Class);         // competition class
+  IGC_HeadParm("HFCIDCompetitionID:", Parameters.ID);               // competition ID
+  { uint64_t ID = getUniqueID();                                    // 48-bit ID of the ESP32
+#ifdef WITH_FollowMe
+    int Len=Format_String(Line, "HFRHWHardwareVersion:FollowMe ");
+#else
+    int Len=Format_String(Line, "HFRHWHardwareVersion:ESP32-SX1276 "); // hardware version
+#endif
+    Len+=Format_Hex(Line+Len, (uint16_t)(ID>>32));                  // ESP32 48-bit ID
+    Len+=Format_Hex(Line+Len, (uint32_t) ID     );
     Line[Len++]='\n'; Line[Len]=0;
     fputs(Line, IGC_File); }
-  fputs("HFRFWFirmwareVersion:" __DATE__ " " __TIME__ "\n", IGC_File);
+  fputs("HFRFWFirmwareVersion:ESP32-OGN-TRACKER " __DATE__ " " __TIME__ "\n", IGC_File); // firmware version, compile date/time
   fputs("HFGPSReceiver:L80\n", IGC_File);                           // GPS sensor
   fputs("HFPRSPressAltSensor:BMP280\n", IGC_File);                  // pressure sensor
+  return 0; }
+
+int IGC_Ident(void)
+{ uint32_t Time = TimeSync_Time();
+  { int Len=Format_String(Line, "LOGN");
+    Len+=Format_HHMMSS(Line+Len, Time);
+    Len+=Format_String(Line+Len, "ID ");
+    Len+=Format_Hex(Line+Len, Parameters.AcftID);
+    Line[Len++]='\n'; Line[Len]=0;
+    fputs(Line, IGC_File); }
   return 0; }
 
 static int IGC_Log(const GPS_Position &Pos)                         // log GPS position as B-record
@@ -227,7 +239,10 @@ static void IGC_Check(void)                                          // check if
   { if(inFlight)                                                     // and in-flight
     { for(int Try=0; Try<8; Try++)
       { int Err=IGC_Open(); if(Err!=(-2)) break; }                   // try to open a new IGC file but don't overwrite the old ones
-      if(IGC_File) { IGC_Header(GPS_Pos[PosIdx]); IGC_Log(GPS_Pos[PosIdx]); }       // if open succesfully then write header and first B-record
+      if(IGC_File)                                                   // if open succesfully
+      { IGC_Header(GPS_Pos[PosIdx]);                                 // then write header
+        IGC_Ident();
+        IGC_Log(GPS_Pos[PosIdx]); }                                  // log first B-record
     }
   }
 }
