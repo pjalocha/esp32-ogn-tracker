@@ -503,6 +503,17 @@ FIFO<uint8_t, 8> KeyBuffer;
 // 48-bit unique ID of the chip
 
 uint64_t getUniqueID(void)
+{ uint8_t MAC[6]; esp_efuse_mac_get_default(MAC);
+  uint64_t ID=MAC[0];
+  for(int Idx=1; Idx<6; Idx++)
+  { ID<<=8; ID|=MAC[Idx]; }
+  return ID; }
+
+uint32_t getUniqueAddress(void)
+{ return getUniqueID()&0x00FFFFFF; }
+
+/*
+uint64_t getUniqueID(void)
 { uint64_t ID=0; esp_err_t ret=esp_efuse_mac_get_default((uint8_t *)&ID); return ID; }
 
 uint32_t getUniqueAddress(void)
@@ -511,7 +522,7 @@ uint32_t getUniqueAddress(void)
   ID = (ID>>16) | (ID&0x00FF00) | (ID<<16);
   ID &= 0x00FFFFFF;
   return ID; }
-
+*/
 // ======================================================================================================
 
 #ifdef WITH_MAVLINK
