@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include "mbedtls/md5.h"
+#include "mbedtls/rsa.h"
 
 #include "hal.h"
 #include "gps.h"
@@ -162,15 +163,18 @@ static int IGC_LogLine(const char *Line)
 
 static char Line[192];
 
-static int IGC_HeadParm(const char *Name, const char *Parm)
+static int IGC_HeadParm(const char *Name, const char *Parm1, const char *Parm2=0, const char *Parm3=0)
 { int Len=Format_String(Line, Name);
-  Len+=Format_String(Line+Len, Parm);
+  Len+=Format_String(Line+Len, Parm1);
+  if(Parm2 && Parm2[0]) { Line[Len++]=','; Len+=Format_String(Line+Len, Parm2); }
+  if(Parm3 && Parm3[0]) { Line[Len++]=','; Len+=Format_String(Line+Len, Parm3); }
   Line[Len++]='\n'; Line[Len]=0;
   IGC_LogLine(Line, Len);
   return 0; }
 
 static int IGC_Header(const GPS_Position &Pos)                      // write the top of the IGC file
 { IGC_LogLine("AGNE001Tracker\n");
+  IGC_LogLine("HFFXA020\n");
   { int Len=Format_String(Line, "HFDTEDate:");                      // date
     Len+=Format_UnsDec(Line+Len, (uint16_t)Pos.Day  , 2);           // from the GPS position
     Len+=Format_UnsDec(Line+Len, (uint16_t)Pos.Month, 2);
@@ -180,19 +184,17 @@ static int IGC_Header(const GPS_Position &Pos)                      // write the
     Line[Len++]='\n'; Line[Len]=0;
     IGC_LogLine(Line, Len); }
   IGC_HeadParm("HFPLTPilotincharge:", Parameters.Pilot);            // Pilot
-  IGC_HeadParm("HFGTYGliderType:",    Parameters.Type);             // aircraft type like ASK-21
+  IGC_HeadParm("HFGTYGliderType:",    Parameters.Type, Parameters.Manuf, Parameters.Model);             // aircraft type like ASK-21
   IGC_HeadParm("HFGIDGliderID:",      Parameters.Reg);              // aircraft registration like D-8329
   IGC_HeadParm("HFCM2Crew2:",         Parameters.Crew);             // Crew member
   IGC_HeadParm("HFCCLCompetitionClass:", Parameters.Class);         // competition class
   IGC_HeadParm("HFCIDCompetitionID:", Parameters.ID);               // competition ID
-  { uint64_t ID = getUniqueID();                                    // 48-bit ID of the ESP32
+  {
 #ifdef WITH_FollowMe
-    int Len=Format_String(Line, "HFRHWHardwareVersion:FollowMe ");
+    int Len=Format_String(Line, "HFRHWHardwareVersion:FollowMe");
 #else
-    int Len=Format_String(Line, "HFRHWHardwareVersion:ESP32-SX1276 "); // hardware version
+    int Len=Format_String(Line, "HFRHWHardwareVersion:ESP32-SX1276"); // hardware version
 #endif
-    Len+=Format_Hex(Line+Len, (uint16_t)(ID>>32));                  // ESP32 48-bit ID
-    Len+=Format_Hex(Line+Len, (uint32_t) ID     );
     Line[Len++]='\n'; Line[Len]=0;
     IGC_LogLine(Line, Len); }
   IGC_LogLine("HFRFWFirmwareVersion:ESP32-OGN-TRACKER " __DATE__ " " __TIME__ "\n"); // firmware version, compile date/time
@@ -200,14 +202,21 @@ static int IGC_Header(const GPS_Position &Pos)                      // write the
   IGC_LogLine("HFPRSPressAltSensor:BMP280\n");                     // pressure sensor
   return 0; }
 
-int IGC_Ident(void)
+int IGC_ID(void)
 { uint32_t Time = TimeSync_Time();
-  { int Len=Format_String(Line, "LOGN");
-    Len+=Format_HHMMSS(Line+Len, Time);
-    Len+=Format_String(Line+Len, "ID ");
-    Len+=Format_Hex(Line+Len, Parameters.AcftID);
-    Line[Len++]='\n'; Line[Len]=0;
-    IGC_LogLine(Line, Len); }
+  int Len=Format_String(Line, "LOGN");
+  Len+=Format_HHMMSS(Line+Len, Time);
+  Len+=Format_String(Line+Len, "ID ");
+  Len+=Format_Hex(Line+Len, Parameters.AcftID);
+  Line[Len++]='\n'; Line[Len]=0;
+  IGC_LogLine(Line, Len);
+  uint64_t MAC = getUniqueID();
+  Len=4+6;
+  Len+=Format_String(Line+Len, "MAC ");
+  Len+=Format_Hex(Line+Len, (uint16_t)(MAC>>32));                  // ESP32 48-bit ID
+  Len+=Format_Hex(Line+Len, (uint32_t) MAC     );
+  Line[Len++]='\n'; Line[Len]=0;
+  IGC_LogLine(Line, Len);
   return 0; }
 
 static int IGC_Log(const GPS_Position &Pos)                         // log GPS position as B-record
@@ -261,7 +270,7 @@ static void IGC_Check(void)                                          // check if
       if(IGC_File)                                                   // if open succesfully
       { mbedtls_md5_starts_ret(&IGC_MD5);                            // start the MD5 calculation
         IGC_Header(GPS_Pos[PosIdx]);                                 // then write header
-        IGC_Ident();
+        IGC_ID();
         IGC_Log(GPS_Pos[PosIdx]); }                                  // log first B-record
     }
   }
