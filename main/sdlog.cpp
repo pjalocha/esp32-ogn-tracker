@@ -5,6 +5,8 @@
 #include <utime.h>
 #include <unistd.h>
 
+#include "mbedtls/md5.h"
+
 #include "hal.h"
 #include "gps.h"
 #include "sdlog.h"
@@ -84,9 +86,12 @@ const uint32_t IGC_SavePeriod = 20;
 // constexpr int IGC_PathLen = strlen(IGC_Path);
       char    IGC_Serial[4] = { 0, 0, 0, 0 };
       char    IGC_FileName[32];
-static FILE  *IGC_File=0;
+static FILE  *IGC_File=0;                                         //
 static uint32_t IGC_SaveTime=0;
-       uint16_t IGC_FlightNum=0;
+       uint16_t IGC_FlightNum=0;                                  // flight counter
+
+static mbedtls_md5_context IGC_MD5;                               //
+static uint8_t IGC_Digest[16];                                    //
 
 static void IGC_TimeStamp(void)
 { struct stat FileStat;
@@ -147,17 +152,25 @@ static void IGC_Reopen(void)
     IGC_File=fopen(IGC_FileName, "at"); }
 }
 
+static int IGC_LogLine(const char *Line, int Len)
+{ int Written = fwrite(Line, 1, Len, IGC_File);
+  mbedtls_md5_update_ret(&IGC_MD5, (uint8_t *)Line, Written);
+  return Written; }
+
+static int IGC_LogLine(const char *Line)
+{ return IGC_LogLine(Line, strlen(Line)); }
+
 static char Line[192];
 
 static int IGC_HeadParm(const char *Name, const char *Parm)
 { int Len=Format_String(Line, Name);
   Len+=Format_String(Line+Len, Parm);
   Line[Len++]='\n'; Line[Len]=0;
-  fputs(Line, IGC_File);
+  IGC_LogLine(Line, Len);
   return 0; }
 
 static int IGC_Header(const GPS_Position &Pos)                      // write the top of the IGC file
-{ fputs("AGNE001Tracker\n", IGC_File);
+{ IGC_LogLine("AGNE001Tracker\n");
   { int Len=Format_String(Line, "HFDTEDate:");                      // date
     Len+=Format_UnsDec(Line+Len, (uint16_t)Pos.Day  , 2);           // from the GPS position
     Len+=Format_UnsDec(Line+Len, (uint16_t)Pos.Month, 2);
@@ -165,7 +178,7 @@ static int IGC_Header(const GPS_Position &Pos)                      // write the
     Line[Len++]=',';
     Len+=Format_UnsDec(Line+Len, (uint16_t)IGC_FlightNum, 2);       // flight number of the day
     Line[Len++]='\n'; Line[Len]=0;
-    fputs(Line, IGC_File); }
+    IGC_LogLine(Line, Len); }
   IGC_HeadParm("HFPLTPilotincharge:", Parameters.Pilot);            // Pilot
   IGC_HeadParm("HFGTYGliderType:",    Parameters.Type);             // aircraft type like ASK-21
   IGC_HeadParm("HFGIDGliderID:",      Parameters.Reg);              // aircraft registration like D-8329
@@ -181,10 +194,10 @@ static int IGC_Header(const GPS_Position &Pos)                      // write the
     Len+=Format_Hex(Line+Len, (uint16_t)(ID>>32));                  // ESP32 48-bit ID
     Len+=Format_Hex(Line+Len, (uint32_t) ID     );
     Line[Len++]='\n'; Line[Len]=0;
-    fputs(Line, IGC_File); }
-  fputs("HFRFWFirmwareVersion:ESP32-OGN-TRACKER " __DATE__ " " __TIME__ "\n", IGC_File); // firmware version, compile date/time
-  fputs("HFGPSReceiver:L80\n", IGC_File);                           // GPS sensor
-  fputs("HFPRSPressAltSensor:BMP280\n", IGC_File);                  // pressure sensor
+    IGC_LogLine(Line, Len); }
+  IGC_LogLine("HFRFWFirmwareVersion:ESP32-OGN-TRACKER " __DATE__ " " __TIME__ "\n"); // firmware version, compile date/time
+  IGC_LogLine("HFGPSReceiver:L80\n");                              // GPS sensor
+  IGC_LogLine("HFPRSPressAltSensor:BMP280\n");                     // pressure sensor
   return 0; }
 
 int IGC_Ident(void)
@@ -194,7 +207,7 @@ int IGC_Ident(void)
     Len+=Format_String(Line+Len, "ID ");
     Len+=Format_Hex(Line+Len, Parameters.AcftID);
     Line[Len++]='\n'; Line[Len]=0;
-    fputs(Line, IGC_File); }
+    IGC_LogLine(Line, Len); }
   return 0; }
 
 static int IGC_Log(const GPS_Position &Pos)                         // log GPS position as B-record
@@ -204,7 +217,7 @@ static int IGC_Log(const GPS_Position &Pos)                         // log GPS p
   Format_String(CONS_UART_Write, Line);
   xSemaphoreGive(CONS_Mutex);
 #endif
-  int Written=fwrite(Line, 1, Len, IGC_File);
+  int Written=IGC_LogLine(Line, Len);
   if(Written!=Len) IGC_Close();
   return Written; }
 
@@ -228,7 +241,13 @@ static void IGC_Check(void)                                          // check if
   if(IGC_File)                                                       // if IGC file already open
   { IGC_Log(GPS_Pos[PosIdx]);                                        // log position
     if(!inFlight)                                                    // if no longer in flight
-    { IGC_Close(); IGC_TimeStamp(); }                                                 // then close the IGC file
+    { mbedtls_md5_finish_ret(&IGC_MD5, IGC_Digest);
+      Line[0]='G';                                                   // produce G-record with MD5
+      for(int Idx=0; Idx<16; Idx++)                                  // 16 MD5 bytes
+        Format_Hex(Line+1+2*Idx, IGC_Digest[Idx]);                   // printed as hex
+      Line[33]='\n'; Line[34]=0;                                     // end-of-line, end-of-string
+      IGC_LogLine(Line, 34);                                         // write to IGC
+      IGC_Close(); IGC_TimeStamp(); }                                // then close the IGC file
     else
     { uint32_t Time=TimeSync_Time();
       if(Time-IGC_SaveTime>=IGC_SavePeriod)
@@ -240,7 +259,8 @@ static void IGC_Check(void)                                          // check if
     { for(int Try=0; Try<8; Try++)
       { int Err=IGC_Open(); if(Err!=(-2)) break; }                   // try to open a new IGC file but don't overwrite the old ones
       if(IGC_File)                                                   // if open succesfully
-      { IGC_Header(GPS_Pos[PosIdx]);                                 // then write header
+      { mbedtls_md5_starts_ret(&IGC_MD5);                            // start the MD5 calculation
+        IGC_Header(GPS_Pos[PosIdx]);                                 // then write header
         IGC_Ident();
         IGC_Log(GPS_Pos[PosIdx]); }                                  // log first B-record
     }
@@ -257,6 +277,8 @@ extern "C"
   IGC_Serial[2] = Flight.Code36(ID%36); ID/=36;
   IGC_Serial[1] = Flight.Code36(ID%36); ID/=36;
   IGC_Serial[0] = Flight.Code36(ID%36);
+
+  mbedtls_md5_init(&IGC_MD5);
 
   Log_FIFO.Clear();
 
