@@ -81,6 +81,8 @@ static int WriteLog(size_t MaxBlock=FIFOsize/2)                    // process th
 
 // ============================================================================================
 
+#ifdef WITH_SDLOG
+
 const char   *IGC_Path = "/sdcard/IGC";
 const int     IGC_PathLen = 11;
 const uint32_t IGC_SavePeriod = 20;
@@ -275,6 +277,8 @@ static void IGC_Check(void)                                          // check if
     }
   }
 }
+
+#endif // WITH_SDLOG
 
 // ============================================================================================
 

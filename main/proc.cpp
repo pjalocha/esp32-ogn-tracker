@@ -408,7 +408,7 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
   }
 }
 
-static void DecodeRxPacket(RFM_RxPktData *RxPkt)
+static void DecodeRxPacket(RFM_FSK_RxPktData *RxPkt)
 {
   uint8_t RxPacketIdx  = RelayQueue.getNew();                   // get place for this new packet
   OGN_RxPacket<OGN_Packet> *RxPacket = RelayQueue[RxPacketIdx];
@@ -466,7 +466,7 @@ void vTaskPROC(void* pvParameters)
   for( ; ; )
   { vTaskDelay(1);
 
-    RFM_RxPktData *RxPkt = RF_RxFIFO.getRead();                         // check for new received packets
+    RFM_FSK_RxPktData *RxPkt = RF_RxFIFO.getRead();                     // check for new received packets
     if(RxPkt)                                                           // if there is a new received packet
     {
 #ifdef DEBUG_PRINT

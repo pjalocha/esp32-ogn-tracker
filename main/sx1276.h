@@ -136,9 +136,10 @@ Maintainer: Miguel Luis and Gregory Cristian
 #define REG_LORA_FREQ_ERR_MID                       0x29
 #define REG_LORA_FREQ_ERR_LSB                       0x2A
 #define REG_LORA_DETECT_OPTIMIZE                    0x31 //
-#define REG_LORA_INVERT_IQ                          0x33
+#define REG_LORA_INVERT_IQ                          0x33 //
 #define REG_LORA_DETECT_THRESHOLD                   0x37 // for SF6
 #define REG_LORA_SYNC                               0x39 // 0xF1 for FANET, default = 0x12 (for old FANET)
+#define REG_LORA_INVERT_IQ2                         0x3B //
 
 // LoRa flags
 #define LORA_FLAG_TIMEOUT     0x80  // timeout in single packet reception ?

@@ -27,7 +27,7 @@ static const uint8_t *OGN_SYNC = OGN2_SYNC;
 static uint32_t  RF_SlotTime;               // [sec] UTC time which belongs to the current time slot (0.3sec late by GPS UTC)
        FreqPlan  RF_FreqPlan;               // frequency hopping pattern calculator
 
-       FIFO<RFM_RxPktData, 16> RF_RxFIFO;   // buffer for received packets
+       FIFO<RFM_FSK_RxPktData, 16> RF_RxFIFO;         // buffer for received packets
        FIFO<OGN_TxPacket<OGN_Packet>, 4> RF_TxFIFO;   // buffer for transmitted packets
 
 #ifdef WITH_FANET
@@ -58,15 +58,15 @@ static void SetTxChannel(uint8_t TxChan=RX_Channel)         // default channel t
   TRX.WriteTxPower(Parameters.getTxPower(), Parameters.isTxTypeHW()); // set TX for transmission
 #endif
 #if defined(WITH_RFM95) || defined(WITH_SX1272)
-  TRX.WriteTxPower(Parameters.getTxPower());                          // set TX for transmission
+  TRX.WriteTxPower(Parameters.getTxPower());                    // set TX for transmission
 #endif
   TRX.setChannel(TxChan&0x7F);
-  TRX.WriteSYNC(8, 7, OGN_SYNC); }                              // Full SYNC for TX
+  TRX.FSK_WriteSYNC(8, 7, OGN_SYNC); }                          // Full SYNC for TX
 
 static void SetRxChannel(uint8_t RxChan=RX_Channel)
 { TRX.WriteTxPowerMin();                                        // setup for RX
   TRX.setChannel(RxChan&0x7F);
-  TRX.WriteSYNC(7, 7, OGN_SYNC); }                              // Shorter SYNC for RX
+  TRX.FSK_WriteSYNC(7, 7, OGN_SYNC); }                          // Shorter SYNC for RX
 
 static uint8_t ReceivePacket(void)                              // see if a packet has arrived
 { if(!TRX.DIO0_isOn()) return 0;                                // DIO0 line HIGH signals a new packet has arrived
@@ -76,7 +76,7 @@ static uint8_t ReceivePacket(void)                              // see if a pack
   uint8_t RxRSSI = TRX.ReadRSSI();                              // signal strength for the received packet
   RX_Random = (RX_Random<<1) | (RxRSSI&1);                      // use the lowest bit to add entropy
 
-  RFM_RxPktData *RxPkt = RF_RxFIFO.getWrite();
+  RFM_FSK_RxPktData *RxPkt = RF_RxFIFO.getWrite();
   RxPkt->Time    = RF_SlotTime;                                 // store reception time
   RxPkt->msTime = TimeSync_msTime(); if(RxPkt->msTime<200) RxPkt->msTime+=1000;
   RxPkt->Channel = RX_Channel;                                  // store reception channel
@@ -177,7 +177,7 @@ static uint8_t StartRFchip(void)
 // #ifdef WITH_RFM95
 //   TRX.WriteDefaultReg();
 // #endif
-  TRX.ConfigureOGN(0, OGN_SYNC);                                // setup RF chip parameters and set to channel #0
+  TRX.OGN_Configure(0, OGN_SYNC);                                // setup RF chip parameters and set to channel #0
   TRX.WriteMode(RF_OPMODE_STANDBY);                          // set RF chip mode to STANDBY
   uint8_t Version = TRX.ReadVersion();
 #ifdef DEBUG_PRINT
@@ -342,8 +342,9 @@ extern "C"
 #if defined(WITH_FANET) && defined(WITH_RFM95)
     const FANET_Packet *FNTpkt = FNT_TxFIFO.getRead(0);                        // read the packet from the FANET transmitt queue
     if(FNTpkt)                                                                 // was there any ?
-    { TRX.SetLoRa();                                                           // switch TRX to LoRa
-      TRX.ConfigureFNT();                                                      // configure for FANET
+    { TRX.setLoRa();                                                           // switch TRX to LoRa
+      TRX.FNT_Configure();
+      // TRX.setChannel(0);                                                      // configure for FANET
       TRX.WriteMode(RF_OPMODE_LORA_RX_CONT);
       vTaskDelay(2);
       for(uint8_t Wait=50; Wait; Wait--)
@@ -351,7 +352,7 @@ extern "C"
         uint8_t Stat = TRX.ReadByte(REG_LORA_MODEM_STATUS);
         if((Stat&0x0B)==0) break; }
       TRX.WriteMode(RF_OPMODE_LORA_STANDBY);
-      TRX.SendPacketFNT(FNTpkt->Byte, FNTpkt->Len);
+      TRX.FNT_SendPacket(FNTpkt->Byte, FNTpkt->Len);
       FNT_TxFIFO.Read();                                                        // remove the last packet from the queue
 /*
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -375,8 +376,8 @@ extern "C"
       { vTaskDelay(1);
         uint8_t Mode=TRX.ReadMode();
         if(Mode!=RF_OPMODE_LORA_TX) break; }
-      TRX.SetFSK();
-      TRX.ConfigureOGN(0, OGN_SYNC);
+      TRX.setFSK();
+      TRX.OGN_Configure(0, OGN_SYNC);
     }
 #endif
 

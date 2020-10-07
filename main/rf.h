@@ -16,7 +16,7 @@
 #include "fanet.h"
 #endif
 
-  extern FIFO<RFM_RxPktData, 16> RF_RxFIFO;   // buffer for received packets
+  extern FIFO<RFM_FSK_RxPktData, 16> RF_RxFIFO;   // buffer for received packets
   extern FIFO<OGN_TxPacket<OGN_Packet>, 4> RF_TxFIFO;   // buffer for transmitted packets
 
 #ifdef WITH_FANET

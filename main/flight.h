@@ -12,8 +12,8 @@ class FlightMonitor
    GPS_Position MaxAltitude;            // est. positon at peak altitude
    // GPS_Position Recent;
    // const char *IGCpath;
-   static const uint8_t  MinHold  = 5;  // [sec] minimum hold time before takeoff declared
-   static const uint16_t MinSpeed = 60; // [0.1m/s] minimum speed to trigger the takeoff
+   static const uint8_t  MinHold  =  5; // [sec] minimum hold time before takeoff declared
+   static const uint16_t MinSpeed = 50; // [0.1m/s] minimum speed to trigger the takeoff
    uint8_t HoldTime;
    // uint8_t TakeoffCount;                // count take-off/landing cycles for the IGC file name
 
@@ -57,6 +57,7 @@ class FlightMonitor
 
    static int FlightThresh(const GPS_Position &Position, uint16_t MinSpeed) // does the GPS position meed the  in-flight criteria ?
    { if(!Position.isValid()) return -1;
+     if(Position.Altitude>20000) return 1;                     // [0.1] Altitude above 2000m implies a flight
      uint16_t Speed=Position.Speed;                            // [0.1m/s]  Horizontal speed
      int16_t Climb=Position.ClimbRate;                         // [0.1m/s]  Vertical speed
      uint8_t DOP=Position.PDOP; if(DOP==0) DOP=Position.HDOP;  // [0.1]     Dilution of Precision

@@ -9,7 +9,81 @@
 #include "ogn.h"
 #include "fanet.h"
 
-class RFM_RxPktData                 // OGN packet received by the RF chip
+class RFM_LoRa_Config
+{ public:
+
+  union
+  { uint32_t Word;
+    struct
+    { uint8_t Spare   :3;
+      uint8_t LowRate :1; // 0..1
+      uint8_t TxInv   :1; // 0..1, invert on TX
+      uint8_t RxInv   :1; // 0..1, invert on RX
+      uint8_t IHDR    :1; // 0..1, implicit header (no header on TX)
+      uint8_t CRC     :1; // 0..1, produce CRC on TX and check CRC on RX
+      uint8_t CR      :4; // 1..4, Coding Rate
+      uint8_t SF      :4; // 6..12, Spreading Factor
+      uint8_t BW      :4; // 0..9, 7=125kHz, 8=250kHz, 9=500kHz
+      uint8_t Preamble:4; // 0..15, preamble symbols
+      uint8_t SYNC    :8; // 0..0xFF, SYNC
+    } ;
+  } ;
+
+  public:
+   void Print(void)
+   { printf("RFM_LoRa_Config: SYNC:0x%02X/%d, BW%d, SF%d, CR%d, IHDR:%d, Inv:%d/%d, LR:%d\n", SYNC, Preamble, BW, SF, CR, IHDR, RxInv, TxInv, LowRate); }
+
+   uint16_t getAirTime(uint8_t PktLen) // [ms] estimated time on the air for given packet length
+   { uint16_t Symbols = Preamble+2+3+8;                                 // [symbols] preamble, SYNC and header
+     uint8_t  NibPerBlock = SF; if(LowRate) NibPerBlock-=2;             // [nibbles/block] byte-halfs
+     uint8_t  SymbPerBlock = 4+CR;                                      // [symbols]
+     uint16_t Nibbles = 2*(PktLen+2);                                   // [nibbles]
+     uint8_t  Blocks = (Nibbles+NibPerBlock-1)/NibPerBlock;             // [FEC blocks] for the data part
+              Symbols += (uint16_t)Blocks*SymbPerBlock;                 // [symbols]
+     uint32_t SymbTime = 1<<(10-BW+SF);                                 // [usec/symbol]
+     uint32_t Time = SymbTime*Symbols;                                  // [usec]
+     return (Time+500)/1000; }
+
+} ;
+
+const RFM_LoRa_Config RFM_FNTcfg { 0xF1587190 } ; // LoRa seting for FANET
+
+class RFM_LoRa_RxPacket
+{ public:
+
+   union
+   { uint8_t Flags;
+     struct
+     { uint8_t  CR:3;  // Coding rate used (RX) or to be used (TX)
+       bool hasCRC:1;  // CRC was there (RX)
+       bool badCRC:1;  // CRC was bad (RX)
+       bool   Done:1;
+     } ;
+   } ;
+   uint8_t Len;       // [bytes] packet length
+   static const int MaxBytes = 40;
+   uint8_t Byte[MaxBytes+2];
+
+   uint32_t  sTime;         // [ s] reception time
+   uint16_t msTime;         // [ms]
+   int16_t FreqOfs;         // [ 10Hz]
+    int8_t SNR;             // [0.25dB]
+    int8_t RSSI;            // [dBm]
+   uint8_t BitErr;          // number of bit errors
+   uint8_t CodeErr;         // number of block errors
+
+  public:
+   void Print(void) const
+   { char HHMMSS[8];
+     Format_HHMMSS(HHMMSS, sTime);  HHMMSS[6]='h'; HHMMSS[7]=0;
+     printf("%s CR%c%c%c %3.1fdB/%de %+3.1fkHz ", HHMMSS, '0'+CR, hasCRC?'c':'_', badCRC?'-':'+', 0.25*SNR, BitErr, 1e-2*FreqOfs);
+     for(uint8_t Idx=0; Idx<Len; Idx++)
+       printf("%02X", Byte[Idx]);
+     printf("\n"); }
+
+} ;
+
+class RFM_FSK_RxPktData                 // OGN packet received by the RF chip
 { public:
    static const uint8_t Bytes=26;   // [bytes] number of bytes in the packet
    uint32_t Time;                   // [sec] Time slot
@@ -118,7 +192,7 @@ class RFM_RxPktData                 // OGN packet received by the RF chip
 
 #include "sx1276.h"
 
-#define RF_IRQ_PreambleDetect 0x0200
+#define RF_IRQ_PreambleDetect 0x0200 // 
 
 #endif // of WITH_RFM95
 
@@ -167,6 +241,7 @@ class RFM_TRX
    uint8_t (*TransferByte)(uint8_t);                                    // exchange one byte through SPI
 #endif
 
+   void (*Delay_ms)(void);
    bool (*DIO0_isOn)(void);                                              // read DIO0 = packet is ready
    // bool (*DIO4_isOn)(void);
    void (*RESET)(uint8_t On);                                            // activate or desactivate the RF chip reset
@@ -380,7 +455,7 @@ class RFM_TRX
 #endif // USE_BLOCK_SPI
 
 #ifdef WITH_RFM69
-   void WriteSYNC(uint8_t WriteSize, uint8_t SyncTol, const uint8_t *SyncData)
+   void FSK_WriteSYNC(uint8_t WriteSize, uint8_t SyncTol, const uint8_t *SyncData)
    { if(SyncTol>7) SyncTol=7;                                                // no more than 7 bit errors can be tolerated on SYNC
      if(WriteSize>8) WriteSize=8;                                            // up to 8 bytes of SYNC can be programmed
      WriteBytes(SyncData+(8-WriteSize), WriteSize, REG_SYNCVALUE1);          // write the SYNC, skip some initial bytes
@@ -391,7 +466,7 @@ class RFM_TRX
 
 // #ifdef WITH_RFM95
 #if defined(WITH_RFM95) || defined(WITH_SX1272)
-   void WriteSYNC(uint8_t WriteSize, uint8_t SyncTol, const uint8_t *SyncData)
+   void FSK_WriteSYNC(uint8_t WriteSize, uint8_t SyncTol, const uint8_t *SyncData)
    { if(SyncTol>7) SyncTol=7;
      if(WriteSize>8) WriteSize=8;
      WriteBytes(SyncData+(8-WriteSize), WriteSize, REG_SYNCVALUE1);        // write the SYNC, skip some initial bytes
@@ -441,14 +516,14 @@ class RFM_TRX
 
    void WriteTxPowerMin(void) { WriteTxPower_W(-18); } // set minimal Tx power and setup for reception
 
-   int ConfigureOGN(int16_t Channel, const uint8_t *Sync, bool PW=0)
+   int FSK_Configure(int16_t Channel, const uint8_t *Sync, bool PW=0)
    { WriteMode(RF_OPMODE_STANDBY);          // mode = STDBY
      ClearIrqFlags();
      WriteByte(  0x02, REG_DATAMODUL);      // [0x00] Packet mode, FSK, 0x02: BT=0.5, 0x01: BT=1.0, 0x03: BT=0.3
      WriteWord(PW?0x0341:0x0140, REG_BITRATEMSB); // bit rate = 100kbps
      WriteWord(PW?0x013B:0x0333, REG_FDEVMSB);    // FSK deviation = +/-50kHz
      setChannel(Channel);                   // operating channel
-     WriteSYNC(8, 7, Sync);                 // SYNC pattern (setup for reception)
+     FSK_WriteSYNC(8, 7, Sync);             // SYNC pattern (setup for reception)
      WriteByte(  0x00, REG_PACKETCONFIG1);  // [0x10] Fixed size packet, no DC-free encoding, no CRC, no address filtering
      WriteByte(0x80+51, REG_FIFOTHRESH);    // [ ] TxStartCondition=FifoNotEmpty, FIFO threshold = 51 bytes
      WriteByte(  2*26, REG_PAYLOADLENGTH);  // [0x40] Packet size = 26 bytes Manchester encoded into 52 bytes
@@ -498,35 +573,57 @@ class RFM_TRX
 
    void WriteTxPowerMin(void) { WriteTxPower(0); }
 
-   int SetLoRa(void)                            // switch to LoRa: has to go througth the SLEEP mode
+   int setLoRa(void)                            // switch to LoRa: has to go througth the SLEEP mode
    { WriteMode(RF_OPMODE_LORA_SLEEP);
      WriteMode(RF_OPMODE_LORA_SLEEP);
      return 0; }
 
-   int SetFSK(void)                             // switch to FSK: has to go through the SLEEP mode
+   int setFSK(void)                             // switch to FSK: has to go through the SLEEP mode
    { WriteMode(RF_OPMODE_SLEEP);
      WriteMode(RF_OPMODE_SLEEP);
      return 0; }
 
-   int ConfigureFNT(uint8_t CR=1)                 // configure for FANET/LoRa
-   { WriteTxPower(0);
-     WriteByte(0x00,   REG_LORA_HOPPING_PERIOD);  // disable fast-hopping
-     WriteByte(0xF1,   REG_LORA_SYNC);            // SYNC for FANET
-     WriteWord(0x0005, REG_LORA_PREAMBLE_MSB);    // [symbols] minimal preamble
-     WriteByte(0x80 | (CR<<1), REG_LORA_MODEM_CONFIG1);   // 0x88 = 250kHz, 4+4, explicit header
-     WriteByte(0x74,   REG_LORA_MODEM_CONFIG2);   // 0x74 = SF7, CRC on
+   int LoRa_Configure(RFM_LoRa_Config CFG, uint8_t MaxSize=64)
+   { WriteByte(0x00,   REG_LORA_HOPPING_PERIOD);                                // disable fast-hopping
+     WriteByte(CFG.SYNC,   REG_LORA_SYNC);                                      // SYNC
+     WriteWord(CFG.Preamble, REG_LORA_PREAMBLE_MSB);                            // [symbols] minimal preamble
+     WriteByte((CFG.BW<<4) | (CFG.CR<<1) | CFG.IHDR, REG_LORA_MODEM_CONFIG1);   // 0x88 = 250kHz, 4+4, explicit header
+     WriteByte((CFG.SF<<4) | (CFG.CRC<<2), REG_LORA_MODEM_CONFIG2);             // 0x74 = SF7, CRC on
+     // WriteByte(CFG.InvIQ?0x67:0x26, REG_LORA_INVERT_IQ);
+     // WriteByte(CFG.InvIQ?0x19:0x1D, REG_LORA_INVERT_IQ2);
+     WriteByte((CFG.RxInv<<6) | 0x26 | CFG.TxInv, REG_LORA_INVERT_IQ);
+     // Format_String(CONS_UART_Write, "REG_LORA_INVERT_IQ:");
+     // Format_Hex(CONS_UART_Write, CFG.Word);
+     // Format_String(CONS_UART_Write, ":");
+     // Format_Hex(CONS_UART_Write, ReadByte(REG_LORA_INVERT_IQ));
+     // Format_String(CONS_UART_Write, "\n");
      WriteByte(0xC3,   REG_LORA_DETECT_OPTIMIZE);
      WriteByte(0x0A,   REG_LORA_DETECT_THRESHOLD);
-     WriteByte(0x04,   REG_LORA_MODEM_CONFIG3);   // LNA auto-gain ?
-     WriteByte(0xFF,   REG_LORA_SYMBOL_TIMEOUT);  // 0x64 = default or more ?
-     WriteByte(FANET_Packet::MaxBytes,   REG_LORA_PACKET_MAXLEN);   // [bytes] enough ?
+     WriteByte(0x04,   REG_LORA_MODEM_CONFIG3);     // LNA auto-gain ?
+     WriteByte(0xFF,   REG_LORA_SYMBOL_TIMEOUT);    //
+     WriteByte(MaxSize,  REG_LORA_PACKET_MAXLEN);   // [bytes]
      WriteByte(0x00,   REG_LORA_RX_ADDR);
-     setChannel(0);                               // operating channel
-     WriteWord(0x0000, REG_DIOMAPPING1);    // 001122334455___D signals: 00=DIO0 11=DIO1 22=DIO2 33=DIO3 44=DIO4 55=DIO5 D=MapPreambleDetect
-                                            // DIO0: 00=RxDone, 01=TxDone, 10=CadDone
+     setChannel(0);                                 // operating channel
+     WriteWord(0x0000, REG_DIOMAPPING1);            // 001122334455___D signals: 00=DIO0 11=DIO1 22=DIO2 33=DIO3 44=DIO4 55=DIO5 D=MapPreambleDetect
+                                                    // DIO0: 00=RxDone, 01=TxDone, 10=CadDone
      return 0; }
 
-   int SendPacketFNT(const uint8_t *Data, uint8_t Len)
+   int FNT_Configure(uint8_t CR=1)                   // configure for FANET/LoRa
+   { WriteTxPower(0);
+     RFM_LoRa_Config CFG = RFM_FNTcfg; CFG.CR=CR;
+     return LoRa_Configure(CFG, FANET_Packet::MaxBytes); }
+
+   void LoRa_setCRC(bool ON=1)                           // LoRaWAN: uplink with CRC, downlink without CRC
+   { uint8_t Reg=ReadByte(REG_LORA_MODEM_CONFIG2);
+     if(ON) Reg|=0x04;
+       else Reg&=0xFB;
+     WriteByte(Reg, REG_LORA_MODEM_CONFIG2); }
+
+   void LoRa_InvertIQ(bool ON=0)                         // LoRaWAN
+   { WriteByte(ON?0x66:0x27, REG_LORA_INVERT_IQ);
+     WriteByte(ON?0x19:0x1D, REG_LORA_INVERT_IQ2); }
+
+   int LoRa_SendPacket(const uint8_t *Data, uint8_t Len)
    { // WriteMode(RF_OPMODE_LORA_STANDBY);
      // check if FIFO empty, packets could be received ?
      WriteByte(0x00, REG_LORA_FIFO_ADDR);   // tell write to FIFO at address 0x00
@@ -536,7 +633,11 @@ class RFM_TRX
      WriteMode(RF_OPMODE_LORA_TX);          // enter transmission mode
      return 0; }                            // afterwards just wait for TX mode to stop
 
-   int ReceivePacketFNT(FANET_RxPacket &Packet)
+   int FNT_SendPacket(const uint8_t *Data, uint8_t Len)
+   { return LoRa_SendPacket(Data, Len); }
+
+  template<class RxPacket>
+   int LoRa_ReceivePacket(RxPacket &Packet)
    { uint8_t Flags = ReadByte(REG_LORA_IRQ_FLAGS);
      if((Flags&LORA_FLAG_RX_DONE)==0) return 0;
      uint8_t Stat = ReadByte(REG_LORA_MODEM_STATUS);     // coding rate in three top bits
@@ -552,7 +653,7 @@ class RFM_TRX
      Packet.FreqOfs = (FreqOfs*1718+0x8000)>>16;         //  [10Hz]
      Packet.BitErr  = 0;
      Packet.CodeErr = 0;
-     int Len=ReceivePacketFNT(Packet.Byte, Packet.MaxBytes);
+     int Len=LoRa_ReceivePacket(Packet.Byte, Packet.MaxBytes);
      // printf("ReceivePacketFNT() => %d %02X %3.1fdB %+ddBm 0x%08X=%+6.3fkHz, %02X%02X%02X%02X\n",
      //       Packet.Len, Stat, 0.25*Packet.SNR, Packet.RSSI, FreqOfs, 0.5*0x1000000/32e9*FreqOfs,
      //       Packet.Byte[0], Packet.Byte[1], Packet.Byte[2], Packet.Byte[3]);
@@ -560,7 +661,7 @@ class RFM_TRX
      WriteByte(LORA_FLAG_RX_DONE | LORA_FLAG_BAD_CRC, REG_LORA_IRQ_FLAGS);
      return Len; }
 
-   int ReceivePacketFNT(uint8_t *Data, uint8_t MaxLen)
+   int LoRa_ReceivePacket(uint8_t *Data, uint8_t MaxLen)
    { uint8_t Len=ReadByte(REG_LORA_PACKET_BYTES);    // packet length
      uint8_t Ptr=ReadByte(REG_LORA_PACKET_ADDR);     // packet address in FIFO
      WriteByte(Ptr, REG_LORA_FIFO_ADDR);             // ask to read FIFO from this address
@@ -577,7 +678,7 @@ class RFM_TRX
      //       ReadData[0], ReadData[1], ReadData[2], ReadData[3]);
      return Len; }
 
-   int ConfigureOGN(int16_t Channel, const uint8_t *Sync, bool PW=0)
+   int OGN_Configure(int16_t Channel, const uint8_t *Sync, bool PW=0)
    { // WriteMode(RF_OPMODE_STANDBY);              // mode: STDBY, modulation: FSK, no LoRa
      // usleep(1000);
      WriteTxPower(0);
@@ -588,7 +689,7 @@ class RFM_TRX
      WriteWord(PW?0x013B:0x0333, REG_FDEVMSB);  // FSK deviation = +/-50kHz [32MHz/(1<<19)] (0x013B = 19.226kHz)
      // ReadWord(REG_FDEVMSB);
      setChannel(Channel);                       // operating channel
-     WriteSYNC(8, 7, Sync);                     // SYNC pattern (setup for reception)
+     FSK_WriteSYNC(8, 7, Sync);                 // SYNC pattern (setup for reception)
      WriteByte(  0x85, REG_PREAMBLEDETECT);     // preamble detect: 1 byte, page 92 (or 0x85 ?)
      WriteByte(  0x00, REG_PACKETCONFIG1);      // Fixed size packet, no DC-free encoding, no CRC, no address filtering
      WriteByte(  0x40, REG_PACKETCONFIG2);      // Packet mode
