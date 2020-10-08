@@ -131,6 +131,9 @@ class FlashParameters
 #ifdef WITH_ENCRYPT
   uint32_t EncryptKey[4];    // encryption key
 #endif
+#ifdef WITH_LORAWAN
+  uint8_t AppKey[16];
+#endif
 
   uint32_t CheckSum;
 
@@ -400,9 +403,11 @@ class FlashParameters
     Line[Len++]=HexDigit(AcftType); Line[Len++]=':';
     Line[Len++]=HexDigit(AddrType); Line[Len++]=':';
     Len+=Format_Hex(Line+Len, Address, 6);
-    uint32_t DefaultAddr=getUniqueAddress();
-    if(Address!=DefaultAddr)
-    { Line[Len++]='/'; Len+=Format_Hex(Line+Len, DefaultAddr, 6); }
+    { uint64_t ID=getUniqueID(); Line[Len++]='/';
+      Len+=Format_Hex(Line+Len, (uint16_t)(ID>>32)); Len+=Format_Hex(Line+Len, (uint32_t)ID); }
+    // uint32_t DefaultAddr=getUniqueAddress();
+    // if(Address!=DefaultAddr)
+    // { Line[Len++]='/'; Len+=Format_Hex(Line+Len, DefaultAddr, 6); }
 #ifdef WITH_RFM69
     Len+=Format_String(Line+Len, " RFM69");
     if(isTxTypeHW()) Line[Len++]='H';
@@ -511,6 +516,15 @@ class FlashParameters
     if(strcmp(Name, "Verbose")==0)
     { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
       Verbose=Mode; return 1; }
+#ifdef WITH_LORAWAN
+    if(strcmp(Name, "AppKey")==0)
+    { for( uint8_t Idx=0; Idx<16; Idx++)
+      { uint8_t Byte;
+        uint8_t Len=Read_Hex(Byte, Value);
+        if(Len!=2) break;
+        AppKey[Idx]=Byte; }
+      return 1; }
+#endif
 #ifdef WITH_ENCRYPT
     if(strcmp(Name, "Encrypt")==0)
     { int32_t Encr=0; if(Read_Int(Encr, Value)<=0) return 0;

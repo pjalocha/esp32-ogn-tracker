@@ -63,6 +63,11 @@ uint32_t getUniqueAddress(void);           // get unique 24-bit address for the 
 #include "parameters.h"
 extern FlashParameters Parameters;
 
+#ifdef WITH_LORAWAN
+#include "lorawan.h"
+extern LoRaWANnode WANdev;
+#endif
+
 void CONS_UART_Init       (void);
 int  CONS_UART_Read       (uint8_t &Byte); // non-blocking
 void CONS_UART_Write      (char     Byte); // blocking

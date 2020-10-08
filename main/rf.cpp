@@ -4,6 +4,10 @@
 #include "timesync.h"
 #include "lowpass2.h"
 
+#ifdef WITH_LORAWAN
+#include "lorawan.h"
+#endif
+
 // ===============================================================================================
 
 // OGNv1 SYNC:       0x0AF3656C encoded in Manchester

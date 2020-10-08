@@ -16,6 +16,10 @@
 #include "esp_system.h"
 #include "esp_freertos_hooks.h"
 
+#ifdef WITH_LORAWAN
+#include "lorawan.h"
+#endif
+
 #ifdef WITH_SLEEP
 #include "esp_sleep.h"
 #endif
@@ -538,6 +542,10 @@ uint8_t  MAV_Seq=0;                   // sequence number for MAVlink message sen
 // ======================================================================================================
 
 FlashParameters Parameters;
+
+#ifdef WITH_LORAWAN
+LoRaWANnode WANdev;
+#endif
 
 //--------------------------------------------------------------------------------------------------------
 // Power control

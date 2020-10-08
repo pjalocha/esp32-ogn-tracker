@@ -9,34 +9,35 @@
 // #define WITH_HELTEC_V2                     // HELTEC module v2
 // #define WITH_TTGO                          // TTGO module: PCB LED on GPIO2, GPIO25 free to use as DAC2 output
 // #define WITH_TBEAM                          // T-Beam module
-#define WITH_TBEAM_V10                      // T-Beam module
+// #define WITH_TBEAM_V10                      // T-Beam module
 // #define WITH_M5_JACEK                         // JACEK M5 ESP32 OGN-Tracker
-// #define WITH_FollowMe                         // by Avionix
+#define WITH_FollowMe                         // by Avionix
 
 // #define WITH_ILI9341                        // 320x240 M5stack
 // #define WITH_ST7789                         // IPS 240x240 ST7789
 // #define WITH_TFT_LCD                       // TFT LCD
 // #define WITH_OLED                          // OLED display on the I2C: some TTGO modules are without OLED display
 // #define WITH_OLED2                         // 2nd OLED display, I2C address next higher
-// #define WITH_U8G2_OLED                     // I2C OLED through the U8g2 library
-// #define WITH_U8G2_SH1106
+#define WITH_U8G2_OLED                     // I2C OLED through the U8g2 library
+#define WITH_U8G2_SH1106                   // correct controller for the bigger OLED
+#define WITH_U8G2_FLIP                     // flip the OLED screen (rotate by 180deg)
 
 #define WITH_RFM95                         // RF chip selection:  both HELTEC and TTGO use sx1276 which is same as RFM95
 
 // #define WITH_SLEEP                         // with software sleep mode controlled by the long-press on the button
 
-#define WITH_AXP                           // with AXP192 power controller (T-BEAM V1.0)
+// #define WITH_AXP                           // with AXP192 power controller (T-BEAM V1.0)
 // #define WITH_BQ                            // with BQ24295  power controller (FollowMe)
 
 // #define WITH_LED_RX
 // #define WITH_LED_TX
 
-// #define WITH_GPS_ENABLE                    // use GPS_ENABLE control line to turn the GPS ON/OFF
+#define WITH_GPS_ENABLE                    // use GPS_ENABLE control line to turn the GPS ON/OFF
 #define WITH_GPS_PPS                       // use the PPS signal from GPS for precise time-sync.
 #define WITH_GPS_CONFIG                    // attempt to configure higher GPS baud rate and airborne mode
 
-#define WITH_GPS_UBX                       // GPS understands UBX
-// #define WITH_GPS_MTK                       // GPS understands MTK
+// #define WITH_GPS_UBX                       // GPS understands UBX
+#define WITH_GPS_MTK                       // GPS understands MTK
 // #define WITH_GPS_SRF
 // #define WITH_MAVLINK
 
@@ -45,12 +46,19 @@
 
 // #define WITH_BMP180                        // BMP180 pressure sensor
 // #define WITH_BMP280                        // BMP280 pressure sensor
-// #define WITH_BME280                        // BMP280 with humidity (but still works with BMP280)
+#define WITH_BME280                        // BMP280 with humidity (but still works with BMP280)
 // #define WITH_MS5607                        // MS5607 pressure sensor
 // #define WITH_MS5611                        // MS5611 pressure sensor
 
+// #define WITH_BMX055                        // BMX055 magnetic and IMU sensor
+
+#define WITH_LORAWAN                       // LoRaWAN connectivity
+#define WITH_FANET                         // FANET transmission and reception
+
 #define WITH_PFLAA                         // PFLAU and PFLAA for compatibility with XCsoar and LK8000
 // #define WITH_POGNT
+// #define WITH_GDL90
+// #define WITH_PGAV5
 #define WITH_LOOKOUT
 
 #define WITH_CONFIG                        // interpret the console input: $POGNS to change parameters
@@ -61,14 +69,15 @@
 // #define WITH_KNOB
 // #define WITH_VARIO
 
-// #define WITH_SD                            // use the SD card in SPI mode and FAT file system
-#define WITH_SPIFFS_FAT
+#define WITH_SD                            // use the SD card in SPI mode and FAT file system
 #define WITH_SPIFFS                        // use SPIFFS file system in Flash
-#define WITH_LOG                           // log own positions and other received to SPIFFS and possibly to uSD
+#define WITH_SPIFFS_FAT
+#define WITH_LOG                           // log own positions and other received to SPIFFS
+#define WITH_SDLOG                         // log own position and other data to uSD card
 
+// #define WITH_STRATUX
 #define WITH_BT_SPP                        // Bluetooth serial port for smartphone/tablet link
 // #define WITH_WIFI                          // attempt to connect to the wifi router for uploading the log files
-// #define WITH_SPIFFS_LOG                    // log transmitted and received packets to SPIFFS
 
 // #define WITH_ENCRYPT                       // Encrypt (optionally) the position
 

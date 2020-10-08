@@ -46,6 +46,13 @@ void app_main(void)
     Parameters.setDefault(getUniqueAddress()); // set default parameter values
     if(Parameters.ReadFromNVS()!=ESP_OK)     // try to get parameters from NVS
     { Parameters.WriteToNVS(); }             // if did not work: try to save (default) parameters to NVS
+#ifdef WITH_LORAWAN
+    WANdev.Reset(getUniqueID(), Parameters.AppKey);
+    if(WANdev.ReadFromNVS()!=ESP_OK)
+    { WANdev.WriteToNVS(); }
+    if(memcpy(WANdev.AppKey, Parameters.AppKey, 16)) WANdev.Reset(getUniqueID(), Parameters.AppKey);
+#endif
+
 #ifdef WITH_SPIFFS
     SPIFFS_Register();                       // initialize the file system in the Flash
 #endif

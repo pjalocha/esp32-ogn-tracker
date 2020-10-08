@@ -453,7 +453,7 @@ static uint8_t BattCapacity(uint16_t mVolt)
   return (mVolt-3600+2)/5; }
 
 void OLED_DrawBattery(u8g2_t *OLED, GPS_Position *GPS) // draw battery status page
-{ 
+{
 #ifdef WITH_MAVLINK
   uint8_t Cap=MAVLINK_BattCap;                         // [%] from the drone's telemetry
 #else
@@ -725,7 +725,7 @@ void OLED_DrawID(u8g2_t *OLED, GPS_Position *GPS)
 #endif
   }
   u8g2_SetFont(OLED, u8g2_font_5x8_tr);
-  u8g2_DrawStr(OLED, 96, 62, "v0.1.1");
+  u8g2_DrawStr(OLED, 96, 62, "v0.1.2");
 }
 
 void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
@@ -813,6 +813,23 @@ void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
     0xa9, 0x02, 0x00, 0x00, 0xff, 0x03, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00,
     0x08, 0x00, 0x38, 0x00, 0x48, 0x00, 0x48, 0x00, 0x48, 0x00 };
   u8g2_DrawXBM(OLED, 118, 47, kmh_width, kmh_height, kmh_bits);
+}
+
+void OLED_DrawLoRaWAN(u8g2_t *OLED, GPS_Position *GPS) // draw LoRaWAN status page
+{
+  u8g2_SetFont(OLED, u8g2_font_7x13_tf);
+#ifndef WITH_LORAWAN
+  u8g2_DrawStr(OLED, 0, 28, "LoRaWAN: -OFF-");
+#endif
+#ifdef WITH_LORAWAN
+  const char *StateName[3] = { "Idle", "Join-Req", "Joined" } ;
+  int Len=Format_String(Line, "LoRaWAN: ");
+  if(WANdev.State<=2) Len+=Format_String(Line+Len, StateName[WANdev.State]);
+                 else Len+=Format_Hex(Line+Len, WANdev.State);
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 24, Line);
+
+#endif // WITH_LORAWAN
 }
 
 #endif

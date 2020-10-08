@@ -18,7 +18,7 @@ class RFM_LoRa_Config
     { uint8_t Spare   :3;
       uint8_t LowRate :1; // 0..1
       uint8_t TxInv   :1; // 0..1, invert on TX
-      uint8_t RxInv   :1; // 0..1, invert on RX
+      uint8_t RxInv   :1; // 0..1, invert on RX <- probably inverted logic
       uint8_t IHDR    :1; // 0..1, implicit header (no header on TX)
       uint8_t CRC     :1; // 0..1, produce CRC on TX and check CRC on RX
       uint8_t CR      :4; // 1..4, Coding Rate
@@ -241,7 +241,7 @@ class RFM_TRX
    uint8_t (*TransferByte)(uint8_t);                                    // exchange one byte through SPI
 #endif
 
-   void (*Delay_ms)(void);
+   void (*Delay_ms)(int ms);
    bool (*DIO0_isOn)(void);                                              // read DIO0 = packet is ready
    // bool (*DIO4_isOn)(void);
    void (*RESET)(uint8_t On);                                            // activate or desactivate the RF chip reset
@@ -613,17 +613,20 @@ class RFM_TRX
      RFM_LoRa_Config CFG = RFM_FNTcfg; CFG.CR=CR;
      return LoRa_Configure(CFG, FANET_Packet::MaxBytes); }
 
-   void LoRa_setCRC(bool ON=1)                           // LoRaWAN: uplink with CRC, downlink without CRC
+   void LoRa_setIRQ(uint8_t Mode=0)                  // 0:on RX, 1:on TX, 2: on CAD
+   { WriteByte(Mode<<6, REG_DIOMAPPING1); }
+
+   void LoRa_setCRC(bool ON=1)                       // LoRaWAN: uplink with CRC, downlink without CRC
    { uint8_t Reg=ReadByte(REG_LORA_MODEM_CONFIG2);
      if(ON) Reg|=0x04;
        else Reg&=0xFB;
      WriteByte(Reg, REG_LORA_MODEM_CONFIG2); }
 
-   void LoRa_InvertIQ(bool ON=0)                         // LoRaWAN
+   void LoRa_InvertIQ(bool ON=0)                     // LoRaWAN: uplink without inversion, downlink with inversion, but beacon without
    { WriteByte(ON?0x66:0x27, REG_LORA_INVERT_IQ);
      WriteByte(ON?0x19:0x1D, REG_LORA_INVERT_IQ2); }
 
-   int LoRa_SendPacket(const uint8_t *Data, uint8_t Len)
+   int LoRa_SendPacket(const uint8_t *Data, uint8_t Len, int Wait=0)
    { // WriteMode(RF_OPMODE_LORA_STANDBY);
      // check if FIFO empty, packets could be received ?
      WriteByte(0x00, REG_LORA_FIFO_ADDR);   // tell write to FIFO at address 0x00
@@ -631,10 +634,16 @@ class RFM_TRX
      WriteByte(0x00, REG_LORA_TX_ADDR);     // tell packet address in the FIFO
      WriteByte(Len, REG_LORA_PACKET_LEN);   // tell packet length
      WriteMode(RF_OPMODE_LORA_TX);          // enter transmission mode
-     return 0; }                            // afterwards just wait for TX mode to stop
+     if(Wait==0) return 0;
+     Delay_ms(10); int Check=10;
+     for(Check=0; Check<Wait; Check++)
+     { Delay_ms(1);
+       uint8_t Mode=ReadMode();
+       if(Mode!=RF_OPMODE_LORA_TX) break; }
+     return Check+1; }                      // afterwards just wait for TX mode to stop
 
-   int FNT_SendPacket(const uint8_t *Data, uint8_t Len)
-   { return LoRa_SendPacket(Data, Len); }
+   int FNT_SendPacket(const uint8_t *Data, uint8_t Len, int Wait=0)
+   { return LoRa_SendPacket(Data, Len, Wait); }
 
   template<class RxPacket>
    int LoRa_ReceivePacket(RxPacket &Packet)
@@ -658,7 +667,7 @@ class RFM_TRX
      //       Packet.Len, Stat, 0.25*Packet.SNR, Packet.RSSI, FreqOfs, 0.5*0x1000000/32e9*FreqOfs,
      //       Packet.Byte[0], Packet.Byte[1], Packet.Byte[2], Packet.Byte[3]);
      Packet.Len=Len;
-     WriteByte(LORA_FLAG_RX_DONE | LORA_FLAG_BAD_CRC, REG_LORA_IRQ_FLAGS);
+     WriteByte(LORA_FLAG_RX_DONE | LORA_FLAG_BAD_CRC | LORA_FLAG_RX_HEADER, REG_LORA_IRQ_FLAGS);
      return Len; }
 
    int LoRa_ReceivePacket(uint8_t *Data, uint8_t MaxLen)
