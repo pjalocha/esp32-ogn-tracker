@@ -481,7 +481,7 @@ extern "C"
       int RespDelay=0;
       int TxPktLen=0;
       if(WANdev.State==0)
-      { uint8_t *TxPacket; int TxPktLen=WANdev.getJoinRequest(&TxPacket); // produce Join-Request packet
+      { uint8_t *TxPacket; TxPktLen=WANdev.getJoinRequest(&TxPacket); // produce Join-Request packet
         TRX.LoRa_SendPacket(TxPacket, TxPktLen); RespDelay=5000;          // transmit join-request packet
       } else if(WANdev.State==2)
       { const uint8_t *PktData=TxPktData0;

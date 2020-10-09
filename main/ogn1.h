@@ -199,7 +199,7 @@ class OGN1_Packet          // Packet structure for the OGN tracker
              (1.0/64)*DecodeVoltage(), Status.TxPower+4, -0.5*Status.RadioNoise, (1<<Status.RxRate)-1 );
    }
 
-   uint8_t WriteDeviceInfo(char *Out)
+   int WriteDeviceInfo(char *Out)
    { int Len=0;
      char Value[16];
      uint8_t InfoType;
