@@ -25,7 +25,7 @@
 #include "disp_lcd.h"
 
 #ifdef WITH_U8G2_OLED
-const uint8_t DISP_Pages = 11;
+const uint8_t DISP_Pages = 12;
 static uint8_t DISP_Page = 0;
 #endif
 #if defined(WITH_ST7789) || defined(WITH_ILI9341)
@@ -191,7 +191,8 @@ void vTaskDISP(void* pvParameters)
           case 7: OLED_DrawRelay            (&U8G2_OLED, GPS); break;
           case 8: OLED_DrawLookout          (&U8G2_OLED, GPS); break;
           case 9: OLED_DrawTrafWarn         (&U8G2_OLED, GPS); break;
-         case 10: OLED_DrawLoRaWAN          (&U8G2_OLED, GPS); break;
+         case 10: OLED_DrawFlight           (&U8G2_OLED, GPS); break;
+         case 11: OLED_DrawLoRaWAN          (&U8G2_OLED, GPS); break;
         }
       }
       //if ( DISP_Page != 6 )

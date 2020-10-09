@@ -815,6 +815,12 @@ void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
   u8g2_DrawXBM(OLED, 118, 47, kmh_width, kmh_height, kmh_bits);
 }
 
+void OLED_DrawFlight(u8g2_t *OLED, GPS_Position *GPS) // draw flight status page
+{ u8g2_SetFont(OLED, u8g2_font_7x13_tf);
+  u8g2_DrawStr(OLED, 0, 28, "Flight");
+
+}
+
 void OLED_DrawLoRaWAN(u8g2_t *OLED, GPS_Position *GPS) // draw LoRaWAN status page
 {
   u8g2_SetFont(OLED, u8g2_font_7x13_tf);
@@ -822,13 +828,25 @@ void OLED_DrawLoRaWAN(u8g2_t *OLED, GPS_Position *GPS) // draw LoRaWAN status pa
   u8g2_DrawStr(OLED, 0, 28, "LoRaWAN: -OFF-");
 #endif
 #ifdef WITH_LORAWAN
-  const char *StateName[3] = { "Idle", "Join-Req", "Joined" } ;
+  const char *StateName[4] = { "Not-Joined", "Join-Req", "+Joined+", "PktSend" } ;
   int Len=Format_String(Line, "LoRaWAN: ");
-  if(WANdev.State<=2) Len+=Format_String(Line+Len, StateName[WANdev.State]);
+  if(WANdev.State<=3) Len+=Format_String(Line+Len, StateName[WANdev.State]);
                  else Len+=Format_Hex(Line+Len, WANdev.State);
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 24, Line);
-
+  Len =Format_String(Line    , "Up: "); Len+=Format_Hex(Line+Len, (uint16_t)WANdev.UpCount);
+  Len+=Format_String(Line+Len, "  Dn: "); Len+=Format_Hex(Line+Len, (uint16_t)WANdev.DnCount);
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 36, Line);
+  // if(WANdev.State>=2) { }
+/*
+  Len=0;
+  for(int Idx=0; Idx<16; Idx++)
+  { Len+=Format_Hex(Line+Len, WANdev.AppKey[Idx]); }
+  Line[Len]=0;
+  u8g2_SetFont(OLED, u8g2_font_5x8_tr);
+  u8g2_DrawStr(OLED, 0, 48, Line);
+*/
 #endif // WITH_LORAWAN
 }
 

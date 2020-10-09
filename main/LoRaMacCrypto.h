@@ -42,6 +42,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*!
  * Computes the LoRaMAC frame MIC field
  *
@@ -123,5 +127,9 @@ void LoRaMacJoinComputeSKeys( const uint8_t *key, const uint8_t *appNonce, uint1
 void LoRaMacBeaconComputePingOffset( uint64_t beaconTime, uint32_t address, uint16_t pingPeriod, uint16_t *pingOffset );
 
 /*! \} defgroup LORAMAC */
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif // __LORAMAC_CRYPTO_H__

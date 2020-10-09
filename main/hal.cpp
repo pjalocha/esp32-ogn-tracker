@@ -919,6 +919,8 @@ void RFM_RESET(uint8_t On) { }
 void RFM_IRQ_SetInput(void) { gpio_set_direction(PIN_RFM_IRQ, GPIO_MODE_INPUT); }
 bool RFM_IRQ_isOn(void)      { return gpio_get_level(PIN_RFM_IRQ); }
 
+void RFM_Delay(int ms) { vTaskDelay(ms); }
+
 static spi_device_handle_t RFM_SPI;
 
 void RFM_TransferBlock(uint8_t *Data, uint8_t Len)

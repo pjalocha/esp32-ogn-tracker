@@ -159,11 +159,15 @@ static void TimeSlot(uint8_t TxChan, uint32_t SlotLen, const uint8_t *PacketByte
   ReceiveUntil(End);                                                       // listen till the end of the time-slot
 }
 
-static void SetFreqPlan(void)                                // set the RF TRX according to the selected frequency hopping plan
+static void SetFreqPlanOGN(void)                             // set the RF TRX according to the selected frequency hopping plan
 { TRX.setBaseFrequency(RF_FreqPlan.BaseFreq);                // set the base frequency (recalculate to RFM69 internal synth. units)
   TRX.setChannelSpacing(RF_FreqPlan.ChanSepar);              // set the channel separation
-  TRX.setFrequencyCorrection(Parameters.RFchipFreqCorr);     // set the fine correction (to counter the Xtal error)
-}
+  TRX.setFrequencyCorrection(Parameters.RFchipFreqCorr); }   // set the fine correction (to counter the Xtal error)
+
+static void SetFreqPlanWAN(void)                             // set the LoRaWAN EU frequency plan: 8 LoRa channels
+{ TRX.setBaseFrequency(867100000);
+  TRX.setChannelSpacing(   200000);
+  TRX.setFrequencyCorrection(Parameters.RFchipFreqCorr); }
 
 static uint8_t StartRFchip(void)
 { TRX.WriteMode(RF_OPMODE_STANDBY);
@@ -172,7 +176,7 @@ static uint8_t StartRFchip(void)
   vTaskDelay(1);                                             // wait 10ms
   TRX.RESET(0);                                              // RESET released
   vTaskDelay(5);                                             // wait 10ms
-  SetFreqPlan();                                             // set TRX base frequency and channel separation after the frequency hopping plan
+  SetFreqPlanOGN();                                         // set TRX base frequency and channel separation after the frequency hopping plan
 #ifdef DEBUG_PRINT
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   TRX.PrintReg(CONS_UART_Write);
@@ -200,6 +204,11 @@ static uint8_t StartRFchip(void)
 #endif
   return Version; }                                          // read the RF chip version and return it
 
+static TickType_t WAN_RespTick = xTaskGetTickCount();        // when to expect the WAN response
+static RFM_LoRa_RxPacket WAN_RxPacket;                       // packet received from WAN
+// static WAN_Setup()
+// static WAN_Back()
+
 extern "C"
  void vTaskRF(void* pvParameters)
 {
@@ -213,12 +222,13 @@ extern "C"
 #ifdef USE_BLOCK_SPI
   TRX.TransferBlock = RFM_TransferBlock;
 #else
-  TRX.Select       = RFM_Select;
-  TRX.Deselect     = RFM_Deselect;
-  TRX.TransferByte = RFM_TransferByte;
+  TRX.Select       = RFM_Select;                // [call]
+  TRX.Deselect     = RFM_Deselect;              // [call]
+  TRX.TransferByte = RFM_TransferByte;          // [call]
 #endif
-  TRX.DIO0_isOn    = RFM_IRQ_isOn;
-  TRX.RESET        = RFM_RESET;
+  TRX.DIO0_isOn    = RFM_IRQ_isOn;              // [call] read IRQrfm_reset
+  TRX.Delay_ms     = RFM_Delay;                 // [call] delay by N miliseconds
+  TRX.RESET        = RFM_RESET;                 // [call] chip reset control
 
   RF_FreqPlan.setPlan(Parameters.FreqPlan);     // 1 = Europe/Africa, 2 = USA/CA, 3 = Australia and South America
 
@@ -256,18 +266,73 @@ extern "C"
     // RF_Print();
 // #endif
 
-    uint32_t RxRssiSum=0; uint16_t RxRssiCount=0;                              // measure the average RSSI for lower frequency
-    do
-    { ReceivePacket();                                                         // keep checking for received packets
+#ifdef WITH_LORAWAN
+    bool WANrx=0;
+    int WAN_RespLeft = WAN_RespTick-xTaskGetTickCount();
+    if(WANdev.State==1 || WANdev.State==3)
+    { if(WAN_RespLeft<=5) WANdev.State--;
+      else if(WAN_RespLeft<200) { WANrx=1; }
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, "LoRaWAN Rx: ");
+      Format_SignDec(CONS_UART_Write, WAN_RespLeft);
+      Format_String(CONS_UART_Write, "ms ");
+      Format_UnsDec(CONS_UART_Write, xTaskGetTickCount());
+      Format_String(CONS_UART_Write, "ms\n");
+      xSemaphoreGive(CONS_Mutex);
+    }
+
+    if(WANrx)
+    { TRX.WriteMode(RF_OPMODE_STANDBY);                    // TRX to standby
+      TRX.setLoRa();                                       // switch to LoRa mode (through sleep)
+      TRX.WriteMode(RF_OPMODE_LORA_STANDBY);               // TRX in standby
+      SetFreqPlanWAN();                                    // WAN frequency plan
+      TRX.WAN_Configure();                                 // LoRa for WAN config.
+      TRX.setChannel(WANdev.Chan);                         // set the channel
+      TRX.LoRa_InvertIQ(1); TRX.LoRa_setCRC(0); TRX.LoRa_setIRQ(0); // setup for WAN RX
+      TRX.WriteMode(RF_OPMODE_LORA_RX_SINGLE);             // wait for a single packet
+      int Wait=WAN_RespLeft+100;
+      for( ; Wait>0; Wait--)
+      { vTaskDelay(1);
+        if(TRX.readIRQ()) break; }
+      if(Wait)
+      { TRX.LoRa_ReceivePacket(WAN_RxPacket);
+        xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+        Format_String(CONS_UART_Write, "LoRaWAN Rx: ");
+        Format_UnsDec(CONS_UART_Write, (uint16_t)WAN_RxPacket.Len);
+        Format_String(CONS_UART_Write, "B/");
+        Format_UnsDec(CONS_UART_Write, (unsigned)Wait);
+        Format_String(CONS_UART_Write, "ms ");
+        Format_UnsDec(CONS_UART_Write, xTaskGetTickCount());
+        Format_String(CONS_UART_Write, "ms\n");
+        xSemaphoreGive(CONS_Mutex);
+        if(WANdev.State==1) WANdev.procJoinAccept(WAN_RxPacket);
+        else if(WANdev.State==3) WANdev.procRxData(WAN_RxPacket);
+      }
+      else WANdev.State--;
+      WANdev.WriteToNVS();
+      TRX.setFSK();                                        // back to FSK
+      SetFreqPlanOGN();                                    // OGN frequency plan
+      TRX.OGN_Configure(0, OGN_SYNC);                      // OGN config
+      SetRxChannel();
+      TRX.WriteMode(RF_OPMODE_RECEIVER);                                         // switch to receive mode
+    }
+    else
+#else
+    // if(TimeSync_msTime()<260);
+    { uint32_t RxRssiSum=0; uint16_t RxRssiCount=0;                              // measure the average RSSI for lower frequency
+      do
+      { ReceivePacket();                                                         // keep checking for received packets
 #ifdef WITH_RFM69
-      TRX.TriggerRSSI();
+        TRX.TriggerRSSI();
 #endif
-      vTaskDelay(1);
-      uint8_t RxRSSI=TRX.ReadRSSI();                                           // measure the channel noise level
-      RX_Random = (RX_Random<<1) | (RxRSSI&1);
-      RxRssiSum+=RxRSSI; RxRssiCount++;
-    } while(TimeSync_msTime()<270);                                                  // until 300ms from the PPS
-    RX_RSSI.Process(RxRssiSum/RxRssiCount);                                    // [-0.5dBm] average noise on channel
+        vTaskDelay(1);
+        uint8_t RxRSSI=TRX.ReadRSSI();                                           // measure the channel noise level
+        RX_Random = (RX_Random<<1) | (RxRSSI&1);
+        RxRssiSum+=RxRSSI; RxRssiCount++;
+      } while(TimeSync_msTime()<270);                                            // until 300ms from the PPS
+      RX_RSSI.Process(RxRssiSum/RxRssiCount);                                    // [-0.5dBm] average noise on channel
+    }
+#endif
 
     TRX.WriteMode(RF_OPMODE_STANDBY);                                         // switch to standy
     vTaskDelay(1);
@@ -279,7 +344,7 @@ extern "C"
       TRX.WriteMode(RF_OPMODE_STANDBY);
       vTaskDelay(1); }
 
-    SetFreqPlan();
+    SetFreqPlanOGN();
 
     TRX.averRSSI=RX_RSSI.getOutput();
 
@@ -307,7 +372,7 @@ extern "C"
     TRX.WriteMode(RF_OPMODE_RECEIVER);                                         // switch to receive mode
     vTaskDelay(1);
 
-    RxRssiSum=0; RxRssiCount=0;                                                // measure the average RSSI for the upper frequency
+    uint32_t RxRssiSum=0; uint16_t RxRssiCount=0;                              // measure the average RSSI for the upper frequency
     do
     { ReceivePacket();                                                         // check for packets being received ?
 #ifdef WITH_RFM69
@@ -349,6 +414,7 @@ extern "C"
     { TRX.setLoRa();                                                           // switch TRX to LoRa
       TRX.FNT_Configure();
       // TRX.setChannel(0);                                                      // configure for FANET
+      TRX.WriteTxPower(Parameters.getTxPower());
       TRX.WriteMode(RF_OPMODE_LORA_RX_CONT);
       vTaskDelay(2);
       for(uint8_t Wait=50; Wait; Wait--)
@@ -389,9 +455,65 @@ extern "C"
     TRX.WriteMode(RF_OPMODE_RECEIVER);                                         // switch to receive mode
 
     XorShift32(RX_Random);
-    TxTime = (RX_Random&0x3F)+1; TxTime*=6;
-
+    TxTime = (RX_Random&0x3F)+1; TxTime*=6;                                    // [ms] (1..64)*6 = 6..384ms
+#ifdef WITH_LORAWAN
+    bool WANtx = 0;                                                            // decide if send Join-Request
+    uint16_t SlotEnd = 1240;
+    if(WANdev.State==0 || WANdev.State==2)
+    { XorShift32(RX_Random); if((RX_Random&0x3F)==0x20) WANtx=1; SlotEnd=1200; }
+    TimeSlot(TxChan, SlotEnd-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
+#else
     TimeSlot(TxChan, 1250-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
+#endif
+
+#ifdef WITH_LORAWAN
+    if(WANtx)
+    { TRX.WriteMode(RF_OPMODE_STANDBY);                    // TRX to standby
+      TRX.setLoRa();                                       // switch to LoRa mode (through sleep)
+      TRX.WriteMode(RF_OPMODE_LORA_STANDBY);               // TRX in standby
+      SetFreqPlanWAN();                                    // WAN frequency plan
+      TRX.WAN_Configure();                                 // LoRa for WAN config.
+      XorShift32(RX_Random);                               // random
+      WANdev.Chan = RX_Random&7;                           // choose random channel
+      TRX.setChannel(WANdev.Chan);                         // set the channel
+      TRX.LoRa_InvertIQ(0); TRX.LoRa_setCRC(1);            // setup for WAN TX
+      TRX.WriteTxPower(Parameters.getTxPower());           // transmit power
+      int RespDelay=0;
+      int TxPktLen=0;
+      if(WANdev.State==0)
+      { uint8_t *TxPacket; int TxPktLen=WANdev.getJoinRequest(&TxPacket); // produce Join-Request packet
+        TRX.LoRa_SendPacket(TxPacket, TxPktLen); RespDelay=5000;          // transmit join-request packet
+      } else if(WANdev.State==2)
+      { const uint8_t *PktData=TxPktData0;
+        if(PktData==0) PktData=TxPktData1;
+        if(PktData)
+        { ((OGN1_Packet *)PktData)->Dewhiten();
+          uint8_t *TxPacket;
+          TxPktLen=WANdev.getDataPacket(&TxPacket, PktData, 20, 1, ((RX_Random>>16)&0xF)==0x8 );
+          TRX.LoRa_SendPacket(TxPacket, TxPktLen); RespDelay=1000; }
+      }
+      if(RespDelay)
+      { vTaskDelay(8);
+        for( uint8_t Wait=100; Wait; Wait--)                 // wait for the end of transmission
+        { vTaskDelay(1);
+          uint8_t Mode=TRX.ReadMode();
+          if(Mode!=RF_OPMODE_LORA_TX) break; }
+        WAN_RespTick=xTaskGetTickCount()+RespDelay;          // when to expect the response: 5sec after the end of Join-Request packet
+        xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+        Format_String(CONS_UART_Write, "LoRaWAN Tx: ");
+        Format_UnsDec(CONS_UART_Write, (unsigned)TxPktLen);
+        Format_String(CONS_UART_Write, "B ");
+        Format_UnsDec(CONS_UART_Write, xTaskGetTickCount());
+        Format_String(CONS_UART_Write, "ms\n");
+        xSemaphoreGive(CONS_Mutex);
+      }
+      TRX.setFSK();                                        // back to FSK
+      SetFreqPlanOGN();                                    // OGN frequency plan
+      TRX.OGN_Configure(0, OGN_SYNC);                      // OGN config
+      SetRxChannel();
+      TRX.WriteMode(RF_OPMODE_RECEIVER);                                         // switch to receive mode
+    }
+#endif
 
     if(TxPkt0) RF_TxFIFO.Read();
     if(TxPkt1) RF_TxFIFO.Read();

@@ -94,6 +94,7 @@ void  AERO_UART_SetBaudrate(int BaudRate);
 void RFM_TransferBlock(uint8_t *Data, uint8_t Len);
 void RFM_RESET(uint8_t On);              // RF module reset
 bool RFM_IRQ_isOn(void);                 // query the IRQ state
+void RFM_Delay(int ms);                  // [ms] idle delay
 
 #ifdef WITH_OLED
 int OLED_DisplayON(uint8_t ON, uint8_t DispIdx=0);                   // when OFF then low-power mode

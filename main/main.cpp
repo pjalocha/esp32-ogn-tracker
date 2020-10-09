@@ -46,12 +46,6 @@ void app_main(void)
     Parameters.setDefault(getUniqueAddress()); // set default parameter values
     if(Parameters.ReadFromNVS()!=ESP_OK)     // try to get parameters from NVS
     { Parameters.WriteToNVS(); }             // if did not work: try to save (default) parameters to NVS
-#ifdef WITH_LORAWAN
-    WANdev.Reset(getUniqueID(), Parameters.AppKey);
-    if(WANdev.ReadFromNVS()!=ESP_OK)
-    { WANdev.WriteToNVS(); }
-    if(memcpy(WANdev.AppKey, Parameters.AppKey, 16)) WANdev.Reset(getUniqueID(), Parameters.AppKey);
-#endif
 
 #ifdef WITH_SPIFFS
     SPIFFS_Register();                       // initialize the file system in the Flash
@@ -67,6 +61,14 @@ void app_main(void)
 //       FlashLog_CopyToSD();                                   // copy all flash log files to the SD card
 // #endif
     }
+#endif
+#ifdef WITH_LORAWAN
+    WANdev.Reset(getUniqueID(), Parameters.AppKey);    // set default LoRaWAN config.
+    if(WANdev.ReadFromNVS()!=ESP_OK)                   // if can't read the LoRaWAN setup from NVS
+    { WANdev.WriteToNVS(); }                           // then store the default
+    // if(memcmp(WANdev.AppKey, Parameters.AppKey, 16))   // if LoRaWAN key different from the one in Parameters
+    // { WANdev.Reset(getUniqueID(), Parameters.AppKey);  // then reset LoRaWAN to this key
+    //   WANdev.WriteToNVS(); }                           // and save LoRaWAN config. to NVS
 #endif
 
     CONS_UART_SetBaudrate(Parameters.CONbaud);
@@ -92,7 +94,7 @@ void app_main(void)
     xTaskCreate(vTaskLOG ,  "LOG",   4096, 0, tskIDLE_PRIORITY+1, 0);
 #endif
 
-    xTaskCreate(vTaskRF,    "RF",    2048, 0, tskIDLE_PRIORITY+4, 0);
+    xTaskCreate(vTaskRF,    "RF",    2048, 0, tskIDLE_PRIORITY+5, 0);
     xTaskCreate(vTaskPROC,  "PROC",  2048, 0, tskIDLE_PRIORITY+3, 0);
 
     xTaskCreate(vTaskGPS,   "GPS",   2048, 0, tskIDLE_PRIORITY+4, 0);
@@ -107,7 +109,7 @@ void app_main(void)
     xTaskCreate(vTaskKNOB,  "KNOB",  2048, 0, tskIDLE_PRIORITY+3, 0);
 #endif
 #ifdef WITH_AERO
-    xTaskCreate(vTaskAERO,  "AERO",  2048, 0, tskIDLE_PRIORITY+4, 0);
+    xTaskCreate(vTaskAERO,  "AERO",  2048, 0, tskIDLE_PRIORITY+3, 0);
 #endif
 #ifdef WITH_WIFI
     xTaskCreate(vTaskWIFI,  "WIFI",  4096, 0, tskIDLE_PRIORITY+2, 0);

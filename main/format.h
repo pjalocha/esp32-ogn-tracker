@@ -33,11 +33,14 @@ uint8_t Format_String(char *Out, const char *String, uint8_t MinLen, uint8_t Max
 uint8_t Format_UnsDec (char *Out, uint32_t Value, uint8_t MinDigits=1, uint8_t DecPoint=0);
 uint8_t Format_SignDec(char *Out,  int32_t Value, uint8_t MinDigits=1, uint8_t DecPoint=0, uint8_t NoPlus=0);
 
-uint8_t Format_Hex( char *Output, uint8_t  Byte );
-uint8_t Format_Hex( char *Output, uint16_t Word );
-uint8_t Format_Hex( char *Output, uint32_t Word );
-uint8_t Format_Hex( char *Output, uint32_t Word, uint8_t Digits);
-uint8_t Format_Hex( char *Output, uint64_t Word );
+uint8_t Format_Hex(char *Output, uint8_t  Byte );
+uint8_t Format_Hex(char *Output, uint16_t Word );
+uint8_t Format_Hex(char *Output, uint32_t Word );
+uint8_t Format_Hex(char *Output, uint32_t Word, uint8_t Digits);
+uint8_t Format_Hex(char *Output, uint64_t Word );
+
+// uint8_t Format_Hex(char *Output, const uint8_t *Bytes, uint8_t Len );
+
 // uint8_t Format_Hex( char *Output, uint64_t Word, uint8_t Digits);
 
 template <class Type>

@@ -47,6 +47,7 @@ class RFM_LoRa_Config
 } ;
 
 const RFM_LoRa_Config RFM_FNTcfg { 0xF1587190 } ; // LoRa seting for FANET
+const RFM_LoRa_Config RFM_WANcfg { 0x34877190 } ; // LoRa WAN setting for TX
 
 class RFM_LoRa_RxPacket
 { public:
@@ -245,6 +246,8 @@ class RFM_TRX
    bool (*DIO0_isOn)(void);                                              // read DIO0 = packet is ready
    // bool (*DIO4_isOn)(void);
    void (*RESET)(uint8_t On);                                            // activate or desactivate the RF chip reset
+
+   bool readIRQ(void) { return (*DIO0_isOn)(); }
 
                                       // the following are in units of the synthesizer with 8 extra bits of precision
    uint32_t BaseFrequency;            // [32MHz/2^19/2^8] base frequency = channel #0
@@ -613,6 +616,11 @@ class RFM_TRX
      RFM_LoRa_Config CFG = RFM_FNTcfg; CFG.CR=CR;
      return LoRa_Configure(CFG, FANET_Packet::MaxBytes); }
 
+   int WAN_Configure(uint8_t CR=1)                   // configure for FANET/LoRa
+   { WriteTxPower(0);
+     RFM_LoRa_Config CFG = RFM_WANcfg; CFG.CR=CR;
+     return LoRa_Configure(CFG, 40); }
+
    void LoRa_setIRQ(uint8_t Mode=0)                  // 0:on RX, 1:on TX, 2: on CAD
    { WriteByte(Mode<<6, REG_DIOMAPPING1); }
 
@@ -662,7 +670,7 @@ class RFM_TRX
      Packet.FreqOfs = (FreqOfs*1718+0x8000)>>16;         //  [10Hz]
      Packet.BitErr  = 0;
      Packet.CodeErr = 0;
-     int Len=LoRa_ReceivePacket(Packet.Byte, Packet.MaxBytes);
+     int Len=LoRa_ReceivePacket(Packet.Byte, Packet.MaxBytes); // read packet data
      // printf("ReceivePacketFNT() => %d %02X %3.1fdB %+ddBm 0x%08X=%+6.3fkHz, %02X%02X%02X%02X\n",
      //       Packet.Len, Stat, 0.25*Packet.SNR, Packet.RSSI, FreqOfs, 0.5*0x1000000/32e9*FreqOfs,
      //       Packet.Byte[0], Packet.Byte[1], Packet.Byte[2], Packet.Byte[3]);

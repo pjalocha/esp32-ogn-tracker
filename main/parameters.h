@@ -518,11 +518,12 @@ class FlashParameters
       Verbose=Mode; return 1; }
 #ifdef WITH_LORAWAN
     if(strcmp(Name, "AppKey")==0)
-    { for( uint8_t Idx=0; Idx<16; Idx++)
+    { for(uint8_t Idx=0; Idx<16; Idx++)
       { uint8_t Byte;
         uint8_t Len=Read_Hex(Byte, Value);
         if(Len!=2) break;
-        AppKey[Idx]=Byte; }
+        AppKey[Idx]=Byte;
+        Value+=2; }
       return 1; }
 #endif
 #ifdef WITH_ENCRYPT
