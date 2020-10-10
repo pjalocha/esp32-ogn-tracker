@@ -597,7 +597,7 @@ class FlashParameters
       Line++; }
     char *NameEnd=Line;                                                         // remember where the parameter name ends
     Line = (char *)SkipBlanks(Line); if((*Line)!='=') return 0;                 // next should be the equal sign
-    char *Value = (char *)SkipBlanks(Line+1); if((*Value)<=' ') return 0;
+    char *Value = (char *)SkipBlanks(Line+1); // if((*Value)<=' ') return 0;
     *NameEnd=0;                                                                 // put NULL character just after the parameter name
     return ReadParam(Name, Value); }
 
