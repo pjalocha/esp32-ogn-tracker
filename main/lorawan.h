@@ -33,7 +33,7 @@ class LoRaWANnode
    uint32_t LastTx;        // [sec] last transmission
    uint32_t RxCount;       // [packets] received from the network
    uint32_t LastRx;        // [sec] when last heard from the network
-   uint8_t  RxSNR;         // SNR on receive
+    int8_t  RxSNR;         // [0.25dB] SNR on receive
     int8_t  RxRSSI;        // [dBm] signal strength
    union
    { uint8_t  Flags;

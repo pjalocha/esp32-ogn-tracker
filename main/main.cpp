@@ -123,7 +123,7 @@ void app_main(void)
 #ifdef WITH_SOUND
     xTaskCreate(vTaskSOUND, "SOUND", 2048, 0, tskIDLE_PRIORITY+3, 0);
 #endif
-    xTaskCreate(vTaskTICK , "TICK",  1024, 0, tskIDLE_PRIORITY+2, 0);
+    xTaskCreate(vTaskTICK , "TICK",  1024, 0, tskIDLE_PRIORITY+3, 0);
     // xTaskCreate(vTaskCTRL,  "CTRL",  1536, 0, tskIDLE_PRIORITY+2, 0);
     vTaskCTRL(0); // run directly the CTRL task, instead of creating a separate one.
 
