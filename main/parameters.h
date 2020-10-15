@@ -208,6 +208,9 @@ class FlashParameters
 
     FreqPlan       =    DEFAULT_FreqPlan; // [0..5]
     PPSdelay       =    DEFAULT_PPSdelay; // [ms]
+#ifdef WITH_LORAWAN
+    for(uint8_t Idx=0; Idx<16; Idx++) AppKey[Idx]=0;
+#endif
 #ifdef WITH_ENCRYPT
     for(uint8_t Idx=0; Idx<4; Idx++) EncryptKey[Idx]=0;
 #endif
