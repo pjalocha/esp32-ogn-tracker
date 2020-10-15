@@ -66,7 +66,7 @@ void app_main(void)
     WANdev.Reset(getUniqueID(), Parameters.AppKey);    // set default LoRaWAN config.
     if(WANdev.ReadFromNVS()!=ESP_OK)                   // if can't read the LoRaWAN setup from NVS
     { WANdev.WriteToNVS(); }                           // then store the default
-    if(WANdev.State<2 && memcmp(WANdev.AppKey, Parameters.AppKey, 16))   // if LoRaWAN key different from the one in Parameters
+    if( /* WANdev.State<2 && */ memcmp(WANdev.AppKey, Parameters.AppKey, 16))   // if LoRaWAN key different from the one in Parameters
     { WANdev.Reset(getUniqueID(), Parameters.AppKey);  // then reset LoRaWAN to this key
       WANdev.WriteToNVS(); }                           // and save LoRaWAN config. to NVS
 #endif
