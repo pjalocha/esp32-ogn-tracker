@@ -4,6 +4,9 @@
 #include <string.h>
 #include <math.h>
 
+#include <vector>
+#include <algorithm>
+
 #include "format.h"
 
 static int APRS2IGC(char *Out, const char *Inp, int GeoidSepar)      // convert APRS positon message into IGC B-record
@@ -40,6 +43,8 @@ static int APRS2IGC(char *Out, const char *Inp, int GeoidSepar)      // convert 
   Len+=5;
   Out[Len]=0; return Len; }
 
+  static bool Earlier(const char *Line1, const char *Line2) { return strcmp(Line1, Line2)<0; }
+
 static int Verbose    =  1;
 static int GeoidSepar = 40;
 
@@ -52,32 +57,39 @@ int main(int argc, char *argv[])
 
   const char *OwnAcft = argv[1]; int OwnAcftLen = strlen(OwnAcft);
   char OutFileName[32]; strcpy(OutFileName, OwnAcft); strcat(OutFileName, ".IGC");
-  OutFile=fopen(OutFileName, "wt");
-  if(OutFile==0) { printf("Cannot open %s for write\n", OutFileName); return 0; }
 
   const char *InpFileName = argv[2];
-
   FILE *InpFile=fopen(InpFileName, "rt");
   if(InpFile==0) { printf("Cannot open %s for read\n", InpFileName); return 0; }
 
+  std::vector<char *> OutLine;
   char InpLine[256];
-  char OutLine[256];
+  // char OutLine[256];
   int InpLines=0;
-  int OutLines=0;
+  // int OutLines=0;
+  char *Out=0;
   for( ; ; )
   { if(fgets(InpLine, 256, InpFile)==0) break;
     char *EOL = strchr(InpLine, '\n'); if(EOL==0) break;
     *EOL = 0;
     InpLines++;
     if(memcmp(InpLine, OwnAcft, OwnAcftLen)) continue;
-    int OutLen=APRS2IGC(OutLine, InpLine, GeoidSepar);
+    if(Out==0) Out = (char *)malloc(60);
+    int OutLen=APRS2IGC(Out, InpLine, GeoidSepar);
     if(OutLen>0)
-    { if(Verbose) printf("%s => %s [%d]\n", InpLine, OutLine, OutLen);
-      fprintf(OutFile, "%s\n", OutLine); OutLines++; }
+    { if(Verbose) printf("%s => %s [%d]\n", InpLine, Out, OutLen);
+      OutLine.push_back(Out); Out=0; }
   }
+  if(Out) { free(Out); Out=0; }
   fclose(InpFile);
   printf("%d lines from %s\n", InpLines, InpFileName);
+
+  std::sort(OutLine.begin(), OutLine.end(), Earlier);
+  OutFile=fopen(OutFileName, "wt");
+  if(OutFile==0) { printf("Cannot open %s for write\n", OutFileName); return 0; }
+  for(int Idx=0; Idx<OutLine.size(); Idx++)
+  { fprintf(OutFile, "%s\n", OutLine[Idx]); }
   fclose(OutFile);
-  printf("%d lines to %s\n", OutLines, OutFileName);
+  printf("%d lines to %s\n", OutLine.size(), OutFileName);
 
   return 0; }
