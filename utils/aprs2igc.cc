@@ -51,7 +51,7 @@ static int GeoidSepar = 40;
 static FILE *OutFile = 0;
 
 int main(int argc, char *argv[])
-{ if(argc<3)
+{ if(argc<2)
   { printf("Usage: %s <own-aircraft-APRS-call> <input-file.aprs>\n", argv[0]);
     return 0; }
 
@@ -59,8 +59,12 @@ int main(int argc, char *argv[])
   char OutFileName[32]; strcpy(OutFileName, OwnAcft); strcat(OutFileName, ".IGC");
 
   const char *InpFileName = argv[2];
-  FILE *InpFile=fopen(InpFileName, "rt");
-  if(InpFile==0) { printf("Cannot open %s for read\n", InpFileName); return 0; }
+  FILE *InpFile;
+  if(InpFileName==0 || strcmp(InpFileName,"-")==0) InpFile=stdin;
+  else
+  { InpFile=fopen(InpFileName, "rt");
+    if(InpFile==0) { printf("Cannot open %s for read\n", InpFileName); return 0; }
+  }
 
   std::vector<char *> OutLine;
   char InpLine[256];
@@ -81,7 +85,7 @@ int main(int argc, char *argv[])
       OutLine.push_back(Out); Out=0; }
   }
   if(Out) { free(Out); Out=0; }
-  fclose(InpFile);
+  if(InpFile!=stdin) fclose(InpFile);
   printf("%d lines from %s\n", InpLines, InpFileName);
 
   std::sort(OutLine.begin(), OutLine.end(), Earlier);
