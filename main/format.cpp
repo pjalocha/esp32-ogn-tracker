@@ -66,6 +66,9 @@ uint8_t Format_String(char *Out, const char *String, uint8_t MinLen, uint8_t Max
 void Format_Hex( void (*Output)(char), uint8_t Byte )
 { (*Output)(HexDigit(Byte>>4)); (*Output)(HexDigit(Byte&0x0F)); }
 
+void Format_HexBytes( void (*Output)(char), const uint8_t *Byte, uint8_t Bytes)
+{ for(uint8_t Idx=0; Idx<Bytes; Idx++) Format_Hex(Output, Byte[Idx]); }
+
 void Format_Hex( void (*Output)(char), uint16_t Word )
 { Format_Hex(Output, (uint8_t)(Word>>8)); Format_Hex(Output, (uint8_t)Word); }
 
@@ -187,6 +190,12 @@ uint8_t Format_SignDec(char *Out, int32_t Value, uint8_t MinDigits, uint8_t DecP
 
 uint8_t Format_Hex( char *Output, uint8_t Byte )
 { (*Output++) = HexDigit(Byte>>4); (*Output++)=HexDigit(Byte&0x0F); return 2; }
+
+uint8_t Format_HexBytes( char *Output, const uint8_t *Byte, uint8_t Bytes)
+{ uint8_t Len=0;
+  for(uint8_t Idx=0; Idx<Bytes; Idx++)
+    Len+=Format_Hex(Output, Byte[Idx]);
+  return Len;  }
 
 uint8_t Format_Hex( char *Output, uint16_t Word )
 { Format_Hex(Output, (uint8_t)(Word>>8)); Format_Hex(Output+2, (uint8_t)Word); return 4; }

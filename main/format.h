@@ -16,7 +16,9 @@ void Format_String( void (*Output)(char), const    char *String, uint8_t MinLen,
 void Format_Hex( void (*Output)(char), uint8_t  Byte );
 void Format_Hex( void (*Output)(char), uint16_t Word );
 void Format_Hex( void (*Output)(char), uint32_t Word );
-void Format_MAC( void (*Output)(char), uint8_t *MAC, uint8_t Len=6);
+void Format_MAC( void (*Output)(char), const uint8_t *MAC, uint8_t Len=6);
+
+void Format_HexBytes( void (*Output)(char), const uint8_t *Byte, uint8_t Bytes);
 
 void Format_UnsDec ( void (*Output)(char), uint16_t Value, uint8_t MinDigits=1, uint8_t DecPoint=0);
 void Format_SignDec( void (*Output)(char),  int16_t Value, uint8_t MinDigits=1, uint8_t DecPoint=0, uint8_t NoPlus=0);
@@ -38,6 +40,8 @@ uint8_t Format_Hex(char *Output, uint16_t Word );
 uint8_t Format_Hex(char *Output, uint32_t Word );
 uint8_t Format_Hex(char *Output, uint32_t Word, uint8_t Digits);
 uint8_t Format_Hex(char *Output, uint64_t Word );
+
+uint8_t Format_HexBytes(char *Output, const uint8_t *Byte, uint8_t Bytes);
 
 // uint8_t Format_Hex(char *Output, const uint8_t *Bytes, uint8_t Len );
 
