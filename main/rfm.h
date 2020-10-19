@@ -16,7 +16,7 @@ class RFM_LoRa_Config
   { uint32_t Word;
     struct
     { uint8_t Spare   :3;
-      uint8_t LowRate :1; // 0..1
+      uint8_t LowRate :1; // 0..1, optimize for low-rate (strips two lowest bits of every symbol)
       uint8_t TxInv   :1; // 0..1, invert on TX
       uint8_t RxInv   :1; // 0..1, invert on RX <- probably inverted logic
       uint8_t IHDR    :1; // 0..1, implicit header (no header on TX)
@@ -602,7 +602,7 @@ class RFM_TRX
      // Format_String(CONS_UART_Write, "\n");
      WriteByte(0xC3,   REG_LORA_DETECT_OPTIMIZE);
      WriteByte(0x0A,   REG_LORA_DETECT_THRESHOLD);
-     WriteByte(0x04,   REG_LORA_MODEM_CONFIG3);     // LNA auto-gain ?
+     WriteByte(0x04 | (CFG.LowRate<<3),   REG_LORA_MODEM_CONFIG3);  // LNA auto-gain and low-rate-optimize
      WriteByte(0xFF,   REG_LORA_SYMBOL_TIMEOUT);    //
      WriteByte(MaxSize,  REG_LORA_PACKET_MAXLEN);   // [bytes]
      WriteByte(0x00,   REG_LORA_RX_ADDR);
