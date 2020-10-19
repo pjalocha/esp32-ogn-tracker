@@ -835,16 +835,20 @@ void OLED_DrawLoRaWAN(u8g2_t *OLED, GPS_Position *GPS) // draw LoRaWAN status pa
                  else Len+=Format_Hex(Line+Len, WANdev.State);
   Line[Len]=0; u8g2_DrawStr(OLED, 0, 24, Line);
 
-  Len =Format_String(Line    , "Up: "); Len+=Format_Hex(Line+Len, (uint16_t)WANdev.UpCount);
-  Len+=Format_String(Line+Len, "  Dn: "); Len+=Format_Hex(Line+Len, (uint16_t)WANdev.DnCount);
-  Line[Len]=0; u8g2_DrawStr(OLED, 0, 36, Line);
+  if(WANdev.State<2)
+  { Len =Format_HexBytes(Line, WANdev.AppKey  , 8); Line[Len]=0; u8g2_DrawStr(OLED, 0, 36, Line);
+    Len =Format_HexBytes(Line, WANdev.AppKey+8, 8); Line[Len]=0; u8g2_DrawStr(OLED, 0, 48, Line); }
+  else
+  { Len =Format_String(Line    , "Up: "); Len+=Format_Hex(Line+Len, (uint16_t)WANdev.UpCount);
+    Len+=Format_String(Line+Len, "  Dn: "); Len+=Format_Hex(Line+Len, (uint16_t)WANdev.DnCount);
+    Line[Len]=0; u8g2_DrawStr(OLED, 0, 36, Line);
 
-  Len =Format_String(Line    , "Rx:");
-  Len+=Format_SignDec(Line+Len, (int16_t)WANdev.RxRSSI, 3);
-  Len+=Format_String(Line+Len, "dBm ");
-  Len+=Format_SignDec(Line+Len, ((int16_t)WANdev.RxSNR*10+2)>>2, 2, 1);
-  Len+=Format_String(Line+Len, "dB");
-  Line[Len]=0; u8g2_DrawStr(OLED, 0, 48, Line);
+    Len =Format_String(Line    , "Rx:");
+    Len+=Format_SignDec(Line+Len, (int16_t)WANdev.RxRSSI, 3);
+    Len+=Format_String(Line+Len, "dBm ");
+    Len+=Format_SignDec(Line+Len, ((int16_t)WANdev.RxSNR*10+2)>>2, 2, 1);
+    Len+=Format_String(Line+Len, "dB");
+    Line[Len]=0; u8g2_DrawStr(OLED, 0, 48, Line); }
 
   // if(WANdev.State>=2) { }
 /*
