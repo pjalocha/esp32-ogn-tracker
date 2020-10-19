@@ -842,5 +842,31 @@ class OGN1_Packet          // Packet structure for the OGN tracker
 
 } ;
 
+/*
+class OGN1_DiffPacket
+{ public:
+   union
+   { uint32_t Word;
+     struct
+     { uint8_t dTime:4;
+       int32_t dLat :6;
+       int32_t dLon :6;
+       int32_t dAlt :5;
+       int32_t dVel :5;
+       int32_t dHead:6;
+     } ;
+   } ;
+
+  public:
+   bool Encode(const OGN1_Packet &Pos, const OGN1_Packet &RefPos)
+   { int8_t dT = RefPos.Position.Time - Pos.Position.Time; if(dT<0) dT+=60;
+     if(dT>15) return 0;
+     int32_t dAlt = RefPos.Position.Altitude - RefPos.Position.Altitude;
+     int32_t dLat = RefPos.Position.Latitude - RefPos.Position.Latitude;
+     int32_t dLon = RefPos.Position.Longitude - RefPos.Position.Longitude;
+     return 1; }
+} ;
+*/
+
 #endif // of __OGN1_H__
 
