@@ -156,6 +156,19 @@ class FlashParameters
 
    static const uint32_t CheckInit = 0x89ABCDEF;
 
+#ifdef WITH_LORAWAN
+   bool hasAppKey(void) const
+   { uint8_t Sum=AppKey[0];
+     for(int Idx=1; Idx<16; Idx++)
+     { if(Sum!=0) break;
+       Sum|=AppKey[Idx]; }
+     return Sum!=0; }
+
+   void clrAppKey(void) { for(int Idx=0; Idx<16; Idx++) AppKey[Idx]=0; }
+   void cpyAppKey(uint8_t *Key) { memcpy(Key, AppKey, 16); }
+   bool sameAppKey(const uint8_t *RefKey) const { return memcmp(AppKey, RefKey, 16)==0; }
+#endif
+
    uint32_t static calcCheckSum(volatile uint32_t *Word, uint32_t Words)                      // calculate check-sum of pointed data
    { uint32_t Check=CheckInit;
      for(uint32_t Idx=0; Idx<Words; Idx++)
@@ -209,7 +222,7 @@ class FlashParameters
     FreqPlan       =    DEFAULT_FreqPlan; // [0..5]
     PPSdelay       =    DEFAULT_PPSdelay; // [ms]
 #ifdef WITH_LORAWAN
-    for(uint8_t Idx=0; Idx<16; Idx++) AppKey[Idx]=0;
+    clrAppKey();
 #endif
 #ifdef WITH_ENCRYPT
     for(uint8_t Idx=0; Idx<4; Idx++) EncryptKey[Idx]=0;
