@@ -191,10 +191,10 @@ uint8_t Format_SignDec(char *Out, int32_t Value, uint8_t MinDigits, uint8_t DecP
 uint8_t Format_Hex( char *Output, uint8_t Byte )
 { (*Output++) = HexDigit(Byte>>4); (*Output++)=HexDigit(Byte&0x0F); return 2; }
 
-uint8_t Format_HexBytes( char *Output, const uint8_t *Byte, uint8_t Bytes)
+uint8_t Format_HexBytes(char *Output, const uint8_t *Byte, uint8_t Bytes)
 { uint8_t Len=0;
   for(uint8_t Idx=0; Idx<Bytes; Idx++)
-    Len+=Format_Hex(Output, Byte[Idx]);
+    Len+=Format_Hex(Output+Len, Byte[Idx]);
   return Len;  }
 
 uint8_t Format_Hex( char *Output, uint16_t Word )
