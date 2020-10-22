@@ -315,7 +315,7 @@ extern "C"
       TRX.WriteMode(RF_OPMODE_RECEIVER);                                         // switch to receive mode
       WANdev.WriteToNVS();                                                       // store new WAN state in flash
       if(RxLen>0)                                                                // if Downlink data received
-      {  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
         Format_String(CONS_UART_Write, "LoRaWAN Msg: ");
         Format_UnsDec(CONS_UART_Write, (uint16_t)RxLen);
         Format_String(CONS_UART_Write, "B");
@@ -492,10 +492,14 @@ extern "C"
       } else if(WANdev.State==2)
       { const uint8_t *PktData=TxPktData0;
         if(PktData==0) PktData=TxPktData1;
-        if(PktData)
-        { ((OGN1_Packet *)PktData)->Dewhiten();
+        if(PktData)                                                   // if there is a packet to transmit
+        { OGN1_Packet *OGN = (OGN1_Packet *)PktData; OGN->Dewhiten();
           uint8_t *TxPacket;
-          TxPktLen=WANdev.getDataPacket(&TxPacket, PktData, 20, 1, ((RX_Random>>16)&0xF)==0x8 );
+          bool Short = !OGN->Header.NonPos && OGN->Header.AddrType==3 && OGN->Header.Address!=getUniqueAddress();
+          if(Short)
+          { TxPktLen=WANdev.getDataPacket(&TxPacket, PktData+4, 16, 1, ((RX_Random>>16)&0xF)==0x8 ); }
+          else
+          { TxPktLen=WANdev.getDataPacket(&TxPacket, PktData, 20, 1, ((RX_Random>>16)&0xF)==0x8 ); }
           TRX.LoRa_SendPacket(TxPacket, TxPktLen); RespDelay=1000; }
       }
       if(RespDelay)
