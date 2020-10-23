@@ -495,7 +495,7 @@ extern "C"
         if(PktData)                                                   // if there is a packet to transmit
         { OGN1_Packet *OGN = (OGN1_Packet *)PktData; OGN->Dewhiten();
           uint8_t *TxPacket;
-          bool Short = !OGN->Header.NonPos && OGN->Header.AddrType==3 && OGN->Header.Address!=getUniqueAddress();
+          bool Short = !OGN->Header.NonPos && OGN->Header.AddrType==3 && OGN->Header.Address==(uint32_t)(getUniqueAddress()&0x00FFFFFF);
           if(Short)
           { TxPktLen=WANdev.getDataPacket(&TxPacket, PktData+4, 16, 1, ((RX_Random>>16)&0xF)==0x8 ); }
           else
