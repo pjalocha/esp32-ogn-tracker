@@ -236,6 +236,16 @@ class Acft_RelPos             // 3-D relative position with speed and turn rate
      Z += Climb;
      T += 2; }
 
+   template <class OGNx_Packet>                         // zero the position, read differentials from an OGN packet
+    void Start(OGNx_Packet &Packet)
+   { T=0; X=0; Y=0; Z=0;
+     Speed = (Packet.DecodeSpeed()+2)/5;                // [0.1m/s] => [0.5m/s]
+     Heading = Packet.getHeadingAngle();                // [360/0x10000deg]
+     Climb = Packet.DecodeClimbRate()/5;                // [0.1m/s] => [0.5m/s]
+     Turn = ((int32_t)Packet.DecodeTurnRate()*1165+32)>>6; // [0.1deg/s] => [360/0x10000deg/s]
+     calcDir();
+     Error = (2*Packet.DecodeDOP()+22)/5; }
+
    template <class OGNx_Packet>                          // read position from an OGN packet, use provided reference
     int32_t Read(OGNx_Packet &Packet, uint8_t RefTime, int32_t RefLat, int32_t RefLon, int32_t RefAlt, uint16_t LatCos=3000, int32_t MaxDist=10000)
    { T = (int16_t)Packet.Position.Time-(int16_t)RefTime;

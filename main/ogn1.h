@@ -568,8 +568,11 @@ class OGN1_Packet          // Packet structure for the OGN tracker
 
      Msg[Len++] = ' '; Msg[Len++] = 'i'; Msg[Len++] = 'd'; Len+=Format_Hex(Msg+Len, ((uint32_t)Position.AcftType<<26) | ((uint32_t)Header.AddrType<<24) | Header.Address);
 
-     Msg[Len++] = ' '; Len+=Format_SignDec(Msg+Len, ((int32_t)DecodeClimbRate()*10079+256)>>9, 3); Msg[Len++] = 'f'; Msg[Len++] = 'p'; Msg[Len++] = 'm';
-     Msg[Len++] = ' '; Len+=Format_SignDec(Msg+Len, DecodeTurnRate()/3, 2, 1); Msg[Len++] = 'r'; Msg[Len++] = 'o'; Msg[Len++] = 't';
+     if(hasClimbRate())
+     { Msg[Len++] = ' '; Len+=Format_SignDec(Msg+Len, ((int32_t)DecodeClimbRate()*10079+256)>>9, 3); Msg[Len++] = 'f'; Msg[Len++] = 'p'; Msg[Len++] = 'm'; }
+
+     if(hasTurnRate())
+     { Msg[Len++] = ' '; Len+=Format_SignDec(Msg+Len, DecodeTurnRate()/3, 2, 1); Msg[Len++] = 'r'; Msg[Len++] = 'o'; Msg[Len++] = 't'; }
 
      if(hasBaro())
      { int32_t Alt = DecodeStdAltitude();
@@ -714,16 +717,16 @@ class OGN1_Packet          // Packet structure for the OGN tracker
    uint16_t getHeadingAngle(void) const
    { return (uint16_t)Position.Heading<<6; }
 
-   void clrTurnRate(void)       { Position.TurnRate=0x80; }
+   void clrTurnRate(void)       { Position.TurnRate=0x80; }               // mark turn-rate as absent
    bool hasTurnRate(void) const { return Position.TurnRate==0x80; }
 
-   void EncodeTurnRate(int16_t Turn)         // [0.1 deg/sec]
+   void EncodeTurnRate(int16_t Turn)                                      // [0.1 deg/sec]
    { Position.TurnRate = EncodeSR2V5(Turn); }
 
    int16_t DecodeTurnRate(void) const
    { return DecodeSR2V5(Position.TurnRate); }
 
-   void clrClimbRate(void)       { Position.ClimbRate=0x100; }
+   void clrClimbRate(void)       { Position.ClimbRate=0x100; }            // mark climb rate as absent
    bool hasClimbRate(void) const { return Position.ClimbRate==0x100; }
 
    void EncodeClimbRate(int16_t Climb)
