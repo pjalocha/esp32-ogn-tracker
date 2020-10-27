@@ -204,10 +204,14 @@ static uint8_t StartRFchip(void)
 #endif
   return Version; }                                          // read the RF chip version and return it
 
+                                                             // some LoRaWAN variables
+#ifdef WITH_LORAWAN
+static uint8_t WAN_BackOff = 60;                             // back-off timer
 static TickType_t WAN_RespTick = 0;                          // when to expect the WAN response
 static RFM_LoRa_RxPacket WAN_RxPacket;                       // packet received from WAN
 // static WAN_Setup()
 // static WAN_Back()
+#endif
 
 extern "C"
  void vTaskRF(void* pvParameters)
@@ -268,10 +272,10 @@ extern "C"
 
 #ifdef WITH_LORAWAN
     bool WANrx=0;
-    int WAN_RespLeft = WAN_RespTick-xTaskGetTickCount();
-    if(WANdev.State==1 || WANdev.State==3)
-    { if(WAN_RespLeft<=5) WANdev.State--;
-      else if(WAN_RespLeft<200) { WANrx=1; }
+    int WAN_RespLeft = WAN_RespTick-xTaskGetTickCount();        // [tick] how much time left before expected response
+    if(WANdev.State==1 || WANdev.State==3)                      // if State indicates we are waiting for the response
+    { if(WAN_RespLeft<=5) WANdev.State--;                       // if time below 5 ticks we have not enough time
+      else if(WAN_RespLeft<200) { WANrx=1; }                    // if more than 200ms then we can't wait this long now
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_UnsDec(CONS_UART_Write, xTaskGetTickCount(), 4, 3);
       Format_String(CONS_UART_Write, "s LoRaWAN Rx: ");
@@ -463,11 +467,13 @@ extern "C"
     XorShift32(RX_Random);
     TxTime = (RX_Random&0x3F)+1; TxTime*=6;                                    // [ms] (1..64)*6 = 6..384ms
 #ifdef WITH_LORAWAN
-    bool WANtx = 0;                                                            // decide if send Join-Request
-    uint16_t SlotEnd = 1240;
-    if(WANdev.State==0 || WANdev.State==2)
-    { XorShift32(RX_Random); if((RX_Random&0x3F)==0x20) WANtx=1; SlotEnd=1200; }
-    TimeSlot(TxChan, SlotEnd-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
+    bool WANtx = 0;
+    if(WAN_BackOff) WAN_BackOff--;
+    else                                                                       // decide to transmit in this slot
+    { uint16_t SlotEnd = 1240;
+      if(WANdev.State==0 || WANdev.State==2)
+      { XorShift32(RX_Random); if((RX_Random&0x1F)==0x10) WANtx=1; SlotEnd=1200; } // random decision 1/32
+      TimeSlot(TxChan, SlotEnd-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime); }
 #else
     TimeSlot(TxChan, 1250-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
 #endif
@@ -489,6 +495,7 @@ extern "C"
       if(WANdev.State==0)
       { uint8_t *TxPacket; TxPktLen=WANdev.getJoinRequest(&TxPacket); // produce Join-Request packet
         TRX.LoRa_SendPacket(TxPacket, TxPktLen); RespDelay=5000;          // transmit join-request packet
+        WAN_BackOff=30;
       } else if(WANdev.State==2)
       { const uint8_t *PktData=TxPktData0;
         if(PktData==0) PktData=TxPktData1;
@@ -500,7 +507,8 @@ extern "C"
           { TxPktLen=WANdev.getDataPacket(&TxPacket, PktData+4, 16, 1, ((RX_Random>>16)&0xF)==0x8 ); }
           else
           { TxPktLen=WANdev.getDataPacket(&TxPacket, PktData, 20, 1, ((RX_Random>>16)&0xF)==0x8 ); }
-          TRX.LoRa_SendPacket(TxPacket, TxPktLen); RespDelay=1000; }
+          TRX.LoRa_SendPacket(TxPacket, TxPktLen); RespDelay=1000;
+          WAN_BackOff=32; }
       }
       if(RespDelay)
       { vTaskDelay(8);
