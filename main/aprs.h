@@ -6,5 +6,5 @@ bool APRS_isConnected(void);
 #ifdef __cplusplus
   extern "C"
 #endif
- void vTaskWIFI(void* pvParameters);
+ void vTaskAPRS(void* pvParameters);
 

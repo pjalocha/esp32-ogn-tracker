@@ -11,7 +11,7 @@
 
 #include "proc.h"
 
-#ifdef WITH_WIFI
+#ifdef WITH_APRS
 
 #define DEBUG_PRINT
 
@@ -205,7 +205,7 @@ int APRS_RxMsg(const char *Msg)
   return 0; }
 
 extern "C"
-void vTaskWIFI(void* pvParameters)
+void vTaskAPRS(void* pvParameters)
 { esp_err_t Err;
   vTaskDelay(1000);
 
@@ -369,5 +369,5 @@ void vTaskWIFI(void* pvParameters)
   }
 }
 
-#endif // WITH_WIFI
+#endif // WITH_APRS
 

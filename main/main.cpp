@@ -28,8 +28,8 @@
 #include "stratux.h"
 #endif
 
-#ifdef WITH_WIFI
-#include "wifi.h"                 // WIFI task
+#ifdef WITH_APRS
+#include "aprs.h"                 // APRS task
 #endif
 
 extern "C"
@@ -113,8 +113,8 @@ void app_main(void)
 #ifdef WITH_AERO
     xTaskCreate(vTaskAERO,  "AERO",  2048, 0, tskIDLE_PRIORITY+3, 0);
 #endif
-#ifdef WITH_WIFI
-    xTaskCreate(vTaskWIFI,  "WIFI",  4096, 0, tskIDLE_PRIORITY+2, 0);
+#ifdef WITH_APRS
+    xTaskCreate(vTaskAPRS,  "APRS",  4096, 0, tskIDLE_PRIORITY+2, 0);
 #endif
 #ifdef WITH_STRATUX
     xTaskCreate(vTaskSTX,  "STX",  4096, 0, tskIDLE_PRIORITY+3, 0);
