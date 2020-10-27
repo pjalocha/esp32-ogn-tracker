@@ -608,8 +608,8 @@ static const esp_spp_mode_t esp_spp_mode = ESP_SPP_MODE_CB;
 static const esp_spp_sec_t  sec_mask     = ESP_SPP_SEC_AUTHENTICATE;
 static const esp_spp_role_t role_slave   = ESP_SPP_ROLE_SLAVE;
 
-static FIFO<char, 512> BT_SPP_TxFIFO;         // buffer for console output to be sent over BT
-static FIFO<uint8_t, 512> BT_SPP_RxFIFO;      // buffer for BT data to be send to the console
+static FIFO<char, 2048> BT_SPP_TxFIFO;        // buffer for console output to be sent over BT
+static FIFO<uint8_t, 256> BT_SPP_RxFIFO;      // buffer for BT data to be send to the console
 static uint32_t        BT_SPP_Conn = 0;       // BT incoming connection handle
 static uint32_t        BT_SPP_TxCong = 0;     // congestion control
 // static TickType_t      BT_SPP_LastTxPush=0;   // [ms]
