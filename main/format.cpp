@@ -108,6 +108,24 @@ void Format_HHMMSS(void (*Output)(char), uint32_t Time)
   uint32_t HHMMSS = 10000*Hour + 100*Min + Sec;
   Format_UnsDec(Output, HHMMSS, 6); }
 
+void Format_Period(void (*Output)(char), int32_t Time)
+{ if(Time<0) { (*Output)('-'); Time=(-Time); }
+        else { (*Output)(' '); }
+  if(Time<60) { (*Output)(' '); Format_UnsDec(Output, (uint32_t)Time, 2); (*Output)('s'); return; }
+  if(Time<3600) { Format_UnsDec(Output, (uint32_t)Time/60, 2); (*Output)('m'); Format_UnsDec(Output, (uint32_t)Time%60, 2); return; }
+  if(Time<86400) { Format_UnsDec(Output, (uint32_t)Time/3600, 2); (*Output)('h'); Format_UnsDec(Output, ((uint32_t)Time%3600)/60, 2); return; }
+  Format_UnsDec(Output, (uint32_t)Time/86400, 2); (*Output)('d'); Format_UnsDec(Output, ((uint32_t)Time%86400)/3600, 2); }
+
+uint8_t Format_Period(char *Out, int32_t Time)
+{ uint8_t Len=0;
+  if(Time<0) { Out[Len++]='-'; Time=(-Time); }
+        else { Out[Len++]=' '; }
+  if(Time<60) { Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, (uint32_t)Time, 2); Out[Len++]='s'; return Len; }
+  if(Time<3600) { Len+=Format_UnsDec(Out+Len, (uint32_t)Time/60, 2); Out[Len++]='m'; Len+=Format_UnsDec(Out+Len, (uint32_t)Time%60, 2); return Len; }
+  if(Time<86400) { Len+=Format_UnsDec(Out+Len, (uint32_t)Time/3600, 2); Out[Len++]='h'; Len+=Format_UnsDec(Out+Len, ((uint32_t)Time%3600)/60, 2); return Len; }
+  Len+=Format_UnsDec(Out+Len, (uint32_t)Time/86400, 2); Out[Len++]='d'; Len+=Format_UnsDec(Out+Len, ((uint32_t)Time%86400)/3600, 2);
+  return Len; }
+
 void Format_UnsDec( void (*Output)(char), uint16_t Value, uint8_t MinDigits, uint8_t DecPoint)
 { uint16_t Base; uint8_t Pos;
   for( Pos=5, Base=10000; Base; Base/=10, Pos--)

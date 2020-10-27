@@ -57,6 +57,8 @@ template <class Type>
 uint8_t Format_HHcMMcSS(char *Out, uint32_t Time);
 uint8_t Format_HHMMSS(char *Out, uint32_t Time);
 void    Format_HHMMSS(void (*Output)(char), uint32_t Time);
+uint8_t Format_Period(char *Out, int32_t Time);
+void    Format_Period(void (*Output)(char), int32_t Time);
 
 uint8_t Format_Latitude (char *Out, int32_t Lat); // [1/600000deg] =>  DDMM.MMMMs
 uint8_t Format_Longitude(char *Out, int32_t Lon); // [1/600000deg] => DDDMM.MMMMs
