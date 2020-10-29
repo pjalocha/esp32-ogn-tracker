@@ -10,13 +10,12 @@
 #include "fifo.h"
 #include "socket.h"
 #include "proc.h"
+#include "wifi.h"
 #include "stratux.h"
 
 #define DEBUG_PRINT
 
 #ifdef WITH_STRATUX
-
-#include "wifi.h"
 
 // ==============================================================================================
 

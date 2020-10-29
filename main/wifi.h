@@ -22,6 +22,7 @@ bool WIFI_isConnected(void);
 esp_err_t WIFI_Init(void);
 esp_err_t WIFI_setPowerSave(bool ON);
 esp_err_t WIFI_Start(void);
+esp_err_t WIFI_StartAP(const char *SSID, const char *Pass=0, int MaxConnecions=8);
 esp_err_t WIFI_Stop(void);
 esp_err_t WIFI_setTxPower(int8_t TxPwr=40);
 esp_err_t WIFI_Connect(wifi_ap_record_t *AP, const char *Pass, int8_t MinSig=(-90));

@@ -28,6 +28,10 @@
 #include "stratux.h"
 #endif
 
+#ifdef WITH_AP
+#include "ap.h"
+#endif
+
 #ifdef WITH_APRS
 #include "aprs.h"                 // APRS task
 #endif
@@ -89,43 +93,46 @@ void app_main(void)
 
 #ifdef WITH_SDLOG
     Log_Mutex = xSemaphoreCreateMutex();
-    xTaskCreate(vTaskSDLOG, "SDLOG", 4096, 0, tskIDLE_PRIORITY+1, 0);
+    xTaskCreate(vTaskSDLOG, "SDLOG", 4000, 0, tskIDLE_PRIORITY+1, 0);
 #endif
 
 #ifdef WITH_LOG
-    xTaskCreate(vTaskLOG ,  "LOG",   4096, 0, tskIDLE_PRIORITY+1, 0);
+    xTaskCreate(vTaskLOG ,  "LOG",   5000, 0, tskIDLE_PRIORITY+1, 0);
 #endif
 
-    xTaskCreate(vTaskRF,    "RF",    2048, 0, tskIDLE_PRIORITY+5, 0);
-    xTaskCreate(vTaskPROC,  "PROC",  2048, 0, tskIDLE_PRIORITY+3, 0);
+    xTaskCreate(vTaskRF,    "RF",    2000, 0, tskIDLE_PRIORITY+5, 0);
+    xTaskCreate(vTaskPROC,  "PROC",  2000, 0, tskIDLE_PRIORITY+3, 0);
 
-    xTaskCreate(vTaskGPS,   "GPS",   2048, 0, tskIDLE_PRIORITY+4, 0);
+    xTaskCreate(vTaskGPS,   "GPS",   2000, 0, tskIDLE_PRIORITY+4, 0);
 #if defined(WITH_BMP180) || defined(WITH_BMP280) || defined(WITH_BME280) || defined(WITH_MS5607) || defined(WITH_MS5611)
-    xTaskCreate(vTaskSENS,  "SENS",  2048, 0, tskIDLE_PRIORITY+4, 0);
+    xTaskCreate(vTaskSENS,  "SENS",  2000, 0, tskIDLE_PRIORITY+4, 0);
 #endif
 #ifdef WITH_BMX055
-    xTaskCreate(vTaskIMU,   "IMU",   2048, 0, tskIDLE_PRIORITY+4, 0);
+    xTaskCreate(vTaskIMU,   "IMU",   2000, 0, tskIDLE_PRIORITY+4, 0);
 #endif
 
 #ifdef WITH_KNOB
-    xTaskCreate(vTaskKNOB,  "KNOB",  2048, 0, tskIDLE_PRIORITY+3, 0);
+    xTaskCreate(vTaskKNOB,  "KNOB",  2000, 0, tskIDLE_PRIORITY+3, 0);
 #endif
 #ifdef WITH_AERO
-    xTaskCreate(vTaskAERO,  "AERO",  2048, 0, tskIDLE_PRIORITY+3, 0);
+    xTaskCreate(vTaskAERO,  "AERO",  2000, 0, tskIDLE_PRIORITY+3, 0);
 #endif
 #ifdef WITH_APRS
-    xTaskCreate(vTaskAPRS,  "APRS",  4096, 0, tskIDLE_PRIORITY+2, 0);
+    xTaskCreate(vTaskAPRS,  "APRS",  4000, 0, tskIDLE_PRIORITY+2, 0);
 #endif
 #ifdef WITH_STRATUX
-    xTaskCreate(vTaskSTX,  "STX",  4096, 0, tskIDLE_PRIORITY+3, 0);
+    xTaskCreate(vTaskSTX,  "STX",  4000, 0, tskIDLE_PRIORITY+3, 0);
+#endif
+#ifdef WITH_AP
+    xTaskCreate(vTaskAP,  "AP",  4000, 0, tskIDLE_PRIORITY+3, 0);
 #endif
 #if defined(WITH_OLED) || defined(WITH_U8G2_OLED) || defined(WITH_ST7789) || defined(WITH_ILI9341)
-    xTaskCreate(vTaskDISP,  "DISP",  2048, 0, tskIDLE_PRIORITY+2, 0);
+    xTaskCreate(vTaskDISP,  "DISP",  3000, 0, tskIDLE_PRIORITY+2, 0);
 #endif
 #ifdef WITH_SOUND
-    xTaskCreate(vTaskSOUND, "SOUND", 2048, 0, tskIDLE_PRIORITY+3, 0);
+    xTaskCreate(vTaskSOUND, "SOUND", 2000, 0, tskIDLE_PRIORITY+3, 0);
 #endif
-    xTaskCreate(vTaskTICK , "TICK",  1024, 0, tskIDLE_PRIORITY+3, 0);
+    xTaskCreate(vTaskTICK , "TICK",  1000, 0, tskIDLE_PRIORITY+3, 0);
     // xTaskCreate(vTaskCTRL,  "CTRL",  1536, 0, tskIDLE_PRIORITY+2, 0);
     vTaskCTRL(0); // run directly the CTRL task, instead of creating a separate one.
 

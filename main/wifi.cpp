@@ -65,6 +65,19 @@ esp_err_t WIFI_Start(void)
   Err = esp_wifi_start();
   return Err; }
 
+esp_err_t WIFI_StartAP(const char *SSID, const char *Pass, int MaxConnections)
+{ esp_err_t Err;
+  WIFI_Config.ap.ssid_len = strlen(SSID);
+  strcpy((char *)WIFI_Config.ap.ssid, SSID);
+  if(Pass) strcpy((char *)WIFI_Config.ap.password, Pass);
+      else WIFI_Config.ap.password[0]=0;
+  WIFI_Config.ap.max_connection = MaxConnections;
+  WIFI_Config.ap.authmode = (Pass && Pass[0]) ? WIFI_AUTH_WPA_WPA2_PSK:WIFI_AUTH_OPEN;
+  Err = esp_wifi_set_config(ESP_IF_WIFI_AP, &WIFI_Config); if(Err!=ESP_OK) return Err;
+  Err = esp_wifi_set_mode(WIFI_MODE_AP); if(Err!=ESP_OK) return Err;
+  Err = esp_wifi_start();
+  return Err; }
+
 esp_err_t WIFI_Stop(void)
 { return esp_wifi_stop(); }
 

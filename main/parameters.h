@@ -108,11 +108,19 @@ class FlashParameters
    // char  BTpin[16];
 #endif
 
+#ifdef WITH_AP
+   char APname[32];
+   char APpass[32];
+uint16_t APport;
+  int8_t APminSig;
+  int8_t APtxPwr;
+#endif
+
 #ifdef WITH_STRATUX
    char StratuxWIFI[32];
    char StratuxPass[32];
    char StratuxHost[32];
- uint16_t StratuxPort;
+uint16_t StratuxPort;
   int8_t StratuxMinSig;
   int8_t StratuxTxPwr;
 #endif
@@ -239,6 +247,13 @@ class FlashParameters
 // #endif
    // strcpy(BTpin, "1234");
 #endif
+#ifdef WITH_AP
+   getAprsCall(APname);
+   APpass[0]=0;
+   APport  = 30000;
+   APminSig = -70; // [dBm]
+   APtxPwr = 40; // [0.25dBm]
+#endif
 #ifdef WITH_STRATUX
    strcpy(StratuxWIFI, "stratux");
    StratuxPass[0] = 0;
@@ -277,8 +292,9 @@ class FlashParameters
     if(Err!=ESP_OK) return Err;
     size_t Size=0;
     Err = nvs_get_blob(Handle, Name,    0, &Size);                  // get the Size of the blob in the Flash
-    if( (Err==ESP_OK) && (Size<=sizeof(FlashParameters)) )
-      Err = nvs_get_blob(Handle, Name, this, &Size);                // read the Blob from the Flash
+    if( (Err==ESP_OK) && (Size==sizeof(FlashParameters)) )
+    { Err = nvs_get_blob(Handle, Name, this, &Size); }              // read the Blob from the Flash
+    else Err=ESP_ERR_NVS_NOT_FOUND;
     nvs_close(Handle);
     return Err; }
 #endif // WITH_ESP32
@@ -571,6 +587,19 @@ class FlashParameters
 #ifdef WITH_BT_SPP
     if(strcmp(Name, "BTname")==0) return Read_String(BTname, Value, 16)<=0;
 #endif
+#ifdef WITH_AP
+    if(strcmp(Name, "APname")==0) return Read_String(APname, Value, 16)<=0;
+    if(strcmp(Name, "APpass")==0) return Read_String(APpass, Value, 16)<=0;
+    if(strcmp(Name, "APport")==0)
+    { int32_t Port; if(Read_Int(Port, Value)<=0) return 0;
+      if(Port<=0 || Port>0xFFFF) Port=30011; APport=Port; return 1; }
+    if(strcmp(Name, "APtxPwr")==0)
+    { int32_t TxPwr; if(Read_Float1(TxPwr, Value)<=0) return 0;
+      TxPwr=(TxPwr*4+5)/10;
+      if(TxPwr<=0) TxPwr=0;
+      if(TxPwr>=80) TxPwr=80;
+      APtxPwr=TxPwr; return 1; }
+#endif
 #ifdef WITH_STRATUX
     if(strcmp(Name, "StratuxWIFI")==0) return Read_String(StratuxWIFI, Value, 32)<=0;
     if(strcmp(Name, "StratuxPass")==0) return Read_String(StratuxPass, Value, 32)<=0;
@@ -701,6 +730,12 @@ class FlashParameters
 #ifdef WITH_BT_SPP
     strcpy(Line, "BTname         = "); strcat(Line, BTname); strcat(Line, "; #  [char]\n"); if(fputs(Line, File)==EOF) return EOF;
 #endif
+#ifdef WITH_AP
+    strcpy(Line, "APname         = "); strcat(Line, APname); strcat(Line, "; #  [char]\n"); if(fputs(Line, File)==EOF) return EOF;
+    strcpy(Line, "APpass         = "); strcat(Line, APpass); strcat(Line, "; #  [char]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_UnsDec (Line, "APport"  ,  (uint32_t)APport ); strcat(Line, " #  [port]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_Float1(Line, "APtxPwr"  ,  (int32_t)10*APtxPwr/4); strcat(Line, " #  [ dBm]\n"); if(fputs(Line, File)==EOF) return EOF;
+#endif
 #ifdef WITH_STRATUX
     strcpy(Line, "StratuxWIFI    = "); strcat(Line, StratuxWIFI); strcat(Line, "; #  [char]\n"); if(fputs(Line, File)==EOF) return EOF;
     strcpy(Line, "StratuxPass    = "); strcat(Line, StratuxPass); strcat(Line, "; #  [char]\n"); if(fputs(Line, File)==EOF) return EOF;
@@ -757,6 +792,12 @@ class FlashParameters
 #endif
 #ifdef WITH_BT_SPP
     strcpy(Line, "BTname         = "); strcat(Line, BTname); strcat(Line, "; #  [char]\n"); Format_String(Output, Line);
+#endif
+#ifdef WITH_AP
+    strcpy(Line, "APname         = "); strcat(Line, APname); strcat(Line, "; #  [char]\n"); Format_String(Output, Line);
+    strcpy(Line, "APpass         = "); strcat(Line, APpass); strcat(Line, "; #  [char]\n"); Format_String(Output, Line);
+    Write_UnsDec (Line, "APport", (uint32_t)APport    ); strcat(Line, " #  [port]\n"); Format_String(Output, Line);
+    Write_Float1 (Line, "APtxPwr", (int32_t)10*APtxPwr/4); strcat(Line, " #  [ dBm]\n"); Format_String(Output, Line);
 #endif
     for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
     { Write_String (Line, OGN_Packet::InfoParmName(Idx), InfoParmValue(Idx)); strcat(Line, "; #  [char]\n"); Format_String(Output, Line); }
