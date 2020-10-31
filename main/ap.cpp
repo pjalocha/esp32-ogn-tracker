@@ -19,28 +19,106 @@
 
 // ============================================================================================================
 
-static void RespChunk(httpd_req_t *Req, const char *Resp, int Len) { httpd_resp_send_chunk(Req, Resp, Len); }
-static void RespChunk(httpd_req_t *Req, const char *Resp) { httpd_resp_send_chunk(Req, Resp, strlen(Resp)); }
-static void RespEnd(httpd_req_t *Req) { httpd_resp_send_chunk(Req, 0, 0); };
+static void ParmForm(httpd_req_t *Req)  // produce HTML form for parameters input
+{ char Line[16]; int Len;
 
-static esp_err_t status_get_handler(httpd_req_t *Req)
-{ char Line[64];
-  RespChunk(Req, "\
-<!DOCTYPE html>\r\n\
-<html>\r\n\
-<title>OGN-Tracker status</title>\r\n\
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Parms\">\n");
+
+  httpd_resp_sendstr_chunk(Req, "<br /><label>Address:</label><input type=\"text\" name=\"Address\" size=\"6\" value=\"");
+  strcpy(Line, "0xXXXXXX\">\n"); Format_Hex(Line+2, (uint8_t)(Parameters.Address>>16)); Format_Hex(Line+4, (uint16_t)Parameters.Address);
+  httpd_resp_sendstr_chunk(Req, Line);
+
+  httpd_resp_sendstr_chunk(Req, "<br /><label>Pilot:</label><input type=\"text\" name=\"Pilot\" size=\"10\" value=\"");
+  if(Parameters.Pilot[0]) httpd_resp_sendstr_chunk(Req, Parameters.Pilot);
+  httpd_resp_sendstr_chunk(Req, "\">\n");
+
+  httpd_resp_sendstr_chunk(Req, "<br /><label>AP SSID:</label><input type=\"text\" name=\"APname\" size=\"10\" value=\"");
+  if(Parameters.APname[0]) httpd_resp_sendstr_chunk(Req, Parameters.APname);
+  httpd_resp_sendstr_chunk(Req, "\">\n");
+
+  httpd_resp_sendstr_chunk(Req, "<br /><label>AP pass:</label><input type=\"text\" name=\"APpass\" size=\"10\" value=\"");
+  if(Parameters.APpass[0]) httpd_resp_sendstr_chunk(Req, Parameters.APpass);
+  httpd_resp_sendstr_chunk(Req, "\">\n");
+
+  httpd_resp_sendstr_chunk(Req, "<br /><label>AP port:</label><input type=\"text\" name=\"APport\" size=\"10\" value=\"");
+  Len=Format_UnsDec(Line, Parameters.APport);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\">\n");
+
+  httpd_resp_sendstr_chunk(Req, "<br /><label>Verbose:</label><input type=\"text\" name=\"Verbose\" size=\"6\" value=\"");
+  Len=Format_UnsDec(Line, Parameters.Verbose);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\">\n");
+
+  httpd_resp_sendstr_chunk(Req, "<br /><label>PageMask:</label><input type=\"text\" name=\"PageMask\" size=\"10\" value=\"");
+  strcpy(Line, "0xXXXXXXXX\">\n"); Format_Hex(Line+2, Parameters.PageMask);
+  httpd_resp_sendstr_chunk(Req, Line);
+
+  httpd_resp_sendstr_chunk(Req, "<br /><input type=\"submit\" value=\"Save\">\n</form>\n");
+}
+
+static esp_err_t parm_get_handler(httpd_req_t *Req)
+{ // char Line[64];
+  uint16_t URLlen=httpd_req_get_url_query_len(Req);
+  if(URLlen)
+  { char *URL = (char *)malloc(URLlen+1);
+    httpd_req_get_url_query_str(Req, URL, URLlen+1);
+#ifdef DEBUG_PRINT
+    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    Format_String(CONS_UART_Write, "parm_get_handler() => [");
+    Format_SignDec(CONS_UART_Write, URLlen);
+    Format_String(CONS_UART_Write, "] ");
+    Format_String(CONS_UART_Write, URL);
+    Format_String(CONS_UART_Write, "\n");
+    xSemaphoreGive(CONS_Mutex);
+#endif
+    char *Line=URL;
+    for( ; ; )
+    { Parameters.ReadLine(Line);
+      Line = strchr(Line, '&'); if(Line==0) break;
+      Line++; }
+    free(URL); }
+  httpd_resp_sendstr_chunk(Req, "\
+<!DOCTYPE html>\n\
+<html><body>\n\
+<title>OGN-Tracker status</title>\n\
 ");
-  int Len=Parameters.Print(Line);
-  RespChunk(Req, Line, Len);
-  RespChunk(Req, "</html>\r\n");
-  RespEnd(Req);
+  // int Len=Parameters.Print(Line);
+  // httpd_resp_send_chunk(Req, Line, Len);
+  ParmForm(Req);
+  httpd_resp_sendstr_chunk(Req, "</body></html>\n");
+  httpd_resp_sendstr_chunk(Req, 0);
   return ESP_OK; }
 
-static const httpd_uri_t HTTPstatus =
-{ .uri       = "/status.html",
+/*
+static esp_err_t parm_get_handler(httpd_req_t *Req)
+{ char Line[32];
+  // int ContLen=Req->content_len;
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "parm_get_handler() => [");
+  // Format_SignDec(CONS_UART_Write, ContLen, 1, 0, 1);
+  Format_String(CONS_UART_Write, "] ");
+  // for( ; ; )
+  // { int Ret = httpd_req_recv(Req, Line, 31); if(Len<=0) break;
+  // }
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+  return ESP_OK; }
+*/
+
+static const httpd_uri_t HTTPparm =
+{ .uri       = "/parm.html",
   .method    = HTTP_GET,
-  .handler   = status_get_handler,
+  .handler   = parm_get_handler,
   .user_ctx  = 0 };
+
+/*
+static const httpd_uri_t HTTPsave =
+{ .uri       = "/parm.html",
+  .method    = HTTP_GET,
+  .handler   = parm_get_handler,
+  .user_ctx  = 0 };
+*/
 
 static httpd_handle_t HTTPserver = 0;
 
@@ -50,7 +128,8 @@ static esp_err_t HTTP_Start(int MaxSockets=4, int Port=80)
   Config.task_priority    = tskIDLE_PRIORITY+3;
   Config.max_open_sockets = MaxSockets;
   esp_err_t Err=httpd_start(&HTTPserver, &Config); if(Err!=ESP_OK) return Err;
-  httpd_register_uri_handler(HTTPserver, &HTTPstatus);
+  httpd_register_uri_handler(HTTPserver, &HTTPparm);
+  // httpd_register_uri_handler(HTTPserver, &HTTPsave);
   return Err; }
 
 static void HTTP_Stop(void)

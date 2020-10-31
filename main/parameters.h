@@ -250,7 +250,7 @@ uint16_t StratuxPort;
 #ifdef WITH_AP
    getAprsCall(APname);
    APpass[0]=0;
-   APport  = 30000;
+   APport  = 2000;
    APminSig = -70; // [dBm]
    APtxPwr = 40; // [0.25dBm]
 #endif
@@ -643,8 +643,10 @@ uint16_t StratuxPort;
     char *NameEnd=Line;                                                         // remember where the parameter name ends
     Line = (char *)SkipBlanks(Line); if((*Line)!='=') return 0;                 // next should be the equal sign
     char *Value = (char *)SkipBlanks(Line+1); // if((*Value)<=' ') return 0;
-    *NameEnd=0;                                                                 // put NULL character just after the parameter name
-    return ReadParam(Name, Value); }
+    char ch = *NameEnd; *NameEnd=0;                                             // put NULL character just after the parameter name
+    bool OK = ReadParam(Name, Value);
+    *NameEnd = ch;                                                              // restore the erased character
+    return OK; }
 
   int ReadFromFile(FILE *File)
   { char Line[80];                                                              // line buffer

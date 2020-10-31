@@ -305,9 +305,9 @@ GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    Foll
 #define LCD_PIN_CLK  GPIO_NUM_13   // SCL
 #endif // TBEAM
 #ifdef WITH_TBEAM_V10              // new T-Beam
-#define LCD_PIN_MOSI GPIO_NUM_14 // 13   // SDA
+#define LCD_PIN_MOSI GPIO_NUM_14   // 13   // SDA
 #define LCD_PIN_MISO GPIO_NUM_NC   // MISO not connected
-#define LCD_PIN_CLK  GPIO_NUM_13	 // 2   // SCL
+#define LCD_PIN_CLK  GPIO_NUM_13   // 2   // SCL
 // #define LCD_PIN_MOSI GPIO_NUM_2 // 13   // SDA
 // #define LCD_PIN_MISO GPIO_NUM_NC   // MISO not connected
 // #define LCD_PIN_CLK  GPIO_NUM_13 // 14   // SCL
