@@ -19,43 +19,74 @@
 
 // ============================================================================================================
 
-static void ParmForm(httpd_req_t *Req)  // produce HTML form for parameters input
-{ char Line[16]; int Len;
+static void SelectList(httpd_req_t *Req, const char *Name, const char **List, int Size, int Sel=0)
+{ char Line[8];
+  httpd_resp_sendstr_chunk(Req, "<select name=\"");
+  httpd_resp_sendstr_chunk(Req, Name);
+  httpd_resp_sendstr_chunk(Req, "\">\n");
+  for(int Idx=0; Idx<Size; Idx++)
+  { httpd_resp_sendstr_chunk(Req, "<option value=\"");
+    int Len=Format_UnsDec(Line, (uint16_t)Idx);
+    httpd_resp_send_chunk(Req, Line, Len);
+    httpd_resp_sendstr_chunk(Req, "\"");
+    if(Idx==Sel) httpd_resp_sendstr_chunk(Req, " selected>");
+            else httpd_resp_sendstr_chunk(Req, ">");
+    httpd_resp_sendstr_chunk(Req, List[Idx]);
+    httpd_resp_sendstr_chunk(Req, "</option>\n");
+  }
+  httpd_resp_sendstr_chunk(Req, "</select>\n"); }
 
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Parms\">\n");
+static void ParmForm_Acft(httpd_req_t *Req)  // produce HTML form for aircraft parameters
+{ char Line[16];
 
-  httpd_resp_sendstr_chunk(Req, "<br /><label>Address:</label><input type=\"text\" name=\"Address\" size=\"6\" value=\"");
-  strcpy(Line, "0xXXXXXX\">\n"); Format_Hex(Line+2, (uint8_t)(Parameters.Address>>16)); Format_Hex(Line+4, (uint16_t)Parameters.Address);
-  httpd_resp_sendstr_chunk(Req, Line);
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Acft\"><table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Aircraft</th><th><input type=\"submit\" value=\"Apply\"></th></tr>");
 
-  httpd_resp_sendstr_chunk(Req, "<br /><label>Pilot:</label><input type=\"text\" name=\"Pilot\" size=\"10\" value=\"");
+  httpd_resp_sendstr_chunk(Req, "<tr><th>Address</th><td><input type=\"text\" name=\"Address\" size=\"10\" value=\"0x");
+  Format_Hex(Line, (uint8_t)(Parameters.Address>>16)); Format_Hex(Line+2, (uint16_t)Parameters.Address);
+  httpd_resp_send_chunk(Req, Line, 6);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  const char *AddrTypeTable[4] = { "Random", "ICAO", "FLARM", "OGN" } ;
+  httpd_resp_sendstr_chunk(Req, "<tr><th>Addr-Type</th><th>\n");
+  SelectList(Req, "AddrType", AddrTypeTable, 4, Parameters.AddrType);
+  httpd_resp_sendstr_chunk(Req, "</th></tr>\n");
+
+  const char *AcftTypeTable[16] = { "Unknown", "(moto)Glider", "Tow-plane", "Helicopter", "Parachute", "Drop-plane", "Hang-glider", "Para-glider",
+                                    "Powered-aircraft", "Jet-aircraft", "UFO", "Balloon", "Airship", "UAV", "Ground support", "Static object" } ;
+  httpd_resp_sendstr_chunk(Req, "<tr><th>Acft-Type</th><th>\n");
+  SelectList(Req, "AcftType", AcftTypeTable, 16, Parameters.AcftType);
+  httpd_resp_sendstr_chunk(Req, "</th></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><th>Pilot</th><td><input type=\"text\" name=\"Pilot\" size=\"10\" value=\"");
   if(Parameters.Pilot[0]) httpd_resp_sendstr_chunk(Req, Parameters.Pilot);
-  httpd_resp_sendstr_chunk(Req, "\">\n");
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<br /><label>AP SSID:</label><input type=\"text\" name=\"APname\" size=\"10\" value=\"");
+  httpd_resp_sendstr_chunk(Req, "<tr><th>Crew</th><td><input type=\"text\" name=\"Crew\" size=\"10\" value=\"");
+  if(Parameters.Crew[0]) httpd_resp_sendstr_chunk(Req, Parameters.Crew);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
+
+static void ParmForm_AP(httpd_req_t *Req)
+{ char Line[16]; int Len;
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"AP\"><table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Aceess Point</th><th><input type=\"submit\" value=\"Apply\"></th></tr>");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><th>SSID:</th><td><input type=\"text\" name=\"APname\" size=\"10\" value=\"");
   if(Parameters.APname[0]) httpd_resp_sendstr_chunk(Req, Parameters.APname);
-  httpd_resp_sendstr_chunk(Req, "\">\n");
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<br /><label>AP pass:</label><input type=\"text\" name=\"APpass\" size=\"10\" value=\"");
+  httpd_resp_sendstr_chunk(Req, "<tr><th>Password:</th><td><input type=\"text\" name=\"APpass\" size=\"10\" value=\"");
   if(Parameters.APpass[0]) httpd_resp_sendstr_chunk(Req, Parameters.APpass);
-  httpd_resp_sendstr_chunk(Req, "\">\n");
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<br /><label>AP port:</label><input type=\"text\" name=\"APport\" size=\"10\" value=\"");
+  httpd_resp_sendstr_chunk(Req, "<tr><th><label>Data port:</th><td><input type=\"text\" name=\"APport\" size=\"10\" value=\"");
   Len=Format_UnsDec(Line, Parameters.APport);
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\">\n");
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<br /><label>Verbose:</label><input type=\"text\" name=\"Verbose\" size=\"6\" value=\"");
-  Len=Format_UnsDec(Line, Parameters.Verbose);
-  httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\">\n");
-
-  httpd_resp_sendstr_chunk(Req, "<br /><label>PageMask:</label><input type=\"text\" name=\"PageMask\" size=\"10\" value=\"");
-  strcpy(Line, "0xXXXXXXXX\">\n"); Format_Hex(Line+2, Parameters.PageMask);
-  httpd_resp_sendstr_chunk(Req, Line);
-
-  httpd_resp_sendstr_chunk(Req, "<br /><input type=\"submit\" value=\"Save\">\n</form>\n");
-}
+  httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
 
 static esp_err_t parm_get_handler(httpd_req_t *Req)
 { // char Line[64];
@@ -85,7 +116,8 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
 ");
   // int Len=Parameters.Print(Line);
   // httpd_resp_send_chunk(Req, Line, Len);
-  ParmForm(Req);
+  ParmForm_Acft(Req);
+  ParmForm_AP(Req);
   httpd_resp_sendstr_chunk(Req, "</body></html>\n");
   httpd_resp_sendstr_chunk(Req, 0);
   return ESP_OK; }
