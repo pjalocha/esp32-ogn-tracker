@@ -88,7 +88,7 @@ static void ParmForm_Acft(httpd_req_t *Req)  // produce HTML form for aircraft p
   httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
 
   const char *AcftTypeTable[16] = { "Unknown", "(moto)Glider", "Tow-plane", "Helicopter", "Parachute", "Drop-plane", "Hang-glider", "Para-glider",
-                                    "Powered-aircraft", "Jet-aircraft", "UFO", "Balloon", "Airship", "UAV", "Ground support", "Static object" } ;
+                                    "Powered-aircraft", "Jet-aircraft", "UFO", "Balloon", "Airship", "UAV/drone", "Ground support", "Static object" } ;
   httpd_resp_sendstr_chunk(Req, "<tr><td>Acft-Type</td><td>\n");
   SelectList(Req, "AcftType", AcftTypeTable, 16, Parameters.AcftType);
   httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
@@ -160,7 +160,7 @@ static void ParmForm_AP(httpd_req_t *Req) // Wi-Fi access point parameters { cha
   httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
 
 static esp_err_t parm_get_handler(httpd_req_t *Req)
-{ // char Line[64];
+{ char Line[32]; int Len;
   uint16_t URLlen=httpd_req_get_url_query_len(Req);
   if(URLlen)
   { char *URL = (char *)malloc(URLlen+1);
@@ -183,10 +183,16 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
     Parameters.WriteToNVS(); }
   httpd_resp_sendstr_chunk(Req, "\
 <!DOCTYPE html>\n\
-<html><body>\n\
+<html>\n<body>\n\
 <title>OGN-Tracker config</title>\n\
 ");
+
   httpd_resp_sendstr_chunk(Req, "<h1>OGN-Tracker configuration</h1>\n");
+  httpd_resp_sendstr_chunk(Req, "<b>CPU ID: ");
+  Len=Format_Hex(Line, getUniqueID());
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "</b><br />\n");
+
   httpd_resp_sendstr_chunk(Req, "<table>\n<tr>\n<td>\n");
   ParmForm_Acft(Req);
   httpd_resp_sendstr_chunk(Req, "</td>\n<td>\n");
@@ -195,8 +201,19 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
   ParmForm_Info(Req);
   httpd_resp_sendstr_chunk(Req, "</td>\n<td>\n");
   ParmForm_Other(Req);
-  httpd_resp_sendstr_chunk(Req, "</td>\n<tr>\n</table>\n");
-  httpd_resp_sendstr_chunk(Req, "</body></html>\n");
+  httpd_resp_sendstr_chunk(Req, "</td>\n</tr>\n</table>\n");
+  httpd_resp_sendstr_chunk(Req, "</body>\n</html>\n");
+/*
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Defaults\">\n");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"submit\" value=\"Defaults\">\n");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"hidden\" name=\"Defaults\" value=\"1\"");
+  httpd_resp_sendstr_chunk(Req, "</form>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Restart\">\n");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"submit\" value=\"Restart\">\n");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"hidden\" name=\"Restart\" value=\"1\"");
+  httpd_resp_sendstr_chunk(Req, "</form>\n");
+*/
   httpd_resp_sendstr_chunk(Req, 0);
   return ESP_OK; }
 

@@ -216,11 +216,19 @@ uint8_t Format_HexBytes(char *Output, const uint8_t *Byte, uint8_t Bytes)
   return Len;  }
 
 uint8_t Format_Hex( char *Output, uint16_t Word )
-{ Format_Hex(Output, (uint8_t)(Word>>8)); Format_Hex(Output+2, (uint8_t)Word); return 4; }
+{ Format_Hex(Output, (uint8_t)(Word>>8));
+  Format_Hex(Output+2, (uint8_t)Word);
+  return 4; }
 
 uint8_t Format_Hex( char *Output, uint32_t Word )
-{ Format_Hex(Output  , (uint8_t)(Word>>24)); Format_Hex(Output+2, (uint8_t)(Word>>16));
-  Format_Hex(Output+4, (uint8_t)(Word>> 8)); Format_Hex(Output+6, (uint8_t) Word     ); return 8; }
+{ Format_Hex(Output  , (uint16_t)(Word>>16));
+  Format_Hex(Output+4, (uint16_t)(Word    ));
+  return 8; }
+
+uint8_t Format_Hex( char *Output, uint64_t Word )
+{ Format_Hex(Output  , (uint32_t)(Word>>32));
+  Format_Hex(Output+8, (uint32_t)(Word    ));
+  return 16; }
 
 uint8_t Format_Hex( char *Output, uint32_t Word, uint8_t Digits)
 { for(uint8_t Idx=Digits; Idx>0; )

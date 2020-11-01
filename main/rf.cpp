@@ -468,12 +468,13 @@ extern "C"
     TxTime = (RX_Random&0x3F)+1; TxTime*=6;                                    // [ms] (1..64)*6 = 6..384ms
 #ifdef WITH_LORAWAN
     bool WANtx = 0;
+    uint16_t SlotEnd = 1250;
     if(WAN_BackOff) WAN_BackOff--;
     else                                                                       // decide to transmit in this slot
-    { uint16_t SlotEnd = 1240;
-      if(WANdev.State==0 || WANdev.State==2)
+    { if(WANdev.State==0 || WANdev.State==2)
       { XorShift32(RX_Random); if((RX_Random&0x1F)==0x10) WANtx=1; SlotEnd=1200; } // random decision 1/32
-      TimeSlot(TxChan, SlotEnd-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime); }
+    }
+    TimeSlot(TxChan, SlotEnd-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
 #else
     TimeSlot(TxChan, 1250-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
 #endif
