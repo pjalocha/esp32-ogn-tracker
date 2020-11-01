@@ -36,53 +36,124 @@ static void SelectList(httpd_req_t *Req, const char *Name, const char **List, in
   }
   httpd_resp_sendstr_chunk(Req, "</select>\n"); }
 
+static void ParmForm_Info(httpd_req_t *Req)  // produce HTML form for aircraft parameters
+{
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Info\"><table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Info</th><td><input type=\"submit\" value=\"Apply\"></td></tr>");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Pilot</td><td><input type=\"text\" name=\"Pilot\" size=\"10\" value=\"");
+  if(Parameters.Pilot[0]) httpd_resp_sendstr_chunk(Req, Parameters.Pilot);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Crew</td><td><input type=\"text\" name=\"Crew\" size=\"10\" value=\"");
+  if(Parameters.Crew[0]) httpd_resp_sendstr_chunk(Req, Parameters.Crew);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Base airfield</td><td><input type=\"text\" name=\"Base\" size=\"10\" value=\"");
+  if(Parameters.Base[0]) httpd_resp_sendstr_chunk(Req, Parameters.Base);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Registration</td><td><input type=\"text\" name=\"Reg\" size=\"10\" value=\"");
+  if(Parameters.Reg[0]) httpd_resp_sendstr_chunk(Req, Parameters.Reg);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Manufacturer</td><td><input type=\"text\" name=\"Manuf\" size=\"10\" value=\"");
+  if(Parameters.Manuf[0]) httpd_resp_sendstr_chunk(Req, Parameters.Manuf);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Model</td><td><input type=\"text\" name=\"Model\" size=\"10\" value=\"");
+  if(Parameters.Model[0]) httpd_resp_sendstr_chunk(Req, Parameters.Model);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Type</td><td><input type=\"text\" name=\"Type\" size=\"10\" value=\"");
+  if(Parameters.Type[0]) httpd_resp_sendstr_chunk(Req, Parameters.Type);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
+
 static void ParmForm_Acft(httpd_req_t *Req)  // produce HTML form for aircraft parameters
 { char Line[16];
 
   httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Acft\"><table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Aircraft</th><th><input type=\"submit\" value=\"Apply\"></th></tr>");
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Aircraft</th><td><input type=\"submit\" value=\"Apply\"></td></tr>");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><th>Address</th><td><input type=\"text\" name=\"Address\" size=\"10\" value=\"0x");
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Address</td><td><input type=\"text\" name=\"Address\" size=\"10\" value=\"0x");
   Format_Hex(Line, (uint8_t)(Parameters.Address>>16)); Format_Hex(Line+2, (uint16_t)Parameters.Address);
   httpd_resp_send_chunk(Req, Line, 6);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
   const char *AddrTypeTable[4] = { "Random", "ICAO", "FLARM", "OGN" } ;
-  httpd_resp_sendstr_chunk(Req, "<tr><th>Addr-Type</th><th>\n");
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Addr-Type</td><td>\n");
   SelectList(Req, "AddrType", AddrTypeTable, 4, Parameters.AddrType);
-  httpd_resp_sendstr_chunk(Req, "</th></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
 
   const char *AcftTypeTable[16] = { "Unknown", "(moto)Glider", "Tow-plane", "Helicopter", "Parachute", "Drop-plane", "Hang-glider", "Para-glider",
                                     "Powered-aircraft", "Jet-aircraft", "UFO", "Balloon", "Airship", "UAV", "Ground support", "Static object" } ;
-  httpd_resp_sendstr_chunk(Req, "<tr><th>Acft-Type</th><th>\n");
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Acft-Type</td><td>\n");
   SelectList(Req, "AcftType", AcftTypeTable, 16, Parameters.AcftType);
-  httpd_resp_sendstr_chunk(Req, "</th></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><th>Pilot</th><td><input type=\"text\" name=\"Pilot\" size=\"10\" value=\"");
-  if(Parameters.Pilot[0]) httpd_resp_sendstr_chunk(Req, Parameters.Pilot);
+  httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
+
+static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for aircraft parameters
+{ char Line[16]; int Len;
+
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Other\"><table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Other</th><td><input type=\"submit\" value=\"Apply\"></td></tr>");
+
+  const char *FreqPlanTable[16] = { "Auto", "Europe/Africa", "USA/Canada", "Australia/Chile", "New Zeeland", "Izrael" };
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Freq. plan</td><td>\n");
+  SelectList(Req, "FreqPlan", FreqPlanTable, 6, Parameters.FreqPlan);
+  httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Tx power [dBm]</td><td><input type=\"text\" name=\"TxPower\" size=\"10\" value=\"");
+  Len=Format_SignDec(Line, (int16_t)Parameters.getTxPower());
+  httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><th>Crew</th><td><input type=\"text\" name=\"Crew\" size=\"10\" value=\"");
-  if(Parameters.Crew[0]) httpd_resp_sendstr_chunk(Req, Parameters.Crew);
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Freq.corr. [ppm]</td><td><input type=\"text\" name=\"RFchipFreqCorr\" size=\"10\" value=\"");
+  Len=Format_SignDec(Line, Parameters.RFchipFreqCorr, 2, 1);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Console baud</td><td><input type=\"text\" name=\"CONbaud\" size=\"10\" value=\"");
+  Len=Format_UnsDec(Line, Parameters.CONbaud);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Verbose</td><td><input type=\"text\" name=\"Verbose\" size=\"10\" value=\"");
+  Len=Format_UnsDec(Line, (uint16_t)Parameters.Verbose);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>OLED page sel.</td><td><input type=\"text\" name=\"PageMask\" size=\"10\" value=\"0x");
+  Len=Format_Hex(Line, Parameters.PageMask);
+  httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
   httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
 
-static void ParmForm_AP(httpd_req_t *Req)
+static void ParmForm_AP(httpd_req_t *Req) // Wi-Fi access point parameters { char Line[16]; int Len;
 { char Line[16]; int Len;
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"AP\"><table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Aceess Point</th><th><input type=\"submit\" value=\"Apply\"></th></tr>");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><th>SSID:</th><td><input type=\"text\" name=\"APname\" size=\"10\" value=\"");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"AP\"><table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Wi-Fi AP</th><td><input type=\"submit\" value=\"Apply\"></td></tr>");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>SSID</td><td><input type=\"text\" name=\"APname\" size=\"10\" value=\"");
   if(Parameters.APname[0]) httpd_resp_sendstr_chunk(Req, Parameters.APname);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><th>Password:</th><td><input type=\"text\" name=\"APpass\" size=\"10\" value=\"");
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Password</td><td><input type=\"text\" name=\"APpass\" size=\"10\" value=\"");
   if(Parameters.APpass[0]) httpd_resp_sendstr_chunk(Req, Parameters.APpass);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><th><label>Data port:</th><td><input type=\"text\" name=\"APport\" size=\"10\" value=\"");
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Data port</td><td><input type=\"text\" name=\"APport\" size=\"10\" value=\"");
   Len=Format_UnsDec(Line, Parameters.APport);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Tx [dBm]</td><td><input type=\"text\" name=\"APtxPwr\" size=\"10\" value=\"");
+  Len=Format_UnsDec(Line, Parameters.APtxPwr);
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
@@ -108,49 +179,58 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
     { Parameters.ReadLine(Line);
       Line = strchr(Line, '&'); if(Line==0) break;
       Line++; }
-    free(URL); }
+    free(URL);
+    Parameters.WriteToNVS(); }
+  httpd_resp_sendstr_chunk(Req, "\
+<!DOCTYPE html>\n\
+<html><body>\n\
+<title>OGN-Tracker config</title>\n\
+");
+  httpd_resp_sendstr_chunk(Req, "<h1>OGN-Tracker configuration</h1>\n");
+  httpd_resp_sendstr_chunk(Req, "<table>\n<tr>\n<td>\n");
+  ParmForm_Acft(Req);
+  httpd_resp_sendstr_chunk(Req, "</td>\n<td>\n");
+  ParmForm_AP(Req);
+  httpd_resp_sendstr_chunk(Req, "</td>\n<tr>\n<tr>\n<td>\n");
+  ParmForm_Info(Req);
+  httpd_resp_sendstr_chunk(Req, "</td>\n<td>\n");
+  ParmForm_Other(Req);
+  httpd_resp_sendstr_chunk(Req, "</td>\n<tr>\n</table>\n");
+  httpd_resp_sendstr_chunk(Req, "</body></html>\n");
+  httpd_resp_sendstr_chunk(Req, 0);
+  return ESP_OK; }
+
+static esp_err_t top_get_handler(httpd_req_t *Req)
+{
+  httpd_resp_set_status(Req, "307 Temporary Redirect");
+  httpd_resp_set_hdr(Req, "Location", "/parm.html");
+  httpd_resp_send(Req, 0, 0);
+/*
   httpd_resp_sendstr_chunk(Req, "\
 <!DOCTYPE html>\n\
 <html><body>\n\
 <title>OGN-Tracker status</title>\n\
 ");
-  // int Len=Parameters.Print(Line);
-  // httpd_resp_send_chunk(Req, Line, Len);
-  ParmForm_Acft(Req);
-  ParmForm_AP(Req);
+
+  httpd_resp_sendstr_chunk(Req, "<h1>OGN-Tracker</h1>\n");
+  httpd_resp_sendstr_chunk(Req, "<a href=\"parm.html\">Configuration page</a>\n");
+
   httpd_resp_sendstr_chunk(Req, "</body></html>\n");
   httpd_resp_sendstr_chunk(Req, 0);
+*/
   return ESP_OK; }
 
-/*
-static esp_err_t parm_get_handler(httpd_req_t *Req)
-{ char Line[32];
-  // int ContLen=Req->content_len;
-  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-  Format_String(CONS_UART_Write, "parm_get_handler() => [");
-  // Format_SignDec(CONS_UART_Write, ContLen, 1, 0, 1);
-  Format_String(CONS_UART_Write, "] ");
-  // for( ; ; )
-  // { int Ret = httpd_req_recv(Req, Line, 31); if(Len<=0) break;
-  // }
-  Format_String(CONS_UART_Write, "\n");
-  xSemaphoreGive(CONS_Mutex);
-  return ESP_OK; }
-*/
+static const httpd_uri_t HTTPtop =
+{ .uri       = "/",
+  .method    = HTTP_GET,
+  .handler   = top_get_handler,
+  .user_ctx  = 0 };
 
 static const httpd_uri_t HTTPparm =
 { .uri       = "/parm.html",
   .method    = HTTP_GET,
   .handler   = parm_get_handler,
   .user_ctx  = 0 };
-
-/*
-static const httpd_uri_t HTTPsave =
-{ .uri       = "/parm.html",
-  .method    = HTTP_GET,
-  .handler   = parm_get_handler,
-  .user_ctx  = 0 };
-*/
 
 static httpd_handle_t HTTPserver = 0;
 
@@ -160,8 +240,8 @@ static esp_err_t HTTP_Start(int MaxSockets=4, int Port=80)
   Config.task_priority    = tskIDLE_PRIORITY+3;
   Config.max_open_sockets = MaxSockets;
   esp_err_t Err=httpd_start(&HTTPserver, &Config); if(Err!=ESP_OK) return Err;
+  httpd_register_uri_handler(HTTPserver, &HTTPtop);
   httpd_register_uri_handler(HTTPserver, &HTTPparm);
-  // httpd_register_uri_handler(HTTPserver, &HTTPsave);
   return Err; }
 
 static void HTTP_Stop(void)
