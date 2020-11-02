@@ -38,8 +38,8 @@ static void SelectList(httpd_req_t *Req, const char *Name, const char **List, in
 
 static void ParmForm_Info(httpd_req_t *Req)  // produce HTML form for aircraft parameters
 {
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Info\"><table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Info</th><td><input type=\"submit\" value=\"Apply\"></td></tr>");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Info\">\n<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Info</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
 
   httpd_resp_sendstr_chunk(Req, "<tr><td>Pilot</td><td><input type=\"text\" name=\"Pilot\" size=\"10\" value=\"");
   if(Parameters.Pilot[0]) httpd_resp_sendstr_chunk(Req, Parameters.Pilot);
@@ -74,8 +74,8 @@ static void ParmForm_Info(httpd_req_t *Req)  // produce HTML form for aircraft p
 static void ParmForm_Acft(httpd_req_t *Req)  // produce HTML form for aircraft parameters
 { char Line[16];
 
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Acft\"><table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Aircraft</th><td><input type=\"submit\" value=\"Apply\"></td></tr>");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Acft\">\n<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Aircraft</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
 
   httpd_resp_sendstr_chunk(Req, "<tr><td>Address</td><td><input type=\"text\" name=\"Address\" size=\"10\" value=\"0x");
   Format_Hex(Line, (uint8_t)(Parameters.Address>>16)); Format_Hex(Line+2, (uint16_t)Parameters.Address);
@@ -98,8 +98,8 @@ static void ParmForm_Acft(httpd_req_t *Req)  // produce HTML form for aircraft p
 static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for aircraft parameters
 { char Line[16]; int Len;
 
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Other\"><table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Other</th><td><input type=\"submit\" value=\"Apply\"></td></tr>");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Other\">\n<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Other</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
 
   const char *FreqPlanTable[16] = { "Auto", "Europe/Africa", "USA/Canada", "Australia/Chile", "New Zeeland", "Izrael" };
   httpd_resp_sendstr_chunk(Req, "<tr><td>Freq. plan</td><td>\n");
@@ -136,8 +136,8 @@ static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for aircraft 
 static void ParmForm_AP(httpd_req_t *Req) // Wi-Fi access point parameters { char Line[16]; int Len;
 { char Line[16]; int Len;
 
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"AP\"><table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Wi-Fi AP</th><td><input type=\"submit\" value=\"Apply\"></td></tr>");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"AP\">\n<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Wi-Fi AP</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
 
   httpd_resp_sendstr_chunk(Req, "<tr><td>SSID</td><td><input type=\"text\" name=\"APname\" size=\"10\" value=\"");
   if(Parameters.APname[0]) httpd_resp_sendstr_chunk(Req, Parameters.APname);
@@ -183,8 +183,12 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
     Parameters.WriteToNVS(); }
   httpd_resp_sendstr_chunk(Req, "\
 <!DOCTYPE html>\n\
-<html>\n<body>\n\
-<title>OGN-Tracker config</title>\n\
+<html>\n\
+<head>\n\
+<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n\
+</head>\n\
+<body>\n\
+<title>OGN-Tracker configuration</title>\n\
 ");
 
   httpd_resp_sendstr_chunk(Req, "<h1>OGN-Tracker configuration</h1>\n");
@@ -193,25 +197,26 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "</b><br />\n");
 
-  httpd_resp_sendstr_chunk(Req, "<table>\n<tr>\n<td>\n");
+  httpd_resp_sendstr_chunk(Req, "<table>\n<tr><td>\n");
   ParmForm_Acft(Req);
-  httpd_resp_sendstr_chunk(Req, "</td>\n<td>\n");
-  ParmForm_AP(Req);
-  httpd_resp_sendstr_chunk(Req, "</td>\n<tr>\n<tr>\n<td>\n");
-  ParmForm_Info(Req);
-  httpd_resp_sendstr_chunk(Req, "</td>\n<td>\n");
+  httpd_resp_sendstr_chunk(Req, "</td></tr>\n<tr><td>\n");
   ParmForm_Other(Req);
-  httpd_resp_sendstr_chunk(Req, "</td>\n</tr>\n</table>\n");
-  httpd_resp_sendstr_chunk(Req, "</body>\n</html>\n");
-/*
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Defaults\">\n");
-  httpd_resp_sendstr_chunk(Req, "<input type=\"submit\" value=\"Defaults\">\n");
-  httpd_resp_sendstr_chunk(Req, "<input type=\"hidden\" name=\"Defaults\" value=\"1\"");
+  httpd_resp_sendstr_chunk(Req, "</td></tr>\n<tr><td>\n");
+  ParmForm_Info(Req);
+  httpd_resp_sendstr_chunk(Req, "</td></tr>\n<tr><td>\n");
+  ParmForm_AP(Req);
+  httpd_resp_sendstr_chunk(Req, "</td></tr>\n<tr><td>\n");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\">\n");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"submit\" value=\"Reset to defaults\">\n");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"hidden\" name=\"Defaults\" value=\"1\">\n");
   httpd_resp_sendstr_chunk(Req, "</form>\n");
+  httpd_resp_sendstr_chunk(Req, "</td></tr>\n</table>\n");
+  httpd_resp_sendstr_chunk(Req, "</body>\n</html>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Restart\">\n");
+/*
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\">\n");
   httpd_resp_sendstr_chunk(Req, "<input type=\"submit\" value=\"Restart\">\n");
-  httpd_resp_sendstr_chunk(Req, "<input type=\"hidden\" name=\"Restart\" value=\"1\"");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"hidden\" name=\"Restart\" value=\"1\">");
   httpd_resp_sendstr_chunk(Req, "</form>\n");
 */
   httpd_resp_sendstr_chunk(Req, 0);

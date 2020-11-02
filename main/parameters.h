@@ -630,6 +630,9 @@ uint16_t StratuxPort;
     if(strcmp(Name, "SaveToFlash")==0)
     { int32_t Save=0; if(Read_Int(Save, Value)<=0) return 0;
       SaveToFlash=Save; return 1; }
+    if(strcmp(Name, "Defaults")==0)
+    { int32_t Reset=0; if(Read_Int(Reset, Value)<=0) return 0;
+      if(Reset==1) setDefault(); return 1; }
     return 0; }
 
   bool ReadLine(char *Line)                                                     // read a parameter line
