@@ -270,18 +270,23 @@ extern "C"
     // RF_Print();
 // #endif
 
+    // xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    // Format_UnsDec(CONS_UART_Write, xTaskGetTickCount(), 4, 3);
+    // Format_String(CONS_UART_Write, " => RF-slot\n");
+    // xSemaphoreGive(CONS_Mutex);
+
 #ifdef WITH_LORAWAN
     bool WANrx=0;
     int WAN_RespLeft = WAN_RespTick-xTaskGetTickCount();        // [tick] how much time left before expected response
     if(WANdev.State==1 || WANdev.State==3)                      // if State indicates we are waiting for the response
     { if(WAN_RespLeft<=5) WANdev.State--;                       // if time below 5 ticks we have not enough time
       else if(WAN_RespLeft<200) { WANrx=1; }                    // if more than 200ms then we can't wait this long now
-      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-      Format_UnsDec(CONS_UART_Write, xTaskGetTickCount(), 4, 3);
-      Format_String(CONS_UART_Write, "s LoRaWAN Rx: ");
-      Format_SignDec(CONS_UART_Write, WAN_RespLeft);
-      Format_String(CONS_UART_Write, "ms\n");
-      xSemaphoreGive(CONS_Mutex);
+      // xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      // Format_UnsDec(CONS_UART_Write, xTaskGetTickCount(), 4, 3);
+      // Format_String(CONS_UART_Write, "s LoRaWAN Rx: ");
+      // Format_SignDec(CONS_UART_Write, WAN_RespLeft);
+      // Format_String(CONS_UART_Write, "ms\n");
+      // xSemaphoreGive(CONS_Mutex);
     }
 
     if(WANrx)                                              // if reception expected from WAN
@@ -468,15 +473,15 @@ extern "C"
     TxTime = (RX_Random&0x3F)+1; TxTime*=6;                                    // [ms] (1..64)*6 = 6..384ms
 #ifdef WITH_LORAWAN
     bool WANtx = 0;
-    uint16_t SlotEnd = 1250;
+    uint16_t SlotEnd = 1240;
     if(WAN_BackOff) WAN_BackOff--;
     else                                                                       // decide to transmit in this slot
-    { if(WANdev.State==0 || WANdev.State==2)
-      { XorShift32(RX_Random); if((RX_Random&0x1F)==0x10) WANtx=1; SlotEnd=1200; } // random decision 1/32
+    { if(WANdev.State==0 || WANdev.State==2)                                   // 
+      { XorShift32(RX_Random); if((RX_Random&0x1F)==0x10) { WANtx=1; SlotEnd=1200; } } // random decision 1/32
     }
     TimeSlot(TxChan, SlotEnd-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
 #else
-    TimeSlot(TxChan, 1250-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
+    TimeSlot(TxChan, 1240-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
 #endif
 
 #ifdef WITH_LORAWAN
