@@ -15,7 +15,7 @@
 
 // #define DEBUG_PRINT
 
-static void AddPath(char *Name, const char *FileName, const char *Path)
+void AddPath(char *Name, const char *FileName, const char *Path)
 { if(Path==0) { strcpy(Name, FileName); return; }
   strcpy(Name, Path);
   int Len=strlen(Name); if(Name[Len-1]!='/') Name[Len++]='/';

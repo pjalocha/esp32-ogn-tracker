@@ -3,6 +3,8 @@
 
 extern FIFO<OGN_LogPacket<OGN_Packet>, 32> FlashLog_FIFO;
 
+void AddPath(char *Name, const char *FileName, const char *Path);
+
 extern bool FlashLog_SaveReq;
 extern uint32_t FlashLog_FileTime;                            // [sec] start time of the current log file
 extern char FlashLog_FileName[32];                             // current log file name if open
