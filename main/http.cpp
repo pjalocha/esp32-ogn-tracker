@@ -267,8 +267,27 @@ static int Format_DateTime(char *Out, time_t Time)
   Len+=Format_UnsDec(Out+Len, (uint16_t)TM->tm_sec, 2);
   return Len; }
 
-static esp_err_t SendLog(httpd_req_t *Req, const char *FileName, uint32_t FileTime, bool Bin=0)
-{ char Line[128];
+static int LogFileName(char *Name, time_t Time, const char *Ext=0)
+{ int Len=Parameters.getAprsCall(Name);
+  Name[Len++]='_';
+  struct tm *TM = gmtime(&Time);
+  Len+=Format_UnsDec(Name+Len, (uint16_t)1900+TM->tm_year, 4);
+  Name[Len++]='.';
+  Len+=Format_UnsDec(Name+Len, (uint16_t)1+TM->tm_mon, 2);
+  Name[Len++]='.';
+  Len+=Format_UnsDec(Name+Len, (uint16_t)TM->tm_mday, 2);
+  Name[Len++]='_';
+  Len+=Format_UnsDec(Name+Len, (uint16_t)TM->tm_hour, 2);
+  Len+=Format_UnsDec(Name+Len, (uint16_t)TM->tm_min, 2);
+  Len+=Format_UnsDec(Name+Len, (uint16_t)TM->tm_sec, 2);
+  if(Ext) Len+=Format_String(Name+Len, Ext);
+  Name[Len]=0; return Len; }
+
+static esp_err_t SendLog_APRS(httpd_req_t *Req, const char *FileName, uint32_t FileTime)
+{ char ContDisp[64];
+  char Line[128]; int Len;
+  Len=Format_String(ContDisp, "attachement; filename=\""); Len+=LogFileName(ContDisp+Len, FileTime, ".aprs"); ContDisp[Len++]='\"'; ContDisp[Len]=0;
+  httpd_resp_set_hdr(Req, "Content-Disposition", ContDisp);
   httpd_resp_set_type(Req, "text/plain");
   FILE *File = fopen(FileName, "rb"); if(File==0) { httpd_resp_send_chunk(Req, 0, 0); return ESP_OK; }
   OGN_LogPacket<OGN_Packet> Packet;
@@ -276,8 +295,26 @@ static esp_err_t SendLog(httpd_req_t *Req, const char *FileName, uint32_t FileTi
   { if(fread(&Packet, Packet.Bytes, 1, File)!=1) break;          // read the next packet
     if(!Packet.isCorrect()) continue;
     uint32_t Time = Packet.getTime(FileTime);                    // [sec] get exact time from short time in the packet and the file start time
-    uint8_t Len=Packet.Packet.WriteAPRS(Line, Time);             // print the packet in the APRS format
+    Len=Packet.Packet.WriteAPRS(Line, Time);                     // print the packet in the APRS format
     if(Len==0) continue;                                         // if cannot be printed for whatever reason
+    httpd_resp_send_chunk(Req, Line, Len);
+    vTaskDelay(1); }
+  fclose(File);
+  httpd_resp_send_chunk(Req, 0, 0);
+  return ESP_OK; }
+
+static esp_err_t SendLog_TLG(httpd_req_t *Req, const char *FileName, uint32_t FileTime)
+{ char ContDisp[64];
+  char Line[512]; int Len;
+  Len=Format_String(ContDisp, "attachement; filename=\"");
+  Len+=Parameters.getAprsCall(ContDisp+Len); ContDisp[Len++]='_';
+  Len+=Format_Hex(ContDisp+Len, FileTime);
+  Len+=Format_String(ContDisp+Len, ".TLG"); ContDisp[Len++]='\"'; ContDisp[Len]=0;
+  httpd_resp_set_hdr(Req, "Content-Disposition", ContDisp);
+  httpd_resp_set_type(Req, "application/octet-stream");
+  FILE *File = fopen(FileName, "rb"); if(File==0) { httpd_resp_send_chunk(Req, 0, 0); return ESP_OK; }
+  for( ; ; )
+  { Len=fread(Line, 1, 512, File); if(Len<=0) break;
     httpd_resp_send_chunk(Req, Line, Len);
     vTaskDelay(1); }
   fclose(File);
@@ -294,13 +331,16 @@ static esp_err_t log_get_handler(httpd_req_t *Req)
   if(URLlen)
   { char *URL = (char *)malloc(URLlen+1);
     httpd_req_get_url_query_str(Req, URL, URLlen+1);
-    char Name[16];
-    bool SendFile = httpd_query_key_value(URL, "File", Name, 16)==ESP_OK;
+    char Name[16]; bool SendFile = httpd_query_key_value(URL, "File", Name, 16)==ESP_OK;
+    char Format[8] = { 0 }; httpd_query_key_value(URL, "Format", Format, 8);
     free(URL);
     if(SendFile)
     { AddPath(FullName, Name, Path);
       uint32_t Time=FlashLog_ReadShortFileTime(Name);
-      if(Time) return SendLog(Req, FullName, Time); }
+      if(Time)
+      { if(strcmp(Format, "APRS")==0) return SendLog_APRS(Req, FullName, Time);
+        return SendLog_TLG(Req, FullName, Time); }
+    }
   }
   httpd_resp_sendstr_chunk(Req, "\
 <!DOCTYPE html>\n\
@@ -316,7 +356,7 @@ static esp_err_t log_get_handler(httpd_req_t *Req)
 
   DIR *Dir=opendir(Path);
   if(Dir)
-  { httpd_resp_sendstr_chunk(Req, "<table>\n<tr><th>File</th><th>[KB]</th><th>Date</th></tr>\n");
+  { httpd_resp_sendstr_chunk(Req, "<table>\n<tr><th>File</th><th></th><th>[KB]</th><th>Date</th></tr>\n");
     for( ; ; )
     { struct dirent *Ent = readdir(Dir); if(!Ent) break;        // read next directory entry, break if all read
       if(Ent->d_type != DT_REG) continue;                       // skip non-regular files
@@ -331,7 +371,9 @@ static esp_err_t log_get_handler(httpd_req_t *Req)
       httpd_resp_sendstr_chunk(Req, Name);
       httpd_resp_sendstr_chunk(Req, "\">");
       httpd_resp_sendstr_chunk(Req, Name);
-      httpd_resp_sendstr_chunk(Req, "</a></td><td align=\"center\">");
+      httpd_resp_sendstr_chunk(Req, "</a></td><td><a href=\"/log.html?Format=APRS&File=");
+      httpd_resp_sendstr_chunk(Req, Name);
+      httpd_resp_sendstr_chunk(Req, "\">A</a></td><td align=\"center\">");
       int Len=Format_UnsDec(Line, (Size+512)>>10);
       httpd_resp_send_chunk(Req, Line, Len);
       httpd_resp_sendstr_chunk(Req, "</td><td>");
@@ -346,10 +388,24 @@ static esp_err_t log_get_handler(httpd_req_t *Req)
   httpd_resp_send_chunk(Req, 0, 0);
   return ESP_OK; }
 
+static esp_err_t logo_get_handler(httpd_req_t *Req)
+{ extern const uint8_t OGN_logo_jpg[]   asm("_binary_OGN_logo_240x240_jpg_start");
+  extern const uint8_t OGN_logo_end[]   asm("_binary_OGN_logo_240x240_jpg_end");
+  const int OGN_logo_size = OGN_logo_end-OGN_logo_jpg;
+  httpd_resp_set_type(Req, "image/jpeg");
+  httpd_resp_send(Req, (const char *)OGN_logo_jpg, OGN_logo_size);
+  return ESP_OK; }
+
 static const httpd_uri_t HTTPtop =
 { .uri       = "/",
   .method    = HTTP_GET,
   .handler   = top_get_handler,
+  .user_ctx  = 0 };
+
+static const httpd_uri_t HTTPlogo =
+{ .uri       = "/logo.jpeg",
+  .method    = HTTP_GET,
+  .handler   = logo_get_handler,
   .user_ctx  = 0 };
 
 static const httpd_uri_t HTTPparm =
@@ -375,6 +431,7 @@ esp_err_t HTTP_Start(int MaxSockets, int Port)
   httpd_register_uri_handler(HTTPserver, &HTTPtop);  // top URL
   httpd_register_uri_handler(HTTPserver, &HTTPparm); // parameters URL
   httpd_register_uri_handler(HTTPserver, &HTTPlog);  // log files URL
+  httpd_register_uri_handler(HTTPserver, &HTTPlogo); // OGN logo
   return Err; }
 
 void HTTP_Stop(void)
