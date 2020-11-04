@@ -14,7 +14,7 @@
 // #include "fifo.h"
 // #include "socket.h"
 #include "proc.h"
-// #include "wifi.h"
+#include "gps.h"
 #include "log.h"
 #include "http.h"
 
@@ -166,6 +166,158 @@ static void ParmForm_AP(httpd_req_t *Req) // Wi-Fi access point parameters { cha
   httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
 #endif
 
+// ============================================================================================================
+
+static void Table_GPS(httpd_req_t *Req)
+{ char Line[32]; int Len;
+  uint32_t Time=TimeSync_Time();
+  uint32_t Sec = (Time-1)%60;
+  GPS_Position *GPS = GPS_getPosition(Sec); if(GPS==0) return;
+
+  httpd_resp_sendstr_chunk(Req, "<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>GPS</th><td>");
+  Len=Format_UnsDec(Line, GPS->Year+2000 , 4); Line[Len++]='.';
+  Len+=Format_UnsDec(Line+Len, GPS->Month, 2); Line[Len++]='.';
+  Len+=Format_UnsDec(Line+Len, GPS->Day  , 2); Line[Len++]=' ';
+  Len+=Format_UnsDec(Line+Len, GPS->Hour , 2); Line[Len++]=':';
+  Len+=Format_UnsDec(Line+Len, GPS->Min  , 2); Line[Len++]=':';
+  Len+=Format_UnsDec(Line+Len, GPS->Sec  , 2); Line[Len++]='.';
+  Len+=Format_UnsDec(Line+Len, GPS->FracSec, 2);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<td>Lock</td><td align=\"right\">");
+  if(GPS->FixMode>=2) { strcpy(Line, "0-D "); Line[0]='0'+GPS->FixMode; Len=4; }
+                 else { strcpy(Line, "--- "); Len=4; }
+  Len+=Format_UnsDec(Line+Len, GPS->Satellites);
+  Len+=Format_String(Line+Len, "sat Hdop");
+  Len+=Format_UnsDec(Line+Len, GPS->HDOP, 2, 1);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<td>Latitude</td><td align=\"right\">");
+  Len=Format_SignDec(Line, GPS->Latitude/6, 7, 5);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "&deg;</td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<td>Longitude</td><td align=\"right\">");
+  Len=Format_SignDec(Line, GPS->Longitude/6, 8, 5);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "&deg;</td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<td>Altitude</td><td align=\"right\">");
+  Len=Format_SignDec(Line, GPS->Altitude, 2, 1);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, " m</td></tr>\n");
+
+  if(GPS->hasBaro)
+  { httpd_resp_sendstr_chunk(Req, "<td>Pressure</td><td align=\"right\">");
+    Len=Format_SignDec(Line, (GPS->Pressure+2)/4, 3, 2);
+    httpd_resp_send_chunk(Req, Line, Len);
+    httpd_resp_sendstr_chunk(Req, " hPa</td></tr>\n");
+
+    httpd_resp_sendstr_chunk(Req, "<td>Pressure Alt.</td><td align=\"right\">");
+    Len=Format_SignDec(Line, GPS->StdAltitude, 2, 1);
+    httpd_resp_send_chunk(Req, Line, Len);
+    httpd_resp_sendstr_chunk(Req, " m</td></tr>\n");
+
+    httpd_resp_sendstr_chunk(Req, "<td>Temperature</td><td align=\"right\">");
+    Len=Format_SignDec(Line, GPS->Temperature, 2, 1);
+    httpd_resp_send_chunk(Req, Line, Len);
+    httpd_resp_sendstr_chunk(Req, " &#x2103;</td></tr>\n"); }
+
+  httpd_resp_sendstr_chunk(Req, "<td>Climb rate</td><td align=\"right\">");
+  Len=Format_SignDec(Line, GPS->ClimbRate, 2, 1);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, " m/s</td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<td>Hor. speed</td><td align=\"right\">");
+  Len=Format_UnsDec(Line, GPS->Speed, 2, 1);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, " m/s</td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<td>Hor. track</td><td align=\"right\">");
+  Len=Format_UnsDec(Line, GPS->Heading, 4, 1);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "&deg;</td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "</table>\n"); }
+
+static uint8_t BattCapacity(uint16_t mVolt)
+{ if(mVolt>=4100) return 100;
+  if(mVolt<=3600) return   0;
+  return (mVolt-3600+2)/5; }
+
+static void Table_Batt(httpd_req_t *Req)
+{ char Line[16]; int Len;
+
+  httpd_resp_sendstr_chunk(Req, "<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Battery</th><td></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<td>Voltage</td><td align=\"right\">");
+#ifdef WITH_MAVLINK
+  Len=Format_UnsDec(Line, MAVLINK_BattVolt, 4, 3);
+#else
+  Len=Format_UnsDec(Line, BatteryVoltage>>8, 4, 3);        // print the battery voltage readout
+#endif
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, " V</td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Capacity</td><td align=\"right\">");
+#ifdef WITH_MAVLINK
+  uint8_t Cap=MAVLINK_BattCap;                         // [%] from the drone's telemetry
+#else
+  uint8_t Cap=BattCapacity(BatteryVoltage>>8);         // [%] est. battery capacity based on the voltage readout
+#endif
+  Len=Format_UnsDec(Line, (uint16_t)Cap);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, " %</td></tr>\n");
+
+#ifdef WITH_BQ
+  uint8_t Status = BQ.readStatus();                    // read status register
+  uint8_t State = (Status>>4)&0x03;                    // charging status
+  const char *StateName[4] = { "Charge OFF" , "Pre-charge", "Charging", "Full" } ;
+  httpd_resp_sendstr_chunk(Req, "<tr><td>State</td><td align=\"right\">");
+  httpd_resp_sendstr_chunk(Req, StateName[State]);
+  httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
+#endif
+
+#ifdef WITH_AXP
+  uint16_t InpCurr=AXP.readBatteryInpCurrent(); // [mA]
+  uint16_t OutCurr=AXP.readBatteryOutCurrent(); // [mA]
+  uint16_t Vbus=AXP.readVbusVoltage();          // [mV]
+  uint16_t VbusCurr=AXP.readVbusCurrent();      // [mA]
+   int16_t Temp=AXP.readTemperature();          // [0.1degC]
+  uint32_t InpCharge=AXP.readBatteryInpCharge();
+  uint32_t OutCharge=AXP.readBatteryOutCharge();
+
+  int16_t Current = InpCurr-OutCurr;
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Current</td><td align=\"right\">");
+  Len=Format_SignDec(Line, Current, 3);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, " mA</td></tr>\n");
+
+  int32_t Charge = InpCharge-OutCharge;
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Charge</td><td align=\"right\">");
+  Len=Format_UnsDec(Line, (((int64_t)Charge<<12)+562)/1125, 2, 1);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, " mAh</td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>USB volt.</td><td align=\"right\">");
+  Len=Format_UnsDec(Line, Vbus, 4, 3);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, " V</td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>USB curr.</td><td align=\"right\">");
+  Len=Format_UnsDec(Line, VbusCurr, 4, 3);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, " A</td></tr>\n");
+#endif
+
+  httpd_resp_sendstr_chunk(Req, "</table>\n"); }
+
+// ============================================================================================================
+
 static esp_err_t parm_get_handler(httpd_req_t *Req)
 { char Line[32]; int Len;
   uint16_t URLlen=httpd_req_get_url_query_len(Req);
@@ -234,22 +386,26 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
 
 static esp_err_t top_get_handler(httpd_req_t *Req)
 {
-  httpd_resp_set_status(Req, "307 Temporary Redirect");
-  httpd_resp_set_hdr(Req, "Location", "/parm.html");
-  httpd_resp_send(Req, 0, 0);
-/*
+  // httpd_resp_set_status(Req, "307 Temporary Redirect");
+  // httpd_resp_set_hdr(Req, "Location", "/parm.html");
+  // httpd_resp_send(Req, 0, 0);
+
   httpd_resp_sendstr_chunk(Req, "\
 <!DOCTYPE html>\n\
 <html><body>\n\
 <title>OGN-Tracker status</title>\n\
 ");
 
-  httpd_resp_sendstr_chunk(Req, "<h1>OGN-Tracker</h1>\n");
-  httpd_resp_sendstr_chunk(Req, "<a href=\"parm.html\">Configuration page</a>\n");
+  httpd_resp_sendstr_chunk(Req, "<h2>OGN-Tracker</h2>\n");
+  httpd_resp_sendstr_chunk(Req, "<a href=\"parm.html\"><h3>Configuration</h3></a>\n");
+  httpd_resp_sendstr_chunk(Req, "<a href=\"log.html\"><h3>Log files</h3></a>\n<br />\n");
+
+  Table_GPS(Req);
+  httpd_resp_sendstr_chunk(Req, "<br />\n");
+  Table_Batt(Req);
 
   httpd_resp_sendstr_chunk(Req, "</body></html>\n");
   httpd_resp_sendstr_chunk(Req, 0);
-*/
   return ESP_OK; }
 
 static int Format_DateTime(char *Out, time_t Time)
