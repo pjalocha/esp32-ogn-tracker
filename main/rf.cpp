@@ -506,9 +506,10 @@ extern "C"
       { const uint8_t *PktData=TxPktData0;
         if(PktData==0) PktData=TxPktData1;
         if(PktData)                                                   // if there is a packet to transmit
-        { OGN1_Packet *OGN = (OGN1_Packet *)PktData; OGN->Dewhiten();
+        { OGN1_Packet *OGN = (OGN1_Packet *)PktData; if(!OGN->Header.Encrypted) OGN->Dewhiten();
           uint8_t *TxPacket;
-          bool Short = !OGN->Header.NonPos && OGN->Header.AddrType==3 && OGN->Header.Address==(uint32_t)(getUniqueAddress()&0x00FFFFFF);
+          bool Short = !OGN->Header.NonPos && !OGN->Header.Encrypted
+                     && OGN->Header.AddrType==3 && OGN->Header.Address==(uint32_t)(getUniqueAddress()&0x00FFFFFF);
           if(Short)
           { TxPktLen=WANdev.getDataPacket(&TxPacket, PktData+4, 16, 1, ((RX_Random>>16)&0xF)==0x8 ); }
           else

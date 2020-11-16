@@ -207,13 +207,32 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      for( ; ; )
      { uint8_t Chars = readInfo(Value, InfoType, Idx);
        if(Chars==0) break;
+       Out[Len++]=' ';
+       if(InfoType<InfoParmNum)
+       { Len += Format_String(Out+Len, InfoParmName(InfoType)); }
+       else
+       { Out[Len++]='#'; Out[Len++]=HexDigit(InfoType); }
+       Out[Len++]='=';
+       Len += Format_String(Out+Len, Value);
+       Idx+=Chars; }
+     Out[Len]=0; return Len; }
+
+/*
+   int WriteDeviceInfo(char *Out)
+   { int Len=0;
+     char Value[16];
+     uint8_t InfoType;
+     uint8_t Idx=0;
+     for( ; ; )
+     { uint8_t Chars = readInfo(Value, InfoType, Idx);
+       if(Chars==0) break;
        if(InfoType<InfoParmNum)
        { Len += sprintf(Out+Len, " %s=%s", InfoParmName(InfoType), Value); }
        else
        { Len += sprintf(Out+Len, " #%d=%s", InfoType, Value); }
-     Idx+=Chars; }
+       Idx+=Chars; }
      Out[Len]=0; return Len; }
-
+*/
    void Print(void) const
    { if(!Header.NonPos) { PrintPosition(); return; }
      if(Status.ReportType==0) { PrintDeviceStatus(); return; }
@@ -518,17 +537,26 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      { memcpy(Msg+Len, ",RELAY*", 7); Len+=7; }
      Msg[Len++] = ':';
 
-     if(Header.NonPos && Status.ReportType!=0) return 0;          // give up if neither position nor status
+     if(Header.NonPos && Status.ReportType>1) { Msg[Len]=0; return 0; } // give up if neither position nor status nor info
 
      if(Position.Time<60)
      { uint32_t DayTime=Time%86400; int Sec=DayTime%60;           // second of the time the packet was recevied
        int DiffSec=Position.Time-Sec; if(DiffSec>4) DiffSec-=60;  // difference should always be zero or negative, but can be small positive for predicted positions
        Time+=DiffSec; }                                           // get out the correct position time
-     Msg[Len++] = Header.NonPos?'>':'/';
+     Msg[Len++] = Header.NonPos || Header.Encrypted?'>':'/';
      Len+=Format_HHMMSS(Msg+Len, Time);
      Msg[Len++] = 'h';
 
-     if(Header.NonPos) { Len+=WriteStatus(Msg+Len); Msg[Len++]='\n'; Msg[Len]=0; return Len; }
+     if(Header.NonPos)                                            // status and info packets
+     { if(Status.ReportType==0) Len+=WriteStatus(Msg+Len);
+                           else Len+=WriteDeviceInfo(Msg+Len);
+       Msg[Len++]='\n'; Msg[Len]=0; return Len; }
+
+     if(Header.Encrypted)                                         // encrypted packets
+     { Msg[Len++]=' ';
+       for(int Idx=0; Idx<4; Idx++)
+       { Len+=EncodeAscii85(Msg+Len, Data[Idx]); }
+       Msg[Len++]='\n'; Msg[Len]=0; return Len; }
 
      const char *Icon = getAprsIcon(Position.AcftType);
 
