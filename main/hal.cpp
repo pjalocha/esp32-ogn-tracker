@@ -1779,8 +1779,13 @@ void IO_Configuration(void)
   i2c_config_t I2C_Config =                            // I2C for OLED and pressue sensor
   { mode          : I2C_MODE_MASTER,
     sda_io_num    : PIN_I2C_SDA,
+#if ESP_IDF_VERSION_MINOR<1
     sda_pullup_en : GPIO_PULLUP_ENABLE,
     scl_io_num    : PIN_I2C_SCL,
+#else                                                  // order of the elements has changed in 4.1
+    scl_io_num    : PIN_I2C_SCL,
+    sda_pullup_en : GPIO_PULLUP_ENABLE,
+#endif
     scl_pullup_en : GPIO_PULLUP_ENABLE
   } ;
   I2C_Config.master.clk_speed =  I2C_SPEED;
