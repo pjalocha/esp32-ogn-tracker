@@ -13,6 +13,10 @@
 #include "wifi.h"
 #include "stratux.h"
 
+#ifdef WITH_HTTP
+#include "http.h"
+#endif
+
 #define DEBUG_PRINT
 
 #ifdef WITH_STRATUX
@@ -110,6 +114,9 @@ void vTaskSTX(void* pvParameters)
 #endif
     if(WIFI_IP.ip.addr==0) { WIFI_Disconnect(); WIFI_Stop(); continue; }     // if getting local IP failed then give up
 
+#ifdef WITH_HTTP
+    HTTP_Start();
+#endif
     Stratux_TxFIFO.Clear();
 
     uint8_t Len=Format_UnsDec(Stratux_Port, Parameters.StratuxPort); Stratux_Port[Len]=0;                 // port number in ASCII form
@@ -148,6 +155,9 @@ void vTaskSTX(void* pvParameters)
 
     Stratux_Socket.Disconnect();
     vTaskDelay(2000);
+#ifdef WITH_HTTP
+    HTTP_Stop();
+#endif
     WIFI_Disconnect(); WIFI_Stop(); WIFI_IP.ip.addr=0;
     vTaskDelay(2000);
   }

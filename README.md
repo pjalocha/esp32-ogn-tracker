@@ -18,6 +18,8 @@ git clone -b v4.0 --recursive https://github.com/espressif/esp-idf.git
 cd esp-idf
 ./install.sh
 ```
+Note: there is a fix to compile as well with v4.1: not clear yet, if there is any advantage.
+
 If you are doing this on a Raspberry PI and see error messages about *virtualenv* you may need the following:
 ```
 sudo apt-get install libffi-dev

@@ -3,6 +3,9 @@
 #include <sys/stat.h>
 #include <time.h>
 
+#include <vector>
+#include <algorithm>
+
 #include "hal.h"
 
 // #include "tcpip_adapter.h"
@@ -243,6 +246,22 @@ static void Table_GPS(httpd_req_t *Req)
 
   httpd_resp_sendstr_chunk(Req, "</table>\n"); }
 
+static void Table_RF(httpd_req_t *Req)
+{ char Line[128]; int Len;
+
+  httpd_resp_sendstr_chunk(Req, "<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
+  Len=Format_String(Line, "<tr><th><b>RF chip</th><td>");
+#ifdef WITH_RFM69
+  Len+=Format_String(Line+Len, "sx1276");
+#endif
+#ifdef WITH_RFM95
+  Len+=Format_String(Line+Len, "RFM95");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  httpd_resp_sendstr_chunk(Req, "</table>\n"); }
+
 static uint8_t BattCapacity(uint16_t mVolt)
 { if(mVolt>=4100) return 100;
   if(mVolt<=3600) return   0;
@@ -316,10 +335,27 @@ static void Table_Batt(httpd_req_t *Req)
 
   httpd_resp_sendstr_chunk(Req, "</table>\n"); }
 
+static void Top_Bar(httpd_req_t *Req)
+{ char Line[32]; int Len;
+
+  httpd_resp_sendstr_chunk(Req, "<h2>OGN-Tracker</h2>\n");
+  httpd_resp_sendstr_chunk(Req, "<b>CPU ID: ");
+  Len=Format_Hex(Line, getUniqueID());
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "</b><br />\n");
+
+  httpd_resp_sendstr_chunk(Req, "<table border=\"1\" cellspacing=\"5\" cellpadding=\"5\"><tr>\n\
+<th><a href=\"/\">Status</a></th>\n\
+<th><a href=\"/parm.html\">Configuration</a></th>\n\
+<th><a href=\"/log.html\">Log files</a></th>\n\
+</tr></table><br />\n");
+
+}
+
 // ============================================================================================================
 
 static esp_err_t parm_get_handler(httpd_req_t *Req)
-{ char Line[32]; int Len;
+{ // char Line[32]; int Len;
   uint16_t URLlen=httpd_req_get_url_query_len(Req);
   if(URLlen)
   { char *URL = (char *)malloc(URLlen+1);
@@ -350,11 +386,7 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
 <title>OGN-Tracker configuration</title>\n\
 ");
 
-  httpd_resp_sendstr_chunk(Req, "<h2>OGN-Tracker configuration</h2>\n");
-  httpd_resp_sendstr_chunk(Req, "<b>CPU ID: ");
-  Len=Format_Hex(Line, getUniqueID());
-  httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "</b><br />\n");
+  Top_Bar(Req);
 
   httpd_resp_sendstr_chunk(Req, "<table>\n<tr><td>\n");
   ParmForm_Acft(Req);
@@ -386,21 +418,17 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
 
 static esp_err_t top_get_handler(httpd_req_t *Req)
 {
-  // httpd_resp_set_status(Req, "307 Temporary Redirect");
-  // httpd_resp_set_hdr(Req, "Location", "/parm.html");
-  // httpd_resp_send(Req, 0, 0);
-
   httpd_resp_sendstr_chunk(Req, "\
 <!DOCTYPE html>\n\
 <html><body>\n\
 <title>OGN-Tracker status</title>\n\
 ");
 
-  httpd_resp_sendstr_chunk(Req, "<h2>OGN-Tracker</h2>\n");
-  httpd_resp_sendstr_chunk(Req, "<a href=\"parm.html\"><h3>Configuration</h3></a>\n");
-  httpd_resp_sendstr_chunk(Req, "<a href=\"log.html\"><h3>Log files</h3></a>\n<br />\n");
+  Top_Bar(Req);
 
   Table_GPS(Req);
+  httpd_resp_sendstr_chunk(Req, "<br />\n");
+  Table_RF(Req);
   httpd_resp_sendstr_chunk(Req, "<br />\n");
   Table_Batt(Req);
 
@@ -439,9 +467,10 @@ static int LogFileName(char *Name, time_t Time, const char *Ext=0)
   if(Ext) Len+=Format_String(Name+Len, Ext);
   Name[Len]=0; return Len; }
 
+// send give log file in the APRS format
 static esp_err_t SendLog_APRS(httpd_req_t *Req, const char *FileName, uint32_t FileTime)
 { char ContDisp[64];
-  char Line[128]; int Len;
+  char Line[1000]; int Len=0;
   Len=Format_String(ContDisp, "attachement; filename=\""); Len+=LogFileName(ContDisp+Len, FileTime, ".aprs"); ContDisp[Len++]='\"'; ContDisp[Len]=0;
   httpd_resp_set_hdr(Req, "Content-Disposition", ContDisp);
   httpd_resp_set_type(Req, "text/plain");
@@ -451,14 +480,15 @@ static esp_err_t SendLog_APRS(httpd_req_t *Req, const char *FileName, uint32_t F
   { if(fread(&Packet, Packet.Bytes, 1, File)!=1) break;          // read the next packet
     if(!Packet.isCorrect()) continue;
     uint32_t Time = Packet.getTime(FileTime);                    // [sec] get exact time from short time in the packet and the file start time
-    Len=Packet.Packet.WriteAPRS(Line, Time);                     // print the packet in the APRS format
-    if(Len==0) continue;                                         // if cannot be printed for whatever reason
-    httpd_resp_send_chunk(Req, Line, Len);
+    Len+=Packet.Packet.WriteAPRS(Line+Len, Time);                // print the packet in the APRS format
+    if(Len>850) { httpd_resp_send_chunk(Req, Line, Len); Len=0; }
     vTaskDelay(1); }
   fclose(File);
+  if(Len) { httpd_resp_send_chunk(Req, Line, Len); Len=0; }
   httpd_resp_send_chunk(Req, 0, 0);
   return ESP_OK; }
 
+// send given log file in the TLG (binary) format
 static esp_err_t SendLog_TLG(httpd_req_t *Req, const char *FileName, uint32_t FileTime)
 { char ContDisp[64];
   char Line[512]; int Len;
@@ -477,10 +507,9 @@ static esp_err_t SendLog_TLG(httpd_req_t *Req, const char *FileName, uint32_t Fi
   httpd_resp_send_chunk(Req, 0, 0);
   return ESP_OK; }
 
+// handle the HTTP request for the log files page
 static esp_err_t log_get_handler(httpd_req_t *Req)
-{ char FullName[32]; char Line[32]; struct stat Stat;
-  // httpd_resp_set_status(Req, "307 Temporary Redirect");
-  // httpd_resp_set_hdr(Req, "Location", "/parm.html");
+{ char FullName[32]; char Line[256]; struct stat Stat;
   const char *Path= "/spiffs";
 
   uint16_t URLlen=httpd_req_get_url_query_len(Req);
@@ -508,38 +537,48 @@ static esp_err_t log_get_handler(httpd_req_t *Req)
 <title>OGN-Tracker log files</title>\n\
 ");
 
-  httpd_resp_sendstr_chunk(Req, "<h2>OGN-Tracker log files</h2>\n");
+  Top_Bar(Req);
 
-  DIR *Dir=opendir(Path);
-  if(Dir)
-  { httpd_resp_sendstr_chunk(Req, "<table>\n<tr><th>File</th><th></th><th>[KB]</th><th>Date</th></tr>\n");
-    for( ; ; )
-    { struct dirent *Ent = readdir(Dir); if(!Ent) break;        // read next directory entry, break if all read
-      if(Ent->d_type != DT_REG) continue;                       // skip non-regular files
-      char *Name = Ent->d_name;
-      uint32_t Time=FlashLog_ReadShortFileTime(Name);           // read time from the file name
-      if(Time==0) continue;                                     // skip if not .TLG format
-      AddPath(FullName, Name, Path);
-      uint32_t Size=0;
-      if(stat(FullName, &Stat)>=0)                              // get file info
-        Size = Stat.st_size;
-      httpd_resp_sendstr_chunk(Req, "<tr><td><a href=\"/log.html?File=");
-      httpd_resp_sendstr_chunk(Req, Name);
-      httpd_resp_sendstr_chunk(Req, "\">");
-      httpd_resp_sendstr_chunk(Req, Name);
-      httpd_resp_sendstr_chunk(Req, "</a></td><td><a href=\"/log.html?Format=APRS&File=");
-      httpd_resp_sendstr_chunk(Req, Name);
-      httpd_resp_sendstr_chunk(Req, "\">A</a></td><td align=\"center\">");
-      int Len=Format_UnsDec(Line, (Size+512)>>10);
-      httpd_resp_send_chunk(Req, Line, Len);
-      httpd_resp_sendstr_chunk(Req, "</td><td>");
-      Len=Format_DateTime(Line, Time);
-      httpd_resp_send_chunk(Req, Line, Len);
-      httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
-      vTaskDelay(1); }
-    httpd_resp_sendstr_chunk(Req, "</table>\n");
-    closedir(Dir);
-  } else httpd_resp_sendstr_chunk(Req, "<p>Cannot open the log directory !</p>\n");
+  std::vector<uint32_t> FileList;                               // list of log files
+  DIR *Dir=opendir(Path);                                       // open the log file directory
+  if(Dir==0)
+  { httpd_resp_sendstr_chunk(Req, "<p>Cannot open the log directory !</p>\n");
+    httpd_resp_send_chunk(Req, 0, 0);
+    return ESP_OK; }
+  for( ; ; )
+  { struct dirent *Ent = readdir(Dir); if(!Ent) break;        // read next directory entry, break if all read
+    if(Ent->d_type != DT_REG) continue;                       // skip non-regular files
+    char *Name = Ent->d_name;
+    uint32_t Time=FlashLog_ReadShortFileTime(Name);           // read time from the file name
+    if(Time==0) continue;                                     // skip if not .TLG format
+    FileList.push_back(Time); }
+  closedir(Dir);
+  std::sort(FileList.begin(), FileList.end());
+
+  httpd_resp_sendstr_chunk(Req, "<table>\n<tr><th>File</th><th></th><th>[KB]</th><th>Date</th></tr>\n");
+  for(size_t Idx=0; Idx<FileList.size(); Idx++)
+  { uint32_t Time=FileList[Idx];
+    char Name[16];
+    FlashLog_ShortFileName(Name, Time);
+    AddPath(FullName, Name, Path);
+    uint32_t Size=0;
+    if(stat(FullName, &Stat)>=0)                              // get file info
+      Size = Stat.st_size;
+    int Len=Format_String(Line, "<tr><td><a href=\"/log.html?File=");
+    Len+=Format_String(Line+Len, Name);
+    Len+=Format_String(Line+Len, "\">");
+    Len+=Format_String(Line+Len, Name);
+    Len+=Format_String(Line+Len, "</a></td><td><a href=\"/log.html?Format=APRS&File=");
+    Len+=Format_String(Line+Len, Name);
+    Len+=Format_String(Line+Len, "\">APRS</a></td><td align=\"center\">");
+    Len+=Format_UnsDec(Line+Len, (Size+512)>>10);
+    Len+=Format_String(Line+Len, "</td><td>");
+    Len+=Format_DateTime(Line+Len, Time);
+    Len+=Format_String(Line+Len, "</td></tr>\n");
+    httpd_resp_send_chunk(Req, Line, Len);
+    vTaskDelay(1); }
+  httpd_resp_sendstr_chunk(Req, "</table>\n");
+
   httpd_resp_sendstr_chunk(Req, "</body>\n</html>\n");
   httpd_resp_send_chunk(Req, 0, 0);
   return ESP_OK; }
