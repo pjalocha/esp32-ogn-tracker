@@ -8,14 +8,10 @@
 
 #include "hal.h"
 
-// #include "tcpip_adapter.h"
-// #include "esp_wifi.h"
-// #include "esp_event_loop.h"
 #include "esp_http_server.h"
 
 #include "format.h"
-// #include "fifo.h"
-// #include "socket.h"
+#include "rf.h"
 #include "proc.h"
 #include "gps.h"
 #include "log.h"
@@ -258,6 +254,41 @@ static void Table_RF(httpd_req_t *Req)
   Len+=Format_String(Line+Len, "RFM95");
 #endif
   Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Tx power</td><td align=\"right\">");
+  Len+=Format_SignDec(Line+Len, (int16_t)Parameters.getTxPower());
+  Len+=Format_String(Line+Len, "dBm</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Freq. corr.</td><td align=\"right\">");
+  Len+=Format_SignDec(Line+Len, (int32_t)Parameters.RFchipFreqCorr, 2, 1);
+  Len+=Format_String(Line+Len, "ppm</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Rx noise</td><td align=\"right\">");
+  Len+=Format_SignDec(Line+Len, -5*TRX.averRSSI, 2, 1);
+  Len+=Format_String(Line+Len, "dBm</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Rx rate</td><td align=\"right\">");
+  Len+=Format_UnsDec(Line+Len, RX_OGN_Count64);
+  Len+=Format_String(Line+Len, "/min</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Temperature</td><td align=\"right\">");
+  Len+=Format_SignDec(Line+Len, (int16_t)TRX.chipTemp);
+  Len+=Format_String(Line+Len, "&deg;C</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Rx queue</td><td align=\"right\">");
+  Len+=Format_UnsDec(Line+Len, RF_RxFIFO.Full());
+  Len+=Format_String(Line+Len, "pkt</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Band</td><td align=\"right\">");
+  Len+=Format_UnsDec(Line+Len, (uint16_t)(RF_FreqPlan.getCenterFreq()/100000), 3, 1);
+  Len+=Format_String(Line+Len, "MHz</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
 
   httpd_resp_sendstr_chunk(Req, "</table>\n"); }
