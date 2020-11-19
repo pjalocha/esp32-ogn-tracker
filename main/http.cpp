@@ -24,20 +24,20 @@
 // ============================================================================================================
 
 static void SelectList(httpd_req_t *Req, const char *Name, const char **List, int Size, int Sel=0)
-{ char Line[8];
-  httpd_resp_sendstr_chunk(Req, "<select name=\"");
-  httpd_resp_sendstr_chunk(Req, Name);
-  httpd_resp_sendstr_chunk(Req, "\">\n");
+{ char Line[64]; int Len;
+  Len =Format_String(Line, "<select name=\"");
+  Len+=Format_String(Line+Len, Name);
+  Len+=Format_String(Line+Len, "\">\n");
+  httpd_resp_send_chunk(Req, Line, Len);
   for(int Idx=0; Idx<Size; Idx++)
-  { httpd_resp_sendstr_chunk(Req, "<option value=\"");
-    int Len=Format_UnsDec(Line, (uint16_t)Idx);
-    httpd_resp_send_chunk(Req, Line, Len);
-    httpd_resp_sendstr_chunk(Req, "\"");
-    if(Idx==Sel) httpd_resp_sendstr_chunk(Req, " selected>");
-            else httpd_resp_sendstr_chunk(Req, ">");
-    httpd_resp_sendstr_chunk(Req, List[Idx]);
-    httpd_resp_sendstr_chunk(Req, "</option>\n");
-  }
+  { Len =Format_String(Line, "<option value=\"");
+    Len+=Format_UnsDec(Line+Len, (uint16_t)Idx);
+    Len+=Format_String(Line+Len, "\"");
+    if(Idx==Sel) Len+=Format_String(Line+Len, " selected>");
+            else Len+=Format_String(Line+Len, ">");
+    Len+=Format_String(Line+Len, List[Idx]);
+    Len+=Format_String(Line+Len, "</option>\n");
+    httpd_resp_send_chunk(Req, Line, Len); }
   httpd_resp_sendstr_chunk(Req, "</select>\n"); }
 
 static void ParmForm_Info(httpd_req_t *Req)  // produce HTML form for aircraft parameters
@@ -299,37 +299,38 @@ static uint8_t BattCapacity(uint16_t mVolt)
   return (mVolt-3600+2)/5; }
 
 static void Table_Batt(httpd_req_t *Req)
-{ char Line[16]; int Len;
+{ char Line[128]; int Len;
 
   httpd_resp_sendstr_chunk(Req, "<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
   httpd_resp_sendstr_chunk(Req, "<tr><th><b>Battery</th><td></td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<td>Voltage</td><td align=\"right\">");
+  Len =Format_String(Line, "<td>Voltage</td><td align=\"right\">");
 #ifdef WITH_MAVLINK
-  Len=Format_UnsDec(Line, MAVLINK_BattVolt, 4, 3);
+  Len+=Format_UnsDec(Line+Len, MAVLINK_BattVolt, 4, 3);
 #else
-  Len=Format_UnsDec(Line, BatteryVoltage>>8, 4, 3);        // print the battery voltage readout
+  Len+=Format_UnsDec(Line+Len, BatteryVoltage>>8, 4, 3);        // print the battery voltage readout
 #endif
+  Len+=Format_String(Line+Len, " V</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, " V</td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Capacity</td><td align=\"right\">");
+  Len =Format_String(Line, "<tr><td>Capacity</td><td align=\"right\">");
 #ifdef WITH_MAVLINK
   uint8_t Cap=MAVLINK_BattCap;                         // [%] from the drone's telemetry
 #else
   uint8_t Cap=BattCapacity(BatteryVoltage>>8);         // [%] est. battery capacity based on the voltage readout
 #endif
-  Len=Format_UnsDec(Line, (uint16_t)Cap);
+  Len+=Format_UnsDec(Line+Len, (uint16_t)Cap);
+  Len+=Format_String(Line+Len, " %</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, " %</td></tr>\n");
 
 #ifdef WITH_BQ
   uint8_t Status = BQ.readStatus();                    // read status register
   uint8_t State = (Status>>4)&0x03;                    // charging status
   const char *StateName[4] = { "Charge OFF" , "Pre-charge", "Charging", "Full" } ;
-  httpd_resp_sendstr_chunk(Req, "<tr><td>State</td><td align=\"right\">");
-  httpd_resp_sendstr_chunk(Req, StateName[State]);
-  httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
+  Len =Format_String(Line, "<tr><td>State</td><td align=\"right\">");
+  Len+=Format_String(Line+Len, StateName[State]);
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
 #endif
 
 #ifdef WITH_AXP
@@ -342,26 +343,26 @@ static void Table_Batt(httpd_req_t *Req)
   uint32_t OutCharge=AXP.readBatteryOutCharge();
 
   int16_t Current = InpCurr-OutCurr;
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Current</td><td align=\"right\">");
-  Len=Format_SignDec(Line, Current, 3);
+  Len =Format_String(Line, "<tr><td>Current</td><td align=\"right\">");
+  Len+=Format_SignDec(Line+Len, Current, 3);
+  Len+=Format_String(Line+Len, " mA</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, " mA</td></tr>\n");
 
   int32_t Charge = InpCharge-OutCharge;
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Charge</td><td align=\"right\">");
-  Len=Format_UnsDec(Line, (((int64_t)Charge<<12)+562)/1125, 2, 1);
+  Len =Format_String(Line, "<tr><td>Charge</td><td align=\"right\">");
+  Len+=Format_UnsDec(Line+Len, (((int64_t)Charge<<12)+562)/1125, 2, 1);
+  Len+=Format_String(Line+Len, " mAh</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, " mAh</td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>USB volt.</td><td align=\"right\">");
-  Len=Format_UnsDec(Line, Vbus, 4, 3);
+  Len =Format_String(Line, "<tr><td>USB volt.</td><td align=\"right\">");
+  Len+=Format_UnsDec(Line+Len, Vbus, 4, 3);
+  Len+=Format_String(Line+Len, " V</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, " V</td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>USB curr.</td><td align=\"right\">");
-  Len=Format_UnsDec(Line, VbusCurr, 4, 3);
+  Len =Format_String(Line, "<tr><td>USB curr.</td><td align=\"right\">");
+  Len+=Format_UnsDec(Line+Len, VbusCurr, 4, 3);
+  Len+=Format_String(Line+Len, " A</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, " A</td></tr>\n");
 #endif
 
   httpd_resp_sendstr_chunk(Req, "</table>\n"); }
