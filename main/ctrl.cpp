@@ -376,8 +376,9 @@ void vTaskCTRL(void* pvParameters)
     vTaskDelay(1);                                    //
 
 #ifdef WITH_AXP
-    bool PowerOffRequest = AXP.readLongPressIRQ() /* || AXP.readShortPressIRQ() */ ;
-    if(PowerOffRequest)
+    bool PowerOffRequest1 = AXP.readLongPressIRQ();   // read long-press status
+    bool PowerOffRequest2 = AXP.readLongPressIRQ();   // read again to make sure
+    if(PowerOffRequest1 && PowerOffRequest2)
     { PowerMode=0;
 #ifdef WITH_SPIFFS
       FlashLog_SaveReq=1;
