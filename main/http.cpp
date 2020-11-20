@@ -242,16 +242,65 @@ static void Table_GPS(httpd_req_t *Req)
 
   httpd_resp_sendstr_chunk(Req, "</table>\n"); }
 
+// -------------------------------------------------------------------------------------------------------------
+
+#ifdef WITH_LOOKOUT
+static void Table_LookOut(httpd_req_t *Req)
+{ char Line[128]; int Len;
+  httpd_resp_sendstr_chunk(Req, "<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>LookOut</th><td align=\"center\"></td><td align=\"center\"></td></tr>\n");
+
+  for( uint8_t Idx=0; Idx<Look.MaxTargets; Idx++)
+  { const LookOut_Target *Tgt = Look.Target+Idx; if(!Tgt->Alloc) continue;
+    Len =Format_String(Line, "<tr><td>");
+    Len+=Format_Hex(Line+Len, Tgt->ID, 7);
+    Len+=Format_String(Line+Len, "</td><td>");
+    Len+=Format_UnsDec(Line+Len, Tgt->TimeMargin>>1, 2);
+    Len+=Format_String(Line+Len, "s</td><td>");
+    Len+=Format_UnsDec(Line+Len, ((Tgt->HorDist>>1)+5)/10, 2, 2);
+    Len+=Format_String(Line+Len, "km</td></tr>\n");
+    httpd_resp_send_chunk(Req, Line, Len); }
+
+  httpd_resp_sendstr_chunk(Req, "</table>\n"); }
+#endif
+
+// -------------------------------------------------------------------------------------------------------------
+
+static void Table_Relay(httpd_req_t *Req)
+{ char Line[128]; int Len;
+  httpd_resp_sendstr_chunk(Req, "<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Relay</th><td align=\"center\">Rank</td><td align=\"center\">[sec]</td></tr>\n");
+
+  for( uint8_t Idx=0; Idx<RelayQueueSize; Idx++)
+  { OGN_RxPacket<OGN_Packet> *Packet = RelayQueue.Packet+Idx; if(Packet->Rank==0) continue;
+    Len =Format_String(Line, "<tr><td>");
+    Line[Len++]='0'+Packet->Packet.Header.AddrType;
+    Line[Len++]=':';
+    Len+=Format_Hex(Line+Len, Packet->Packet.Header.Address, 6);
+    Len+=Format_String(Line+Len, "</td><td>");
+    Len+=Format_Hex(Line+Len, Packet->Rank);
+    Len+=Format_String(Line+Len, "</td><td>");
+    Len+=Format_UnsDec(Line+Len, Packet->Packet.Position.Time, 2);
+    Len+=Format_String(Line+Len, "</td></tr>\n");
+    httpd_resp_send_chunk(Req, Line, Len); }
+
+  httpd_resp_sendstr_chunk(Req, "</table>\n"); }
+
+// -------------------------------------------------------------------------------------------------------------
+
 static void Table_RF(httpd_req_t *Req)
 { char Line[128]; int Len;
 
   httpd_resp_sendstr_chunk(Req, "<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  Len=Format_String(Line, "<tr><th><b>RF chip</th><td>");
+  Len=Format_String(Line, "<tr><th><b>RF chip</th><td align=\"center\">");
 #ifdef WITH_RFM69
-  Len+=Format_String(Line+Len, "sx1276");
+  Len+=Format_String(Line+Len, "RFM69");
 #endif
 #ifdef WITH_RFM95
-  Len+=Format_String(Line+Len, "RFM95");
+  Len+=Format_String(Line+Len, "sx1276");
+#endif
+#ifdef WITH_SX1272
+  Len+=Format_String(Line+Len, "sx1272");
 #endif
   Len+=Format_String(Line+Len, "</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
@@ -297,6 +346,8 @@ static uint8_t BattCapacity(uint16_t mVolt)
 { if(mVolt>=4100) return 100;
   if(mVolt<=3600) return   0;
   return (mVolt-3600+2)/5; }
+
+// -------------------------------------------------------------------------------------------------------------
 
 static void Table_Batt(httpd_req_t *Req)
 { char Line[128]; int Len;
@@ -367,6 +418,8 @@ static void Table_Batt(httpd_req_t *Req)
 
   httpd_resp_sendstr_chunk(Req, "</table>\n"); }
 
+// -------------------------------------------------------------------------------------------------------------
+
 static void Top_Bar(httpd_req_t *Req)
 { char Line[32]; int Len;
 
@@ -381,7 +434,6 @@ static void Top_Bar(httpd_req_t *Req)
 <th><a href=\"/parm.html\">Configuration</a></th>\n\
 <th><a href=\"/log.html\">Log files</a></th>\n\
 </tr></table><br />\n");
-
 }
 
 // ============================================================================================================
@@ -463,6 +515,12 @@ static esp_err_t top_get_handler(httpd_req_t *Req)
   Table_RF(Req);
   httpd_resp_sendstr_chunk(Req, "<br />\n");
   Table_Batt(Req);
+#ifdef WITH_LOOKOUT
+  httpd_resp_sendstr_chunk(Req, "<br />\n");
+  Table_LookOut(Req);
+#endif
+  httpd_resp_sendstr_chunk(Req, "<br />\n");
+  Table_Relay(Req);
 
   httpd_resp_sendstr_chunk(Req, "</body></html>\n");
   httpd_resp_sendstr_chunk(Req, 0);

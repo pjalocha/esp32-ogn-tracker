@@ -584,9 +584,9 @@ void vTaskPROC(void* pvParameters)
       if(Parameters.Encrypt) TxPacket->Packet.Encrypt(Parameters.EncryptKey); // if encryption is requested then encrypt
                         else TxPacket->Packet.Whiten();                       // otherwise only whiten
 #else
-      TxPacket->Packet.Whiten();
+      TxPacket->Packet.Whiten();                                              // just whiten if there is no encryption
 #endif
-      TxPacket->calcFEC();                  // whiten and calculate FEC code
+      TxPacket->calcFEC();                                                    // calculate FEC code
 #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60, 2);
