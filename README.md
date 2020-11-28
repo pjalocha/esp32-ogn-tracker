@@ -7,7 +7,32 @@ The initial code is written for and tested on HALTEC LoRa 32 module with sx1276 
 Most likely it can be easily ported to other ESP32 devices, as these are very flexible for the I/O assignement.
 If you need to change the pins assigned to various periferials, see the top of the hal.cpp file.
 
-## To compile the code: install the ESP-IDF
+## Recent development
+
+The most recent features added to the OGN-Tracker, they might not be all working perfectly fine and may need further development to be really useful.
+
+### LoRaWAN connectivity
+
+When you compile the code with WITH_LORAWAN the OGN-Tracker can talk to the LoraWAN network.
+The intention is to use TheThingsNetwork and it is arranged already that packets send to the "ogn" application defined there are decoded and merged into the OGN APRS data stream thus position reporting still follows the same data path and is displayed on the tracking webpages.
+
+To use this feature you need to register your OGN-Tracker with the TTN and "ogn" application, thus you need to send to us your 64-bit CPU ID and we will register the device and send you back the application key which needs to be written into the OGN-Tracker.
+
+### IGC files recorded on the SD card
+
+For OGN-Trackers with SD card connected, IGC files are recorded., as well as internal log files are copied over to the SD card in order not to be lost when newer files overwrite them.
+
+### Wi-Fi Access Point
+
+When compiled with WITH_AP WITH_WIFI and WITH_HTTP the OGN-Tracker creates a Wi-Fi access point when you can connect with the smartphone and access the status, configuration and log files stored in the flash memory.
+
+Note the the ESP32 takes about 80mA more when the Wi-Fi AP is enabled thus total current consumed is about 200mA.
+
+### Stratux-EU connectivity
+
+When compiled with WITH_STRATUX, WITH_WIFI and WITH_HTTP the OGN-Tracker can serve as source of GPS and pressure data (if pressure module present) to the Stratux. THe OGN-Tracker connects to Wi-Fi access point created by Stratux Raspberry PI and send GPS and pressure data to port 30000.
+
+## To compile the code and flash the ESP32 module: install the ESP-IDF
 
 To compile and flash the ESP32 board you need to install the ESP-IDF v4.0
 Start with:
