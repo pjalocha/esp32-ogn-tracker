@@ -8,6 +8,7 @@
 // #include "config.h"
 #include "ogn.h"
 #include "fanet.h"
+#include "paw.h"
 
 class RFM_LoRa_Config
 { public:
@@ -292,6 +293,11 @@ class RFM_TRX
 //    void setFrequencyCorrection(int32_t Correction=0)
 //    { if(Correction<0) FrequencyCorrection = -calcSynthFrequency(-Correction);
 //                 else  FrequencyCorrection =  calcSynthFrequency( Correction); }
+
+   void setFrequency(uint32_t Freq)       // [Hz]
+   { Freq = calcSynthFrequency(Freq);
+     int32_t Corr = ((int64_t)Freq*FreqCorr+5000000)/10000000;
+     Freq+=Corr; WriteFreq((Freq+128)>>8); }
    void setChannel(int16_t newChannel)
    { Channel=newChannel;
      uint32_t Freq = BaseFrequency+ChannelSpacing*Channel;
@@ -350,8 +356,15 @@ class RFM_TRX
        Packet[PktIdx++]=ManchesterEncode[Byte>>4];                               // software manchester encode every byte
        Packet[PktIdx++]=ManchesterEncode[Byte&0x0F];
      }
-     Block_Write(Packet, 2*Len, REG_FIFO);
-   }
+     Block_Write(Packet, 2*Len, REG_FIFO); }
+
+   void WritePacketPAW(const uint8_t *Data, uint8_t Len=24)
+   { uint8_t Packet[Len+1];
+     for(uint8_t Idx=0; Idx<Len; Idx++)
+     { Packet[Idx] = Data[Idx]; }
+     PAW_Packet::Whiten(Packet, Len);
+     Packet[Len] = PAW_Packet::CRC8(Packet, Len);
+     Block_Write(Packet, Len+1, REG_FIFO); }
 
    uint8_t *ReadFIFO(uint8_t Len)
    { return Block_Read(Len, REG_FIFO); }
@@ -437,6 +450,19 @@ class RFM_TRX
        TransferByte(ManchesterEncode[Byte>>4]);                  // software manchester encode every byte
        TransferByte(ManchesterEncode[Byte&0x0F]);
      }
+     Deselect(); }
+
+   void WritePacketPAW(const uint8_t *Data, uint8_t Len=24)
+   { uint8_t Packet[Len+1];
+     for(uint8_t Idx=0; Idx<Len; Idx++)
+     { Packet[Idx] = Data[Idx]; }
+     PAW_Packet::Whiten(Packet, Len);
+     Packet[Len] = PAW_Packet::CRC8(Packet, Len);
+     const uint8_t Addr=REG_FIFO;                                // write to FIFO
+     Select();
+     TransferByte(Addr | 0x80);
+     for(uint8_t Idx=0; Idx<=Len; Idx++)
+     { TransferByte(Packet[Idx]); }
      Deselect(); }
 
    void ReadPacketOGN(uint8_t *Data, uint8_t *Err, uint8_t Len=26) const       // read packet data from FIFO
@@ -695,15 +721,41 @@ class RFM_TRX
      //       ReadData[0], ReadData[1], ReadData[2], ReadData[3]);
      return Len; }
 
-   int OGN_Configure(int16_t Channel, const uint8_t *Sync, bool PW=0)
+   int PAW_Configure(const uint8_t *Sync)
+   { // WriteMode(RF_OPMODE_STANDBY);
+     WriteTxPower(0);
+     ClearIrqFlags();
+     WriteWord(0x0341, REG_BITRATEMSB);         // bit rate = 0x0341 = 38.415kbps
+     WriteByte(  0x05, REG_BITRATEFRAC);        // one should set exactly 38.400kbps for PW
+     WriteWord(   157, REG_FDEVMSB);            // FSK deviation = 0x013B x Fstep = 19.226kHz, Fstep=32MHz/(1<<19);
+     setFrequency(869525000);                   // 869.525MHz
+     FSK_WriteSYNC(8, 7, Sync);                 // SYNC pattern
+     WriteWord(    10, REG_PREAMBLEMSB);        // 10 preamble bytes
+     WriteByte(  0x85, REG_PREAMBLEDETECT);     // preamble detect: 1 byte, page 92 (or 0x85 ?)
+     WriteByte(  0x00, REG_PACKETCONFIG1);      // Fixed size packet, no DC-free encoding, no CRC, no address filtering
+     WriteByte(  0x40, REG_PACKETCONFIG2);      // Packet mode
+     WriteByte(    25, REG_PAYLOADLENGTH);      // Packet size = 25 bytes
+     WriteByte(    24, REG_FIFOTHRESH);         // TxStartCondition=FifoNotEmpty, FIFO threshold = 24 bytes
+     WriteWord(0x3030, REG_DIOMAPPING1);        // DIO signals: DIO0=00, DIO1=11, DIO2=00, DIO3=00, DIO4=00, DIO5=11, => p.64, 99
+     // WriteByte(  0x02, REG_RXBW);               // Man=0=16 Exp=2 +/-125kHz Rx (single-side) bandwidth => p.27,67,83,90
+     WriteByte(  0x23, REG_RXBW);               // Man=1=20 Exp=3 +/-50kHz Rx (single-side) bandwidth => p.27,67,83,90
+     WriteByte(  0x23, REG_AFCBW);              // +/-125kHz AFC bandwidth
+     WriteByte(  0x49, REG_PARAMP);             // BT=0.5 shaping, 40us ramp up/down
+     WriteByte(  0x0E, REG_RXCONFIG);           // => p.90 (or 0x8E ?)
+     WriteByte(  0x07, REG_RSSICONFIG);         // 256 samples for RSSI, no offset, => p.90,82
+     WriteByte(  0x20, REG_LNA);                // max. LNA gain, => p.89
+
+     return 0; }
+
+   int OGN_Configure(int16_t Channel, const uint8_t *Sync)
    { // WriteMode(RF_OPMODE_STANDBY);              // mode: STDBY, modulation: FSK, no LoRa
      // usleep(1000);
      WriteTxPower(0);
      ClearIrqFlags();
-     WriteWord(PW?0x0341:0x0140, REG_BITRATEMSB); // bit rate = 100kbps (32MHz/100000) (0x0341 = 38.415kbps)
-     WriteByte(0x00, REG_BITRATEFRAC);          // one should set exactly 38.400kbps for PW
+     WriteWord(0x0140, REG_BITRATEMSB);         // bit rate = 100kbps (32MHz/100000)
+     WriteByte(0x00, REG_BITRATEFRAC);          //
      // ReadWord(REG_BITRATEMSB);
-     WriteWord(PW?0x013B:0x0333, REG_FDEVMSB);  // FSK deviation = +/-50kHz [32MHz/(1<<19)] (0x013B = 19.226kHz)
+     WriteWord(0x0333, REG_FDEVMSB);            // FSK deviation = +/-50kHz [32MHz/(1<<19)]
      // ReadWord(REG_FDEVMSB);
      setChannel(Channel);                       // operating channel
      FSK_WriteSYNC(8, 7, Sync);                 // SYNC pattern (setup for reception)

@@ -15,6 +15,8 @@ static const uint8_t OGN1_SYNC[8] = { 0xAA, 0x66, 0x55, 0xA5, 0x96, 0x99, 0x96, 
 // OGNv2 SYNC:       0xF56D3738 encoded in Machester
 static const uint8_t OGN2_SYNC[8] = { 0x55, 0x99, 0x96, 0x59, 0xA5, 0x95, 0xA5, 0x6A };
 
+static const uint8_t PAW_SYNC [8] = { 0xB4, 0x2B, 0x00, 0x00, 0x00, 0x00, 0x18, 0x71 };
+
 #ifdef WITH_OGN1
 static const uint8_t *OGN_SYNC = OGN1_SYNC;
 #endif
@@ -422,6 +424,21 @@ extern "C"
     TRX.WriteMode(RF_OPMODE_STANDBY);                                          // switch to receive mode
     TxChan = RF_FreqPlan.getChannel(RF_SlotTime, 1, 1);                        // transmit channel
     RX_Channel = TxChan;
+
+#ifdef WITH_PAW
+   { PAW_Packet Packet; Packet.Clear();
+     Packet.Address = Parameters.Address;
+     Packet.AcftType = Parameters.AcftType;
+     Packet.setCRC();
+     TRX.WriteMode(RF_OPMODE_STANDBY);
+     TRX.PAW_Configure(PAW_SYNC);
+     TRX.WriteTxPower(Parameters.getTxPower());
+     TRX.WritePacketPAW(Packet.Byte, 24);
+     TRX.WriteMode(RF_OPMODE_TRANSMITTER);
+     vTaskDelay(10);
+     TRX.WriteMode(RF_OPMODE_STANDBY);
+     TRX.OGN_Configure(0, OGN_SYNC); }
+#endif
 
 #if defined(WITH_FANET) && defined(WITH_RFM95)
     const FANET_Packet *FNTpkt = FNT_TxFIFO.getRead(0);                        // read the packet from the FANET transmitt queue
