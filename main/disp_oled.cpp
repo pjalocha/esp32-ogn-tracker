@@ -577,7 +577,7 @@ void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS)   // status bar on top 
 #ifdef WITH_BT_SPP
   if(BT_SPP_isConnected())
   { u8g2_SetFont(OLED, u8g2_font_open_iconic_all_1x_t);
-    u8g2_DrawGlyph(OLED, 36, 11, 0x4A); }
+    u8g2_DrawGlyph(OLED, 36, 11, 0x5E); } // 0x4A
 #endif
 // #ifdef WITH_STRATUX
 //   if(Stratux_isConnected())
@@ -587,7 +587,7 @@ void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS)   // status bar on top 
 #ifdef WITH_WIFI
   if(WIFI_isConnected())
   { u8g2_SetFont(OLED, u8g2_font_open_iconic_all_1x_t);
-    u8g2_DrawGlyph(OLED, 43, 11, 0x50); }
+    u8g2_DrawGlyph(OLED, 43, 11, 0x119); } // 0x50
 #endif
   // u8g2_SetFont(OLED, u8g2_font_5x7_tr);
   // u8g2_SetFont(OLED, u8g2_font_5x8_tr);
