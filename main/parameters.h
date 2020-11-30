@@ -229,22 +229,17 @@ uint16_t StratuxPort;
 
     FreqPlan       =    DEFAULT_FreqPlan; // [0..5]
     PPSdelay       =    DEFAULT_PPSdelay; // [ms]
+    PageMask       =    0xFF;
+    for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
+      InfoParmValue(Idx)[0] = 0;
 #ifdef WITH_LORAWAN
     clrAppKey();
 #endif
 #ifdef WITH_ENCRYPT
     for(uint8_t Idx=0; Idx<4; Idx++) EncryptKey[Idx]=0;
 #endif
-    for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
-      InfoParmValue(Idx)[0] = 0;
-    PageMask       =    0b0001111111;
 #ifdef WITH_BT_SPP
    getAprsCall(BTname);
-// #ifdef WITH_TBEAM
-//    strcpy(BTname, "TBEAM-OGN");
-// #else
-//    strcpy(BTname, "ESP32-OGN");
-// #endif
    // strcpy(BTpin, "1234");
 #endif
 #ifdef WITH_AP
@@ -252,7 +247,7 @@ uint16_t StratuxPort;
    APpass[0]=0;
    APport  = 2000;
    APminSig = -70; // [dBm]
-   APtxPwr = 40; // [0.25dBm]
+   APtxPwr  =  40; // [0.25dBm]
 #endif
 #ifdef WITH_STRATUX
    strcpy(StratuxWIFI, "stratux");

@@ -137,12 +137,49 @@ static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for aircraft 
 
   httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
 
+#ifdef WITH_STRATUX
+static void ParmForm_Stratux(httpd_req_t *Req) // Connection to Stratux WiFi parameters and options
+{ char Line[16]; int Len;
+
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Stratux\">\n<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Stratux</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>SSID</td><td><input type=\"text\" name=\"StratuxWIFI\" size=\"10\" value=\"");
+  if(Parameters.StratuxWIFI[0]) httpd_resp_sendstr_chunk(Req, Parameters.StratuxWIFI);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Password</td><td><input type=\"text\" name=\"StratuxPass\" size=\"10\" value=\"");
+  if(Parameters.StratuxPass[0]) httpd_resp_sendstr_chunk(Req, Parameters.StratuxPass);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>TCP host</td><td><input type=\"text\" name=\"StratuxHost\" size=\"10\" value=\"");
+  if(Parameters.StratuxHost[0]) httpd_resp_sendstr_chunk(Req, Parameters.StratuxHost);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>TCP port</td><td><input type=\"text\" name=\"StratuxPort\" size=\"10\" value=\"");
+  Len=Format_UnsDec(Line, Parameters.StratuxPort);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Tx [dBm]</td><td><input type=\"text\" name=\"StratuxTxPwr\" size=\"10\" value=\"");
+  Len=Format_UnsDec(Line, (10*Parameters.StratuxTxPwr+2)>>2, 2, 1);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Min. signal [dBm]</td><td><input type=\"text\" name=\"StratuxMinSig\" size=\"10\" value=\"");
+  Len=Format_SignDec(Line, Parameters.StratuxMinSig);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
+#endif
+
 #ifdef WITH_AP
 static void ParmForm_AP(httpd_req_t *Req) // Wi-Fi access point parameters { char Line[16]; int Len;
 { char Line[16]; int Len;
 
   httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"AP\">\n<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Wi-Fi</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Wi-Fi AP</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
 
   httpd_resp_sendstr_chunk(Req, "<tr><td>SSID</td><td><input type=\"text\" name=\"APname\" size=\"10\" value=\"");
   if(Parameters.APname[0]) httpd_resp_sendstr_chunk(Req, Parameters.APname);
@@ -479,6 +516,10 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
   httpd_resp_sendstr_chunk(Req, "</td></tr>\n<tr><td>\n");
 #ifdef WITH_AP
   ParmForm_AP(Req);
+  httpd_resp_sendstr_chunk(Req, "</td></tr>\n<tr><td>\n");
+#endif
+#ifdef WITH_STRATUX
+  ParmForm_Stratux(Req);
   httpd_resp_sendstr_chunk(Req, "</td></tr>\n<tr><td>\n");
 #endif
   ParmForm_Other(Req);
