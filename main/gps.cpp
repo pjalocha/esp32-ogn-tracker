@@ -24,10 +24,10 @@
 
 // #define DEBUG_PRINT
 
-#ifdef DEBUG_PRINT
+// #ifdef DEBUG_PRINT
 static char Line[128];
 static void CONS_HexDump(char Byte) { Format_Hex(CONS_UART_Write, (uint8_t)Byte); }
-#endif
+// #endif
 
 // ----------------------------------------------------------------------------
 
@@ -255,6 +255,28 @@ static void GPS_BurstStart(void)                                           // wh
     { if(!GPS_Status.ModeConfig)                                             // if GPS navigation mode is not done yet
       { // Format_String(CONS_UART_Write, "CFG_NAV5 query...\n");
 #ifdef WITH_GPS_UBX
+        if(Parameters.NavRate)
+        { UBX_CFG_RATE CFG_RATE;
+          CFG_RATE.measRate = 1000/Parameters.NavRate;
+          CFG_RATE.navRate = 1;
+          CFG_RATE.timeRef = 0;
+          UBX_RxMsg::Send(0x06, 0x08, GPS_UART_Write, (uint8_t*)(&CFG_RATE), sizeof(CFG_RATE));
+// #ifdef DEBUG_PRINT
+          Format_String(CONS_UART_Write, "GPS <- CFG-RATE: ");
+          UBX_RxMsg::Send(0x06, 0x08, CONS_HexDump, (uint8_t*)(&CFG_RATE), sizeof(CFG_RATE));
+          Format_String(CONS_UART_Write, "\n");
+// #endif
+        }
+        { UBX_CFG_NAV5 CFG_NAV5;
+          CFG_NAV5.setDynModel(Parameters.NavMode);
+          UBX_RxMsg::Send(0x06, 0x24, GPS_UART_Write, (uint8_t*)(&CFG_NAV5), sizeof(CFG_NAV5));
+// #ifdef DEBUG_PRINT
+          Format_String(CONS_UART_Write, "GPS <- CFG-NAV5: ");
+          UBX_RxMsg::Send(0x06, 0x24, CONS_HexDump, (uint8_t*)(&CFG_NAV5), sizeof(CFG_NAV5));
+          Format_String(CONS_UART_Write, "\n");
+// #endif
+        }
+        UBX_RxMsg::Send(0x06, 0x08, GPS_UART_Write);                     // send the query for the navigation rate
         UBX_RxMsg::Send(0x06, 0x24, GPS_UART_Write);                     // send the query for the navigation mode setting
         if(!GPS_Status.NMEA)                                             // if NMEA sentences are not there
         { UBX_CFG_MSG CFG_MSG;                                           // send CFG_MSG to enable the NMEA sentences

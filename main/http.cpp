@@ -23,6 +23,7 @@
 
 // ============================================================================================================
 
+// generic HTML list for submit forms
 static void SelectList(httpd_req_t *Req, const char *Name, const char **List, int Size, int Sel=0)
 { char Line[64]; int Len;
   Len =Format_String(Line, "<select name=\"");
@@ -40,7 +41,8 @@ static void SelectList(httpd_req_t *Req, const char *Name, const char **List, in
     httpd_resp_send_chunk(Req, Line, Len); }
   httpd_resp_sendstr_chunk(Req, "</select>\n"); }
 
-static void ParmForm_Info(httpd_req_t *Req)  // produce HTML form for aircraft parameters
+// HTML form for the Info parameters
+static void ParmForm_Info(httpd_req_t *Req)
 {
   httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Info\">\n<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
   httpd_resp_sendstr_chunk(Req, "<tr><th><b>Info</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
@@ -75,7 +77,8 @@ static void ParmForm_Info(httpd_req_t *Req)  // produce HTML form for aircraft p
 
   httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
 
-static void ParmForm_Acft(httpd_req_t *Req)  // produce HTML form for aircraft parameters
+// HTML form for the Aircraft identification: address, address-type, aircraft-type
+static void ParmForm_Acft(httpd_req_t *Req)
 { char Line[16];
 
   httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Acft\">\n<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
@@ -99,13 +102,51 @@ static void ParmForm_Acft(httpd_req_t *Req)  // produce HTML form for aircraft p
 
   httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
 
+static void ParmForm_GPS(httpd_req_t *Req)  // produce HTML form for GPS parameters
+{ char Line[16]; int Len;
+
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"GPS\">\n<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
+#ifdef WITH_GPS_UBX
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>GPS: UBX</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
+#else
+#ifdef WITH_GPS_MTK
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>GPS: MTK</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
+#else
+  httpd_resp_sendstr_chunk(Req, "<tr><th><b>GPS</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
+#endif
+#endif
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Nav. rate [Hz]</td><td><input type=\"text\" name=\"NavRate\" size=\"10\" value=\"");
+  Len=Format_UnsDec(Line, Parameters.NavRate);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Nav. mode</td><td><input type=\"text\" name=\"NavMode\" size=\"10\" value=\"");
+  Len=Format_UnsDec(Line, Parameters.NavMode);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Geoid-Separ.</td><td>\n");
+
+  const char *GeoidSeparTable[2] = { "GPS", "Override" } ;
+  SelectList(Req, "manGeoidSepar", GeoidSeparTable, 2, Parameters.manGeoidSepar);
+
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"GeoidSepar\" size=\"3\" value=\"");
+  Len=Format_SignDec(Line, Parameters.GeoidSepar, 2, 1);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\">\n");
+
+  httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
+
 static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for aircraft parameters
 { char Line[16]; int Len;
 
   httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Other\">\n<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
   httpd_resp_sendstr_chunk(Req, "<tr><th><b>Other</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
 
-  const char *FreqPlanTable[16] = { "Auto", "Europe/Africa", "USA/Canada", "Australia/Chile", "New Zeeland", "Izrael" };
+  const char *FreqPlanTable[6] = { "Auto", "Europe/Africa", "USA/Canada", "Australia/Chile", "New Zeeland", "Izrael" };
   httpd_resp_sendstr_chunk(Req, "<tr><td>Freq. plan</td><td>\n");
   SelectList(Req, "FreqPlan", FreqPlanTable, 6, Parameters.FreqPlan);
   httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
@@ -161,12 +202,12 @@ static void ParmForm_Stratux(httpd_req_t *Req) // Connection to Stratux WiFi par
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Tx [dBm]</td><td><input type=\"text\" name=\"StratuxTxPwr\" size=\"10\" value=\"");
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Tx power [dBm]</td><td><input type=\"text\" name=\"StratuxTxPwr\" size=\"10\" value=\"");
   Len=Format_UnsDec(Line, (10*Parameters.StratuxTxPwr+2)>>2, 2, 1);
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Min. signal [dBm]</td><td><input type=\"text\" name=\"StratuxMinSig\" size=\"10\" value=\"");
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Min. RSSI [dBm]</td><td><input type=\"text\" name=\"StratuxMinSig\" size=\"10\" value=\"");
   Len=Format_SignDec(Line, Parameters.StratuxMinSig);
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
@@ -194,7 +235,7 @@ static void ParmForm_AP(httpd_req_t *Req) // Wi-Fi access point parameters { cha
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Tx [dBm]</td><td><input type=\"text\" name=\"APtxPwr\" size=\"10\" value=\"");
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Tx power [dBm]</td><td><input type=\"text\" name=\"APtxPwr\" size=\"10\" value=\"");
   Len=Format_UnsDec(Line, (10*Parameters.APtxPwr+2)>>2, 2, 1);
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
@@ -461,7 +502,7 @@ static void Top_Bar(httpd_req_t *Req)
 { char Line[32]; int Len;
 
   httpd_resp_sendstr_chunk(Req, "<h2>OGN-Tracker</h2>\n");
-  httpd_resp_sendstr_chunk(Req, "<b>CPU ID: ");
+  httpd_resp_sendstr_chunk(Req, "<b>EUID: ");
   Len=Format_Hex(Line, getUniqueID());
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "</b><br />\n");
@@ -513,6 +554,8 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
   ParmForm_Acft(Req);
   httpd_resp_sendstr_chunk(Req, "</td></tr>\n<tr><td>\n");
   ParmForm_Info(Req);
+  httpd_resp_sendstr_chunk(Req, "</td></tr>\n<tr><td>\n");
+  ParmForm_GPS(Req);
   httpd_resp_sendstr_chunk(Req, "</td></tr>\n<tr><td>\n");
 #ifdef WITH_AP
   ParmForm_AP(Req);

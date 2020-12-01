@@ -212,12 +212,14 @@ uint16_t StratuxPort;
 
     Flags          =         0;
 #ifdef WITH_GPS_UBX
-    NavMode        =         6; // Avionic mode 1g for UBX
+    NavMode        =         6; // 6 = Avionic mode 1g for UBX
 #endif
 #ifdef WITH_GPS_MTK
-    NavMode        =         2; // Avionic mode for MTK
+    NavMode        =         2; // 2 = Avionic mode for MTK
 #endif
     NavRate        =         1; // [Hz]
+    GeoidSepar     =    10*DEFAULT_GeoidSepar; // [0.1m]
+
     Verbose        =         1;
 
     RFchipTempCorr =         0; // [degC]
@@ -225,7 +227,6 @@ uint16_t StratuxPort;
     CONprot        =      0xFF;
     PressCorr      =         0; // [0.25Pa]
     TimeCorr       =         0; // [sec]
-    GeoidSepar     =    10*DEFAULT_GeoidSepar; // [0.1m]
 
     FreqPlan       =    DEFAULT_FreqPlan; // [0..5]
     PPSdelay       =    DEFAULT_PPSdelay; // [ms]

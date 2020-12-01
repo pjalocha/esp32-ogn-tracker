@@ -141,7 +141,7 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
        if(Data[4]!='G') return 0;
        return Data[5]=='A'; }
 
-   uint8_t isGPGSA(void) const                   //
+   uint8_t isGPGSA(void) const                   // GPS satellite data
      { if(!isGP()) return 0;
        if(Data[3]!='G') return 0;
        if(Data[4]!='S') return 0;

@@ -57,6 +57,41 @@ class UBX_NAV_SOL     // 0x01 0x06
     uint8_t reserved2[4]; //
 } ;
 
+class UBX_NAV_PVT     // 0x01 0x07
+{ public:
+   uint32_t iTOW;      // [ms]
+   uint16_t year;
+   uint8_t  month;
+   uint8_t  day;
+   uint8_t  hour;
+   uint8_t  min;
+   uint8_t  sec;
+   uint8_t  valid;
+   uint32_t tAcc;
+    int32_t nano;
+   uint8_t  fixType;
+   uint8_t  flags;
+   uint8_t  flags2;
+   uint8_t  numSV;
+    int32_t lon;
+    int32_t lat;
+    int32_t height;
+    int32_t hMSL;
+   uint32_t hAcc;
+   uint32_t vAcc;
+    int32_t velN;
+    int32_t velE;
+    int32_t velD;
+    int32_t gSpeed;
+    int32_t headMot;
+   uint32_t sAcc;
+   uint32_t headAcc;
+   uint16_t pDOP;
+   uint8_t  reserved1[6];
+    int32_t headVeh;
+   uint8_t  reserved2[4];
+} ;
+
 class UBX_NAV_VELNED  // 0x01 0x12
 { public:
    uint32_t iTOW;      // [ms] Time-of-Week
@@ -126,6 +161,9 @@ class UBX_CFG_PRT         // 0x06 0x00
     int16_t outProtoMask; // bit 0:UBX, bit 1:NMEA
    uint16_t flags;        // bit 1:extendedTxTimeout
    uint16_t reserved2;
+  public:
+   // void setBaudRate(uint32_t BaudRate)
+   // { }
 } ;
 
 class UBX_CFG_MSG         // 0x06 0x01
@@ -171,6 +209,8 @@ class UBX_CFG_NAV5        // 0x06 0x24
   uint8_t   reserved2[2];
   uint32_t  reserved3;
   uint32_t  reserved4;
+ public:
+  void setDynModel(uint8_t DynModel) { mask = 0x0001; dynModel=DynModel; } // only change the dynamic model
 } ;
 
 // UBX Class packet numbers
@@ -280,9 +320,9 @@ class UBX_RxMsg // receiver for the UBX sentences
      CheckB += CheckA;
      (*SendByte)(DataLen);
      CheckA += DataLen;
-     CheckB += CheckA;         // pass PollDataLen
+     CheckB += CheckA;         // pass DataLen LSB
      (*SendByte)(0x00);
-     CheckB += CheckA;         // pass 0x00
+     CheckB += CheckA;         // pass DataLen MSB = 0x00
      if(Data)
      { for(uint8_t Idx=0; Idx<DataLen; Idx++)
        { (*SendByte)(Data[Idx]);
