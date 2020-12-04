@@ -227,9 +227,9 @@ class LookOut
      NMEA[Len++]=',';
      if(Tgt)                                               // [m] relative horizontal distance
      { Len+=Format_UnsDec(NMEA+Len, (Tgt->HorDist)>>1, 1); }
+     NMEA[Len++]=',';
      if(Tgt)                                               // ID
-     { NMEA[Len++]=',';
-       Len+=Format_Hex(NMEA+Len, Tgt->ID); }
+     { Len+=Format_Hex(NMEA+Len, Tgt->ID); }
      Len+=NMEA_AppendCheckCRNL(NMEA, Len);
      NMEA[Len]=0;
      return Len; }
