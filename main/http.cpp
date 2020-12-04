@@ -246,77 +246,95 @@ static void ParmForm_AP(httpd_req_t *Req) // Wi-Fi access point parameters { cha
 // ============================================================================================================
 
 static void Table_GPS(httpd_req_t *Req)
-{ char Line[32]; int Len;
+{ char Line[128]; int Len;
   uint32_t Time=TimeSync_Time();
   uint32_t Sec = (Time-1)%60;
   GPS_Position *GPS = GPS_getPosition(Sec); if(GPS==0) return;
 
-  httpd_resp_sendstr_chunk(Req, "<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>GPS</th><td>");
-  Len=Format_UnsDec(Line, GPS->Year+2000 , 4); Line[Len++]='.';
+  httpd_resp_sendstr_chunk(Req, "<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n\
+<tr><th>GPS</th><td></td></tr>\n");
+
+  Len =Format_String(Line, "<tr><td>Date</td><td align=\"right\">");
+  Len+=Format_UnsDec(Line+Len, GPS->Year+2000 , 4); Line[Len++]='.';
   Len+=Format_UnsDec(Line+Len, GPS->Month, 2); Line[Len++]='.';
-  Len+=Format_UnsDec(Line+Len, GPS->Day  , 2); Line[Len++]=' ';
+  Len+=Format_UnsDec(Line+Len, GPS->Day  , 2);
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Time</td><td align=\"right\">");
   Len+=Format_UnsDec(Line+Len, GPS->Hour , 2); Line[Len++]=':';
   Len+=Format_UnsDec(Line+Len, GPS->Min  , 2); Line[Len++]=':';
   Len+=Format_UnsDec(Line+Len, GPS->Sec  , 2); Line[Len++]='.';
   Len+=Format_UnsDec(Line+Len, GPS->FracSec, 2);
+  Len+=Format_String(Line+Len, "</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<td>Lock</td><td align=\"right\">");
-  if(GPS->FixMode>=2) { strcpy(Line, "0-D "); Line[0]='0'+GPS->FixMode; Len=4; }
-                 else { strcpy(Line, "--- "); Len=4; }
-  Len+=Format_UnsDec(Line+Len, GPS->Satellites);
-  Len+=Format_String(Line+Len, "sat Hdop");
+  Len=Format_String(Line, "<td>Lock</td><td align=\"right\">");
+  if(GPS->FixMode>=2) { strcpy(Line+Len, "0-D "); Line[Len]='0'+GPS->FixMode; }
+                 else { strcpy(Line+Len, "--- "); }
+  Len+=4;
+  Len+=Format_String(Line+Len, " Hdop");
   Len+=Format_UnsDec(Line+Len, GPS->HDOP, 2, 1);
+  Len+=Format_String(Line+Len, "</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<td>Latitude</td><td align=\"right\">");
-  Len=Format_SignDec(Line, GPS->Latitude/6, 7, 5);
+  Len=Format_String(Line, "<td>Satellites</td><td align=\"right\">");
+  Len+=Format_UnsDec(Line+Len, GPS->Satellites);
+  Len+=Format_String(Line+Len, "sats ");
+  Len+=Format_UnsDec(Line+Len, ((uint16_t)10*GPS_SatSNR+2)/4, 2, 1);
+  Len+=Format_String(Line+Len, "dB</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "&deg;</td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<td>Longitude</td><td align=\"right\">");
-  Len=Format_SignDec(Line, GPS->Longitude/6, 8, 5);
+  Len =Format_String(Line, "<tr><td>Latitude</td><td align=\"right\">");
+  Len+=Format_SignDec(Line+Len, GPS->Latitude/6, 7, 5);
+  Len+=Format_String(Line+Len, "&deg;</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "&deg;</td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<td>Altitude</td><td align=\"right\">");
-  Len=Format_SignDec(Line, GPS->Altitude, 2, 1);
+  Len =Format_String(Line, "<tr><td>Longitude</td><td align=\"right\">");
+  Len+=Format_SignDec(Line+Len, GPS->Longitude/6, 8, 5);
+  Len+=Format_String(Line+Len, "&deg;</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, " m</td></tr>\n");
+
+  Len =Format_String(Line, "<tr><td>Altitude</td><td align=\"right\">");
+  Len+=Format_SignDec(Line+Len, GPS->Altitude, 2, 1);
+  Len+=Format_String(Line+Len, " m</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Geoid Separ.</td><td align=\"right\">");
+  Len+=Format_SignDec(Line+Len, GPS->GeoidSeparation, 2, 1);
+  Len+=Format_String(Line+Len, " m</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
 
   if(GPS->hasBaro)
-  { httpd_resp_sendstr_chunk(Req, "<td>Pressure</td><td align=\"right\">");
-    Len=Format_SignDec(Line, (GPS->Pressure+2)/4, 3, 2);
+  { Len =Format_String(Line, "<tr><td>Pressure Alt.</td><td align=\"right\">");
+    Len+=Format_SignDec(Line+Len, GPS->StdAltitude, 2, 1);
+    Len+=Format_String(Line+Len, " m</td></tr>\n");
     httpd_resp_send_chunk(Req, Line, Len);
-    httpd_resp_sendstr_chunk(Req, " hPa</td></tr>\n");
 
-    httpd_resp_sendstr_chunk(Req, "<td>Pressure Alt.</td><td align=\"right\">");
-    Len=Format_SignDec(Line, GPS->StdAltitude, 2, 1);
+    Len =Format_String(Line, "<tr><td>Pressure</td><td align=\"right\">");
+    Len+=Format_SignDec(Line+Len, (GPS->Pressure+2)/4, 3, 2);
+    Len+=Format_String(Line+Len, " hPa</td></tr>\n");
     httpd_resp_send_chunk(Req, Line, Len);
-    httpd_resp_sendstr_chunk(Req, " m</td></tr>\n");
 
-    httpd_resp_sendstr_chunk(Req, "<td>Temperature</td><td align=\"right\">");
-    Len=Format_SignDec(Line, GPS->Temperature, 2, 1);
-    httpd_resp_send_chunk(Req, Line, Len);
-    httpd_resp_sendstr_chunk(Req, " &#x2103;</td></tr>\n"); }
+    Len =Format_String(Line, "<tr><td>Temperature</td><td align=\"right\">");
+    Len+=Format_SignDec(Line+Len, GPS->Temperature, 2, 1);
+    Len+=Format_String(Line+Len, " &#x2103;</td></tr>\n");
+    httpd_resp_send_chunk(Req, Line, Len); }
 
-  httpd_resp_sendstr_chunk(Req, "<td>Climb rate</td><td align=\"right\">");
-  Len=Format_SignDec(Line, GPS->ClimbRate, 2, 1);
+  Len =Format_String(Line, "<tr><td>Climb rate</td><td align=\"right\">");
+  Len+=Format_SignDec(Line+Len, GPS->ClimbRate, 2, 1);
+  Len+=Format_String(Line+Len, " m/s</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, " m/s</td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<td>Hor. speed</td><td align=\"right\">");
-  Len=Format_UnsDec(Line, GPS->Speed, 2, 1);
+  Len =Format_String(Line, "<tr><td>Hor. speed</td><td align=\"right\">");
+  Len+=Format_UnsDec(Line+Len, GPS->Speed, 2, 1);
+  Len+=Format_String(Line+Len, " m/s</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, " m/s</td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<td>Hor. track</td><td align=\"right\">");
-  Len=Format_UnsDec(Line, GPS->Heading, 4, 1);
+  Len =Format_String(Line, "<tr><td>Hor. track</td><td align=\"right\">");
+  Len+=Format_UnsDec(Line+Len, GPS->Heading, 4, 1);
+  Len+=Format_String(Line+Len, "&deg;</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "&deg;</td></tr>\n");
 
   httpd_resp_sendstr_chunk(Req, "</table>\n"); }
 
@@ -479,7 +497,7 @@ static void Table_Batt(httpd_req_t *Req)
 
   int32_t Charge = InpCharge-OutCharge;
   Len =Format_String(Line, "<tr><td>Charge</td><td align=\"right\">");
-  Len+=Format_UnsDec(Line+Len, (((int64_t)Charge<<12)+562)/1125, 2, 1);
+  Len+=Format_SignDec(Line+Len, (((int64_t)Charge<<12)+562)/1125, 2, 1);
   Len+=Format_String(Line+Len, " mAh</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
 
