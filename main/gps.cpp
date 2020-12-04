@@ -102,8 +102,8 @@ FlightMonitor Flight;
 
 static char GPS_Cmd[64];
 
-static uint16_t SatSNRsum = 0;
-static uint8_t  SatSNRcount = 0;
+static uint16_t SatSNRsum = 0;   // sum up the satellite SNR's
+static uint8_t  SatSNRcount = 0; // sum counter
 
 struct GPS_Sat          // store GPS satellite data in single 32-bit word
 { union
@@ -131,8 +131,8 @@ static void ProcessGSV(NMEA_RxMsg &GSV)              // process GxGSV to extract
   if(GSV.Parms<3) return;
   int8_t Pkts=Read_Dec1((const char *)GSV.ParmPtr(0)); if(Pkts<0) return;
   int8_t Pkt =Read_Dec1((const char *)GSV.ParmPtr(1)); if(Pkt <0) return;
-  int8_t Sats=Read_Dec2((const char *)GSV.ParmPtr(2));
-  if(Sats<0) Sats=Read_Dec1((const char *)GSV.ParmPtr(2));
+  int8_t Sats=Read_Dec2((const char *)GSV.ParmPtr(2));                               //
+  if(Sats<0) Sats=Read_Dec1((const char *)GSV.ParmPtr(2));                           //
   if(Sats<0) return;
   for( int Parm=3; Parm<GSV.Parms; )
   { int8_t PRN =Read_Dec2((const char *)GSV.ParmPtr(Parm++)); if(PRN <0) break;
@@ -1011,7 +1011,7 @@ void vTaskGPS(void* pvParameters)
       uint32_t NewBaudRate = GPS_nextBaudRate();                           // switch to the next baud rate
       if(PowerMode>0)
       {
-#ifdef WITH_GPS_UBS
+#ifdef WITH_GPS_UBX
 #ifdef WITH_GPS_ENABLE
         GPS_ENABLE();
 #endif
