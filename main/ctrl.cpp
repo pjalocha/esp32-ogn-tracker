@@ -409,8 +409,9 @@ void vTaskCTRL(void* pvParameters)
 //     esp_sleep_enable_ext0_wakeup(PIN_AXP_IRQ, 0); // 1 = High, 0 = Low
 //     esp_deep_sleep_start();
     }
-    bool ShortPress = AXP.readShortPressIRQ();
-    if(ShortPress)
+    bool ShortPress1 = AXP.readShortPressIRQ();
+    bool ShortPress2 = AXP.readShortPressIRQ();
+    if(ShortPress1 && ShortPress2)
     { KeyBuffer.Write(0x04);
 #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
