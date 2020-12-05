@@ -457,6 +457,28 @@ uint16_t StratuxPort;
     Line[Len]=0;
     return Len; }
 
+  uint8_t WritePOGNS(char *Line)
+  { uint8_t Len=0;
+    Len+=Format_String(Line+Len, "$POGNS,CPU=0x");
+    uint64_t CPU=getUniqueID();
+    Len+=Format_Hex(Line+Len, (uint16_t)(CPU>>32));
+    Len+=Format_Hex(Line+Len, (uint32_t)CPU);
+    Len+=Format_String(Line+Len, ",Address=0x");
+    Len+=Format_Hex(Line+Len, Address, 6);
+    Len+=Format_String(Line+Len, ",AddrType=");
+    Line[Len++]='0'+AddrType;
+    Len+=Format_String(Line+Len, ",AcftType=0x");
+    Line[Len++]=HexDigit(AcftType);
+    Len+=Format_String(Line+Len, ",FreqPlan=");
+    Line[Len++]='0'+FreqPlan;
+    Len+=Format_String(Line+Len, ",Pilot=");
+    Len+=Format_String(Line+Len, Pilot);
+    Len+=Format_String(Line+Len, ",Reg=");
+    Len+=Format_String(Line+Len, Reg);
+    Len+=NMEA_AppendCheckCRNL(Line, Len);
+    Line[Len]=0;
+    return Len; }
+
   int ReadPOGNS(NMEA_RxMsg &NMEA)
   { int Count=0;
     for(uint8_t Idx=0; ; Idx++)

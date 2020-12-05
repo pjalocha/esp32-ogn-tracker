@@ -84,7 +84,9 @@ static void ReadParameters(void)  // read parameters requested by the user in th
     if(NMEA.Parms==0)                                                      // if no parameter given
     { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);                           // print a help message
       // Format_String(CONS_UART_Write, "$POGNS,<aircraft-type>,<addr-type>,<address>,<RFM69(H)W>,<Tx-power[dBm]>,<freq.corr.[kHz]>,<console baudrate[bps]>,<RF temp. corr.[degC]>,<pressure corr.[Pa]>\n");
-      Format_String(CONS_UART_Write, "$POGNS[,<Name>=<Value>]\n");
+      // Format_String(CONS_UART_Write, "$POGNS[,<Name>=<Value>]\n");
+      Parameters.WritePOGNS(Line);
+      Format_String(CONS_UART_Write, Line);
       xSemaphoreGive(CONS_Mutex);                                          //
       return; }
     Parameters.ReadPOGNS(NMEA);
@@ -151,6 +153,8 @@ static void ProcessCtrlV(void)
 
 static void ProcessCtrlC(void)                                  // print system state to the console
 { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  // Parameters.WritePOGNS(Line);
+  // Format_String(CONS_UART_Write, Line);
   Parameters.Print(Line);
   Format_String(CONS_UART_Write, Line);
   Format_String(CONS_UART_Write, "GPS: ");
