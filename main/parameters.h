@@ -40,9 +40,20 @@ class FlashParameters
      } ;
    } ;
 
-    int16_t  RFchipFreqCorr; // [0.1ppm] frequency correction for crystal frequency offset
-    int8_t   RFchipTxPower;  // [dBm] highest bit set => HW module (up to +20dBm Tx power)
-    int8_t   RFchipTempCorr; // [degC] correction to the temperature measured in the RF chip
+   union
+   { uint32_t RFchip;
+     struct
+     { int16_t RFchipFreqCorr: 12; // [0.1ppm] frequency correction for crystal frequency offset
+       int8_t  RFchipTempCorr:  4; // [degC] correction to the temperature measured in the RF chip
+       int8_t         TxPower:  6; // [dBm] highest bit set => HW module (up to +20dBm Tx power)
+       bool      RFchipTypeHW:  1; // is this RFM69HW (Tx power up to +20dBm) ?
+      uint8_t        FreqPlan:  3; // 0=default or force given frequency hopping plan
+     } ;
+   } ;
+
+    // int16_t  RFchipFreqCorr; // [0.1ppm] frequency correction for crystal frequency offset
+    // int8_t   RFchipTxPower;  // [dBm] highest bit set => HW module (up to +20dBm Tx power)
+    // int8_t   RFchipTempCorr; // [degC] correction to the temperature measured in the RF chip
 
    union
    { uint32_t Console;
@@ -61,18 +72,19 @@ class FlashParameters
        bool       hasBT:1;   // has BT interface on the console
        bool       BT_ON:1;   // BT on after power up
        bool manGeoidSepar:1; // GeoidSepar is manually configured as the GPS or MAVlink are not able to deliver it
-       bool     Encrypt:1;   // encrypt the position
+       bool     Encrypt:1;   // encrypt the position packets
        uint8_t  NavMode:3;   // GPS navigation mode/model
-       uint8_t  NavRate:2;   // [Hz]
        uint8_t  Verbose:2;   //
-        int8_t TimeCorr:4;   // [sec] it appears for ArduPilot you need to correct time by 3 seconds
+       uint8_t  NavRate:3;   // [Hz] GPS position report rate
+        int8_t TimeCorr:3;   // [sec] it appears for ArduPilot you need to correct time by 3 seconds which is likley the leap-second issue
      } ;
    } ;                      //
 
    int16_t  GeoidSepar;      // [0.1m] Geoid-Separation, apparently ArduPilot MAVlink does not give this value (although present in the format)
                              //  or it could be a problem of some GPSes
   uint8_t  PPSdelay;         // [ms] delay between the PPS and the data burst starts on the GPS UART (used when PPS failed or is not there)
-  uint8_t  FreqPlan;         // force given frequency hopping plan
+  // uint8_t  FreqPlan;         // 0=default or force given frequency hopping plan
+  uint8_t  Spare;
 
    static const uint8_t InfoParmLen = 16; // [char] max. size of an infp-parameter
    static const uint8_t InfoParmNum = 15; // [int]  number of info-parameters
@@ -155,12 +167,12 @@ uint16_t StratuxPort;
    // static const uint32_t Words=sizeof(FlashParameters)/sizeof(uint32_t);
 
   public:
-   int8_t getTxPower(void) const { int8_t Pwr=RFchipTxPower&0x7F; if(Pwr&0x40) Pwr|=0x80; return Pwr; }
-   void   setTxPower(int8_t Pwr) { RFchipTxPower = (RFchipTxPower&0x80) | (Pwr&0x7F); }
+   // int8_t getTxPower(void) const { int8_t Pwr=RFchipTxPower&0x7F; if(Pwr&0x40) Pwr|=0x80; return Pwr; }
+   // void   setTxPower(int8_t Pwr) { RFchipTxPower = (RFchipTxPower&0x80) | (Pwr&0x7F); }
 
-   void   setTxTypeHW(void)       {        RFchipTxPower|=0x80; }
-   void   clrTxTypeHW(void)       {        RFchipTxPower&=0x7F; }
-   bool    isTxTypeHW(void) const { return RFchipTxPower& 0x80; } // if this RFM69HW (Tx power up to +20dBm) ?
+   // void   setTxTypeHW(void)       {        RFchipTxPower|=0x80; }
+   // void   clrTxTypeHW(void)       {        RFchipTxPower&=0x7F; }
+   // bool    isTxTypeHW(void) const { return RFchipTxPower& 0x80; } // if this RFM69HW (Tx power up to +20dBm) ?
 
    static const uint32_t CheckInit = 0x89ABCDEF;
 
@@ -205,9 +217,11 @@ uint16_t StratuxPort;
   { AcftID = ((uint32_t)DEFAULT_AcftType<<26) | 0x03000000 | (UniqueAddr&0x00FFFFFF);
     RFchipFreqCorr =         0; // [0.1ppm]
 #ifdef WITH_RFM69W
-    RFchipTxPower  =        13; // [dBm] for RFM69W
+    TxPower        =        13; // [dBm] for RFM69W
+    RFchipTypeHW   =         0;
 #else
-    RFchipTxPower  = 0x80 | 14; // [dBm] for RFM69HW
+    TxPower        =        14; // [dBm] for RFM69HW
+    RFchipTypeHW   =         1;
 #endif
 
     Flags          =         0;
@@ -217,7 +231,7 @@ uint16_t StratuxPort;
 #ifdef WITH_GPS_MTK
     NavMode        =         2; // 2 = Avionic mode for MTK
 #endif
-    NavRate        =         1; // [Hz]
+    NavRate        =         0; // [Hz] 0 = do not attempt to change the navigation rate
     GeoidSepar     =    10*DEFAULT_GeoidSepar; // [0.1m]
 
     Verbose        =         1;
@@ -438,7 +452,7 @@ uint16_t StratuxPort;
     // { Line[Len++]='/'; Len+=Format_Hex(Line+Len, DefaultAddr, 6); }
 #ifdef WITH_RFM69
     Len+=Format_String(Line+Len, " RFM69");
-    if(isTxTypeHW()) Line[Len++]='H';
+    if(RFchipTypeHW) Line[Len++]='H';
     Line[Len++]='W';
 #endif
 #ifdef WITH_RFM95
@@ -448,7 +462,7 @@ uint16_t StratuxPort;
     Len+=Format_String(Line+Len, " SX1272");
 #endif
     Line[Len++]='/';
-    Len+=Format_SignDec(Line+Len, (int16_t)getTxPower());
+    Len+=Format_SignDec(Line+Len, (int16_t)TxPower);
     Len+=Format_String(Line+Len, "dBm");
     Line[Len++]=' '; Len+=Format_SignDec(Line+Len, (int32_t)RFchipFreqCorr, 2, 1); Len+=Format_String(Line+Len, "ppm");
     Len+=Format_String(Line+Len, " CON:");
@@ -471,13 +485,81 @@ uint16_t StratuxPort;
     Line[Len++]=HexDigit(AcftType);
     Len+=Format_String(Line+Len, ",FreqPlan=");
     Line[Len++]='0'+FreqPlan;
-    Len+=Format_String(Line+Len, ",Pilot=");
+    Len+=NMEA_AppendCheckCRNL(Line, Len);
+    Line[Len]=0; return Len; }
+
+  uint8_t WritePOGNS_Pilot(char *Line)
+  { uint8_t Len=0;
+    Len+=Format_String(Line+Len, "$POGNS,Pilot=");
     Len+=Format_String(Line+Len, Pilot);
+    Len+=Format_String(Line+Len, ",Crew=");
+    Len+=Format_String(Line+Len, Crew);
     Len+=Format_String(Line+Len, ",Reg=");
     Len+=Format_String(Line+Len, Reg);
+    Len+=Format_String(Line+Len, ",Base=");
+    Len+=Format_String(Line+Len, Base);
     Len+=NMEA_AppendCheckCRNL(Line, Len);
-    Line[Len]=0;
-    return Len; }
+    Line[Len]=0; return Len; }
+
+  uint8_t WritePOGNS_Acft(char *Line)
+  { uint8_t Len=0;
+    Len+=Format_String(Line+Len, "$POGNS,Manuf=");
+    Len+=Format_String(Line+Len, Manuf);
+    Len+=Format_String(Line+Len, ",Model=");
+    Len+=Format_String(Line+Len, Model);
+    Len+=Format_String(Line+Len, ",Type=");
+    Len+=Format_String(Line+Len, Type);
+    Len+=Format_String(Line+Len, ",SN=");
+    Len+=Format_String(Line+Len, SN);
+    Len+=NMEA_AppendCheckCRNL(Line, Len);
+    Line[Len]=0; return Len; }
+
+  uint8_t WritePOGNS_Comp(char *Line)
+  { uint8_t Len=0;
+    Len+=Format_String(Line+Len, "$POGNS,Class=");
+    Len+=Format_String(Line+Len, Class);
+    Len+=Format_String(Line+Len, ",ID=");
+    Len+=Format_String(Line+Len, ID);
+    Len+=Format_String(Line+Len, ",Task=");
+    Len+=Format_String(Line+Len, Task);
+    Len+=NMEA_AppendCheckCRNL(Line, Len);
+    Line[Len]=0; return Len; }
+
+#ifdef WITH_AP
+  uint8_t WritePOGNS_AP(char *Line)
+  { uint8_t Len=0;
+    Len+=Format_String(Line+Len, "$POGNS,APname=");
+    Len+=Format_String(Line+Len, APname);
+    Len+=Format_String(Line+Len, ",APass=");
+    Len+=Format_String(Line+Len, APpass);
+    Len+=Format_String(Line+Len, ",APport=");
+    Len+=Format_UnsDec(Line+Len, APport);
+    Len+=Format_String(Line+Len, ",APtxPwr=");
+    Len+=Format_SignDec(Line+Len, ((int16_t)10*APtxPwr+2)>>2, 2, 1);
+    Len+=Format_String(Line+Len, ",APminSig=");
+    Len+=Format_SignDec(Line+Len, (int16_t)APminSig);
+    Len+=NMEA_AppendCheckCRNL(Line, Len);
+    Line[Len]=0; return Len; }
+#endif
+
+#ifdef WITH_STRATUX
+  uint8_t WritePOGNS_Stratux(char *Line)
+  { uint8_t Len=0;
+    Len+=Format_String(Line+Len, "$POGNS,StratuxWIFI=");
+    Len+=Format_String(Line+Len, StratuxWIFI);
+    Len+=Format_String(Line+Len, ",StratuxPass=");
+    Len+=Format_String(Line+Len, StratuxPass);
+    Len+=Format_String(Line+Len, ",StratuxHost=");
+    Len+=Format_String(Line+Len, StratuxHost);
+    Len+=Format_String(Line+Len, ",StratuxPort=");
+    Len+=Format_UnsDec(Line+Len, StratuxPort);
+    Len+=Format_String(Line+Len, ",StratuxTxPwr=");
+    Len+=Format_SignDec(Line+Len, ((int16_t)10*StratuxTxPwr+2)>>2, 2, 1);
+    Len+=Format_String(Line+Len, ",StratuxMinSig=");
+    Len+=Format_SignDec(Line+Len, (int16_t)StratuxMinSig);
+    Len+=NMEA_AppendCheckCRNL(Line, Len);
+    Line[Len]=0; return Len; }
+#endif
 
   int ReadPOGNS(NMEA_RxMsg &NMEA)
   { int Count=0;
@@ -530,10 +612,10 @@ uint16_t StratuxPort;
       CONprot=Prot; return 1; }
     if(strcmp(Name, "TxHW")==0)
     { int32_t HW=1; if(Read_Int(HW, Value)<=0) return 0;
-      if(HW) setTxTypeHW(); else clrTxTypeHW(); }
+      RFchipTypeHW=HW; }
     if(strcmp(Name, "TxPower")==0)
-    { int32_t TxPower=0; if(Read_Int(TxPower, Value)<=0) return 0;
-      setTxPower(TxPower); return 1; }
+    { int32_t Power=0; if(Read_Int(Power, Value)<=0) return 0;
+      TxPower=Power; return 1; }
     if(strcmp(Name, "PPSdelay")==0)
     { uint32_t Delay=0; if(Read_Int(Delay, Value)<=0) return 0;
       if(Delay>0xFF) Delay=0xFF; PPSdelay=Delay; return 1; }
@@ -559,7 +641,7 @@ uint16_t StratuxPort;
       NavMode=Mode; return 1; }
     if(strcmp(Name, "NavRate")==0)
     { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
-      if(Mode<1) Mode=1; NavRate=Mode; return 1; }
+      if(Mode<0) Mode=0; NavRate=Mode; return 1; }
     if(strcmp(Name, "PageMask")==0)
     { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
       PageMask=Mode; return 1; }
@@ -724,8 +806,8 @@ uint16_t StratuxPort;
     Write_Hex    (Line, "AcftType"  ,          AcftType,       1); strcat(Line, " #  [4-bit]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_UnsDec (Line, "CONbaud"   ,          CONbaud          ); strcat(Line, " #  [  bps]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Hex    (Line, "CONprot"   ,          CONprot,        1); strcat(Line, " #  [ mask]\n"); if(fputs(Line, File)==EOF) return EOF;
-    Write_SignDec(Line, "TxPower"   ,          getTxPower()     ); strcat(Line, " #  [  dBm]\n"); if(fputs(Line, File)==EOF) return EOF;
-    Write_UnsDec (Line, "TxHW"      ,(uint32_t)isTxTypeHW()     ); strcat(Line, " #  [ bool]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_SignDec(Line, "TxPower"   ,          TxPower          ); strcat(Line, " #  [  dBm]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_UnsDec (Line, "TxHW"      ,(uint32_t)RFchipTypeHW     ); strcat(Line, " #  [ bool]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_UnsDec (Line, "FreqPlan"  ,(uint32_t)FreqPlan         ); strcat(Line, " #  [ 0..5]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Float1 (Line, "FreqCorr"  , (int32_t)RFchipFreqCorr   ); strcat(Line, " #  [  ppm]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_SignDec(Line, "TempCorr"  , (int32_t)RFchipTempCorr   ); strcat(Line, " #  [ degC]\n"); if(fputs(Line, File)==EOF) return EOF;
@@ -789,8 +871,8 @@ uint16_t StratuxPort;
     Write_Hex    (Line, "AcftType"  ,          AcftType,       1); strcat(Line, " #  [4-bit]\n"); Format_String(Output, Line);
     Write_UnsDec (Line, "CONbaud"   ,          CONbaud          ); strcat(Line, " #  [  bps]\n"); Format_String(Output, Line);
     Write_Hex    (Line, "CONprot"   ,          CONprot,        1); strcat(Line, " #  [ mask]\n"); Format_String(Output, Line);
-    Write_SignDec(Line, "TxPower"   ,          getTxPower()     ); strcat(Line, " #  [  dBm]\n"); Format_String(Output, Line);
-    Write_UnsDec (Line, "TxHW"      ,(uint32_t)isTxTypeHW()     ); strcat(Line, " #  [ bool]\n"); Format_String(Output, Line);
+    Write_SignDec(Line, "TxPower"   ,          TxPower          ); strcat(Line, " #  [  dBm]\n"); Format_String(Output, Line);
+    Write_UnsDec (Line, "TxHW"      ,(uint32_t)RFchipTypeHW     ); strcat(Line, " #  [ bool]\n"); Format_String(Output, Line);
     Write_UnsDec (Line, "FreqPlan"  ,(uint32_t)FreqPlan         ); strcat(Line, " #  [ 0..5]\n"); Format_String(Output, Line);
     Write_Float1 (Line, "FreqCorr"  , (int32_t)RFchipFreqCorr   ); strcat(Line, " #  [  ppm]\n"); Format_String(Output, Line);
     Write_SignDec(Line, "TempCorr"  , (int32_t)RFchipTempCorr   ); strcat(Line, " #  [ degC]\n"); Format_String(Output, Line);

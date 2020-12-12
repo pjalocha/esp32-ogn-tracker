@@ -81,11 +81,11 @@ class AXP192
   public:
    uint8_t Error;                            // error on the I2C bus (0=no error)
 
-   uint8_t checkID(void) // check ID, to make sure the AXP192 is reachable
+   uint8_t checkID(void)                     // check ID, to make sure the AXP192 is reachable
    { ADDR=0;
      Error=I2C_Read(Bus, AXP192_ADDR, REG_ID, ID);
-     if( (!Error) && (ID==AXP192_ID) ) { ADDR=AXP192_ADDR; return 0; }
-     return 1; } // 0 => no error and correct ID
+     if( (!Error) && (ID==AXP192_ID) ) { ADDR=AXP192_ADDR; return 0; } // 0 => no error and correct ID
+     return 1; }                             // 1 => error or incorrect chip ID
 
    uint8_t readStatus(void)
    { uint8_t Byte=0; Error=I2C_Read(Bus, ADDR, REG_STATUS, Byte); return Byte; }
@@ -243,15 +243,25 @@ class AXP192
      }
      return Error; }
 
-   bool readLongPressIRQ(void)
+   uint8_t readIRQ1(void)
    { uint8_t Byte=0;
-     Error=I2C_Read(Bus, ADDR, REG_INTSTS1+2, Byte); if(Error) return 0;
-     return Byte&0x01; }
+     Error=I2C_Read(Bus, ADDR, REG_INTSTS1, Byte); if(Error) return 0;
+     return Byte; }
+   uint8_t readIRQ2(void)
+   { uint8_t Byte=0;
+     Error=I2C_Read(Bus, ADDR, REG_INTSTS2, Byte); if(Error) return 0;
+     return Byte; }
+   uint8_t readIRQ3(void)
+   { uint8_t Byte=0;
+     Error=I2C_Read(Bus, ADDR, REG_INTSTS3, Byte); if(Error) return 0;
+     return Byte; }
+   uint8_t readIRQ4(void)
+   { uint8_t Byte=0;
+     Error=I2C_Read(Bus, ADDR, REG_INTSTS4, Byte); if(Error) return 0;
+     return Byte; }
 
-   bool readShortPressIRQ(void)
-   { uint8_t Byte=0;
-     Error=I2C_Read(Bus, ADDR, REG_INTSTS1+2, Byte); if(Error) return 0;
-     return Byte&0x02; }
+   bool readLongPressIRQ(void) { return readIRQ3()&0x01; }
+   bool readShortPressIRQ(void) { return readIRQ3()&0x02; }
 
    uint8_t clearIRQ(void)
    { uint8_t Byte=0xFF;

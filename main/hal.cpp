@@ -889,7 +889,8 @@ void  AERO_UART_SetBaudrate(int BaudRate)  {        uart_set_baudrate(AERO_UART,
 // int   GPS_UART_Full       (void)          { size_t Full=0; uart_get_buffered_data_len(GPS_UART, &Full); return Full; }
 int   GPS_UART_Read       (uint8_t &Byte) { return uart_read_bytes  (GPS_UART, &Byte, 1, 0); }  // should be buffered and non-blocking
 void  GPS_UART_Write      (char     Byte) {        uart_write_bytes (GPS_UART, &Byte, 1);    }  // should be buffered and blocking
-void  GPS_UART_SetBaudrate(int BaudRate)  {        uart_set_baudrate(GPS_UART, BaudRate);    }
+void  GPS_UART_Flush      (int MaxWait  ) {        uart_wait_tx_done(GPS_UART, MaxWait);     }
+void  GPS_UART_SetBaudrate(int BaudRate ) {        uart_set_baudrate(GPS_UART, BaudRate);    }
 #endif
 
 #ifdef WITH_GPS_ENABLE
@@ -1810,6 +1811,16 @@ void IO_Configuration(void)
 #ifdef WITH_AXP
   gpio_set_direction(PIN_AXP_IRQ, GPIO_MODE_INPUT);
   AXP.Bus=(uint8_t)I2C_BUS;
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "AXP192: ");
+  Format_Hex(CONS_UART_Write, AXP.readIRQ1());
+  Format_Hex(CONS_UART_Write, AXP.readIRQ2());
+  Format_Hex(CONS_UART_Write, AXP.readIRQ3());
+  Format_Hex(CONS_UART_Write, AXP.readIRQ4());
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
   AXP.checkID();
   AXP.setPOK(0xDC);                      // power-on = 11 = 1sec, long-press = 01 = 1.5sec, power-off = enable, PWROK delay = 64ms, power-off = 00 = 4sec
   uint8_t PwrStatus = AXP.readStatus();

@@ -78,14 +78,23 @@ static union
                                                                                                    // for the autobaud on the GPS port
 const int GPS_BurstTimeout = 200; // [ms]
 
-static const uint8_t  BaudRates=7;                                                                 // number of possible baudrates choices
-static       uint8_t  BaudRateIdx=0;                                                               // actual choice
-static const uint32_t BaudRate[BaudRates] = { 4800, 9600, 19200, 38400, 57600, 115200, 230400 } ;  // list of baudrate the autobaud scans through
+// static const uint8_t  BaudRates=7;                                                                 // number of possible baudrates choices
+// static       uint8_t  BaudRateIdx=0;                                                               // actual choice
+// static const uint32_t BaudRate[BaudRates] = { 4800, 9600, 19200, 38400, 57600, 115200, 230400 } ;  // list of baudrate the autobaud scans through
 
-uint32_t GPS_getBaudRate (void) { return BaudRate[BaudRateIdx]; }
-uint32_t GPS_nextBaudRate(void) { BaudRateIdx++; if(BaudRateIdx>=BaudRates) BaudRateIdx=0; return GPS_getBaudRate(); }
+// uint32_t GPS_getBaudRate (void) { return BaudRate[BaudRateIdx]; }
+// uint32_t GPS_nextBaudRate(void) { BaudRateIdx++; if(BaudRateIdx>=BaudRates) BaudRateIdx=0; return GPS_getBaudRate(); }
 
-const uint32_t GPS_TargetBaudRate = 57600; // BaudRate[4]; // [bps] must be one of the baud rates known by the autbaud
+static uint32_t GPS_BaudRate = 4800; // [bps]
+static uint32_t GPS_nextBaudRate(void)
+{ if(GPS_BaudRate>=230400) GPS_BaudRate=4800;
+  else if(GPS_BaudRate==38400) GPS_BaudRate=57600;
+  else GPS_BaudRate<<=1;
+  return GPS_BaudRate; }
+
+uint32_t GPS_getBaudRate (void) { return GPS_BaudRate; }
+
+const uint32_t GPS_TargetBaudRate = 57600; // [bps]
 // const uint8_t  GPS_TargetDynModel =      7; // for UBX GPS's: 6 = airborne with >1g, 7 = with >2g
 
 #ifdef WITH_MAVLINK
@@ -377,6 +386,8 @@ static void GPS_BurstStart(void)                                           // wh
         GPS_Cmd[Len]=0;
         Format_String(GPS_UART_Write, GPS_Cmd, Len, 0);
 #endif // WITH_GPS_SRF
+        GPS_UART_Flush(500);                                                 // wait for all data to be sent to the GPS
+        GPS_UART_SetBaudrate(GPS_TargetBaudRate); GPS_BaudRate=GPS_TargetBaudRate;   // switch serial port to the new baudrate
       }
       QueryWait=60;
     }
@@ -1006,8 +1017,8 @@ void vTaskGPS(void* pvParameters)
       GPS_Burst.Flags=0;                                                   // clear all flags: active and complete
     }
 
-    if(NoValidData>=2000)                                                  // if no valid data from GPS for 1sec
-    { GPS_Status.Flags=0; GPS_Burst.Flags=0;                                                 // assume GPS state is unknown
+    if(NoValidData>=2000)                                                  // if no valid data from GPS for 2sec
+    { GPS_Status.Flags=0; GPS_Burst.Flags=0;                               // assume GPS state is unknown
       uint32_t NewBaudRate = GPS_nextBaudRate();                           // switch to the next baud rate
       if(PowerMode>0)
       {

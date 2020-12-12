@@ -28,7 +28,7 @@
 
 // #define DEBUG_PRINT
 
-static char Line[128];
+static char Line[160];
 
 // FIFO<uint8_t, 8> KeyBuffer;
 
@@ -87,6 +87,20 @@ static void ReadParameters(void)  // read parameters requested by the user in th
       // Format_String(CONS_UART_Write, "$POGNS[,<Name>=<Value>]\n");
       Parameters.WritePOGNS(Line);
       Format_String(CONS_UART_Write, Line);
+      Parameters.WritePOGNS_Pilot(Line);
+      Format_String(CONS_UART_Write, Line);
+      Parameters.WritePOGNS_Acft(Line);
+      Format_String(CONS_UART_Write, Line);
+      Parameters.WritePOGNS_Comp(Line);
+      Format_String(CONS_UART_Write, Line);
+#ifdef WITH_AP
+      Parameters.WritePOGNS_AP(Line);
+      Format_String(CONS_UART_Write, Line);
+#endif
+#ifdef WITH_STRATUX
+      Parameters.WritePOGNS_Stratux(Line);
+      Format_String(CONS_UART_Write, Line);
+#endif
       xSemaphoreGive(CONS_Mutex);                                          //
       return; }
     Parameters.ReadPOGNS(NMEA);

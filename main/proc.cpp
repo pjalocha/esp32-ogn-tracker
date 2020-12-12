@@ -253,7 +253,7 @@ static void ReadStatus(OGN_Packet &Packet)
   if(Packet.Status.Pressure==0) Packet.EncodeTemperature(TRX.chipTemp*10); // [0.1degC]
   Packet.Status.RadioNoise = TRX.averRSSI;                         // [-0.5dBm] write radio noise to the status packet
 
-  uint8_t TxPower = Parameters.getTxPower()-4;
+  uint8_t TxPower = Parameters.TxPower-4;
   if(TxPower>15) TxPower=15;
   Packet.Status.TxPower = TxPower;
 

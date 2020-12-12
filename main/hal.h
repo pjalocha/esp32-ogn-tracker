@@ -77,6 +77,7 @@ void CONS_UART_SetBaudrate(int BaudRate);
 
 int   GPS_UART_Read       (uint8_t &Byte); // non-blocking
 void  GPS_UART_Write      (char     Byte); // blocking
+void  GPS_UART_Flush      (int MaxWait  ); // wait for data to be pushed out
 void  GPS_UART_SetBaudrate(int BaudRate);
 
 bool GPS_PPS_isOn(void);

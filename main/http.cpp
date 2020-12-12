@@ -152,7 +152,7 @@ static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for aircraft 
   httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
 
   httpd_resp_sendstr_chunk(Req, "<tr><td>Tx power [dBm]</td><td><input type=\"text\" name=\"TxPower\" size=\"10\" value=\"");
-  Len=Format_SignDec(Line, (int16_t)Parameters.getTxPower());
+  Len=Format_SignDec(Line, (int16_t)Parameters.TxPower);
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
@@ -402,7 +402,7 @@ static void Table_RF(httpd_req_t *Req)
   httpd_resp_send_chunk(Req, Line, Len);
 
   Len =Format_String(Line, "<tr><td>Tx power</td><td align=\"right\">");
-  Len+=Format_SignDec(Line+Len, (int16_t)Parameters.getTxPower());
+  Len+=Format_SignDec(Line+Len, (int16_t)Parameters.TxPower);
   Len+=Format_String(Line+Len, "dBm</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
 

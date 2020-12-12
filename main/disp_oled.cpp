@@ -279,7 +279,7 @@ void OLED_DrawRF(u8g2_t *OLED, GPS_Position *GPS) // RF
   Len+=Format_String(Line+Len, "SX1272");
 #endif
   Line[Len++]=':';
-  Len+=Format_SignDec(Line+Len, (int16_t)Parameters.getTxPower());         // Tx power
+  Len+=Format_SignDec(Line+Len, (int16_t)Parameters.TxPower);              // Tx power
   Len+=Format_String(Line+Len, "dBm");
   Line[Len++]=' ';
   Len+=Format_SignDec(Line+Len, (int32_t)Parameters.RFchipFreqCorr, 2, 1); // frequency correction

@@ -431,7 +431,7 @@ static void LCD_UpdateRF(bool Redraw=0)
   Len+=Format_String(Line+Len, "SX1272");
 #endif
   Line[Len++]=':'; Line[Len++]=' ';
-  Len+=Format_SignDec(Line+Len, (int16_t)Parameters.getTxPower());        // Tx power
+  Len+=Format_SignDec(Line+Len, (int16_t)Parameters.TxPower); // Tx power
   Len+=Format_String(Line+Len, "dBm");
   Line[Len]=0;
   LCD_DrawString(Line, 4, PosY, RGB565_BLACK, RGB565_WHITE);

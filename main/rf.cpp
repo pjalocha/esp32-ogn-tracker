@@ -61,10 +61,10 @@ static uint8_t RX_Channel=0;                // (hopping) channel currently being
 static void SetTxChannel(uint8_t TxChan=RX_Channel)         // default channel to transmit is same as the receive channel
 {
 #ifdef WITH_RFM69
-  TRX.WriteTxPower(Parameters.getTxPower(), Parameters.isTxTypeHW()); // set TX for transmission
+  TRX.WriteTxPower(Parameters.TxPower, Parameters.isTxTypeHW()); // set TX for transmission
 #endif
 #if defined(WITH_RFM95) || defined(WITH_SX1272)
-  TRX.WriteTxPower(Parameters.getTxPower());                    // set TX for transmission
+  TRX.WriteTxPower(Parameters.TxPower);                         // set TX for transmission
 #endif
   TRX.setChannel(TxChan&0x7F);
   TRX.FSK_WriteSYNC(8, 7, OGN_SYNC); }                          // Full SYNC for TX
@@ -432,7 +432,7 @@ extern "C"
      Packet.setCRC();
      TRX.WriteMode(RF_OPMODE_STANDBY);
      TRX.PAW_Configure(PAW_SYNC);
-     TRX.WriteTxPower(Parameters.getTxPower());
+     TRX.WriteTxPower(Parameters.TxPower);
      TRX.WritePacketPAW(Packet.Byte, 24);
      TRX.WriteMode(RF_OPMODE_TRANSMITTER);
      vTaskDelay(10);
@@ -446,7 +446,7 @@ extern "C"
     { TRX.setLoRa();                                                           // switch TRX to LoRa
       TRX.FNT_Configure();                                                     // configure for FANET
       // TRX.setChannel(0);                                                      // configure for FANET
-      TRX.WriteTxPower(Parameters.getTxPower());                               // transmission power
+      TRX.WriteTxPower(Parameters.TxPower);                                    // transmission power
       TRX.WriteMode(RF_OPMODE_LORA_RX_CONT);                                   // continous receiver mode
       vTaskDelay(2);
       for(uint8_t Wait=50; Wait; Wait--)                                       //
@@ -512,7 +512,7 @@ extern "C"
       WANdev.Chan = RX_Random&7;                           // choose random channel
       TRX.setChannel(WANdev.Chan);                         // set the channel
       TRX.LoRa_InvertIQ(0); TRX.LoRa_setCRC(1);            // setup for WAN TX
-      TRX.WriteTxPower(Parameters.getTxPower());           // transmit power
+      TRX.WriteTxPower(Parameters.TxPower);                // transmit power
       int RespDelay=0;
       int TxPktLen=0;
       if(WANdev.State==0)

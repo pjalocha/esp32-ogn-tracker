@@ -9,7 +9,7 @@ inline uint8_t NMEA_AppendCheck(char *NMEA, uint8_t Len) { return NMEA_AppendChe
 uint8_t NMEA_AppendCheckCRNL(uint8_t *NMEA, uint8_t Len);
 inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_AppendCheckCRNL((uint8_t*)NMEA, Len); }
 
- class NMEA_RxMsg             // receiver for the NMEA sentences
+ class NMEA_RxMsg                    // receiver for the NMEA sentences
 { public:
    static const uint8_t MaxLen=104;  // maximum length
    static const uint8_t MaxParms=24; // maximum number of parameters (commas)
@@ -153,13 +153,13 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
        if(Data[4]!='S') return 0;
        return Data[5]=='A'; }
 
-   uint8_t isGxGSA(void) const                   // 
+   uint8_t isGxGSA(void) const                   // GP=GPS, GA=Galileo, GL=Glonass, GB=BaiDou, GN=any of the systems combined
      { if(!isGx()) return 0;
        if(Data[3]!='G') return 0;
        if(Data[4]!='S') return 0;
        return Data[5]=='A'; }
 
-   uint8_t isGxGSV(void) const                   // GPS satellite data
+   uint8_t isGxGSV(void) const                   // Satellite data
      { if(!isGx()) return 0;
        if(Data[3]!='G') return 0;
        if(Data[4]!='S') return 0;
@@ -171,7 +171,7 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
        if(Data[4]!='S') return 0;
        return Data[5]=='V'; }
 
-   uint8_t isGNGSV(void) const                   // GPS satellite data
+   uint8_t isGNGSV(void) const                   // Combined atellite data
      { if(!isGN()) return 0;
        if(Data[3]!='G') return 0;
        if(Data[4]!='S') return 0;
