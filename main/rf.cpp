@@ -61,7 +61,7 @@ static uint8_t RX_Channel=0;                // (hopping) channel currently being
 static void SetTxChannel(uint8_t TxChan=RX_Channel)         // default channel to transmit is same as the receive channel
 {
 #ifdef WITH_RFM69
-  TRX.WriteTxPower(Parameters.TxPower, Parameters.isTxTypeHW()); // set TX for transmission
+  TRX.WriteTxPower(Parameters.TxPower, Parameters.RFchipTypeHW); // set TX for transmission
 #endif
 #if defined(WITH_RFM95) || defined(WITH_SX1272)
   TRX.WriteTxPower(Parameters.TxPower);                         // set TX for transmission

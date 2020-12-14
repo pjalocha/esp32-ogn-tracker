@@ -269,7 +269,7 @@ void OLED_DrawRF(u8g2_t *OLED, GPS_Position *GPS) // RF
   uint8_t Len=0;
 #ifdef WITH_RFM69
   Len+=Format_String(Line+Len, "RFM69");            // Type of RF chip used
-  if(Parameters.isTxTypeHW()) Line[Len++]='H';
+  if(Parameters.RFchipTypeHW) Line[Len++]='H';
   Line[Len++]='W';
 #endif
 #ifdef WITH_RFM95
@@ -635,7 +635,7 @@ void OLED_DrawSystem(u8g2_t *OLED, GPS_Position *GPS)
   Len=0;
 #ifdef WITH_RFM69
   Len+=Format_String(Line+Len, "RFM69 v");            // Type of RF chip used
-  if(Parameters.isTxTypeHW()) Line[Len++]='H';
+  if(Parameters.RFchipTypeHW) Line[Len++]='H';
   Line[Len++]='W';
 #endif
 #ifdef WITH_RFM95

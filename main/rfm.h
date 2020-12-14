@@ -545,12 +545,12 @@ class RFM_TRX
 
    void WriteTxPowerMin(void) { WriteTxPower_W(-18); } // set minimal Tx power and setup for reception
 
-   int FSK_Configure(int16_t Channel, const uint8_t *Sync, bool PW=0)
+   int OGN_Configure(int16_t Channel, const uint8_t *Sync)
    { WriteMode(RF_OPMODE_STANDBY);          // mode = STDBY
      ClearIrqFlags();
      WriteByte(  0x02, REG_DATAMODUL);      // [0x00] Packet mode, FSK, 0x02: BT=0.5, 0x01: BT=1.0, 0x03: BT=0.3
-     WriteWord(PW?0x0341:0x0140, REG_BITRATEMSB); // bit rate = 100kbps
-     WriteWord(PW?0x013B:0x0333, REG_FDEVMSB);    // FSK deviation = +/-50kHz
+     WriteWord(0x0140, REG_BITRATEMSB);     // bit rate = 100kbps
+     WriteWord(0x0333, REG_FDEVMSB);        // FSK deviation = +/-50kHz
      setChannel(Channel);                   // operating channel
      FSK_WriteSYNC(8, 7, Sync);             // SYNC pattern (setup for reception)
      WriteByte(  0x00, REG_PACKETCONFIG1);  // [0x10] Fixed size packet, no DC-free encoding, no CRC, no address filtering

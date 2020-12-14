@@ -78,13 +78,24 @@ class FlashParameters
        uint8_t  NavRate:3;   // [Hz] GPS position report rate
         int8_t TimeCorr:3;   // [sec] it appears for ArduPilot you need to correct time by 3 seconds which is likley the leap-second issue
      } ;
-   } ;                      //
+   } ;                       //
 
    int16_t  GeoidSepar;      // [0.1m] Geoid-Separation, apparently ArduPilot MAVlink does not give this value (although present in the format)
                              //  or it could be a problem of some GPSes
   uint8_t  PPSdelay;         // [ms] delay between the PPS and the data burst starts on the GPS UART (used when PPS failed or is not there)
-  // uint8_t  FreqPlan;         // 0=default or force given frequency hopping plan
-  uint8_t  Spare;
+
+  union
+  { uint8_t  GNSS;
+    struct
+    { bool EnableGPS :1;     //
+      bool EnableSBAS:1;     //
+      bool EnableGAL :1;     //
+      bool EnableBEI :1;     //
+      bool EnableIMES:1;     //
+      bool EnableQZSS:1;     //
+      bool EnableGLO :1;     //
+    } ;
+  } ;
 
    static const uint8_t InfoParmLen = 16; // [char] max. size of an infp-parameter
    static const uint8_t InfoParmNum = 15; // [int]  number of info-parameters
@@ -232,6 +243,7 @@ uint16_t StratuxPort;
     NavMode        =         2; // 2 = Avionic mode for MTK
 #endif
     NavRate        =         0; // [Hz] 0 = do not attempt to change the navigation rate
+    GNSS           =      0x67; // enable GPS, SBAS, GLONASS and GALILEO, but not BeiDou
     GeoidSepar     =    10*DEFAULT_GeoidSepar; // [0.1m]
 
     Verbose        =         1;
@@ -642,6 +654,9 @@ uint16_t StratuxPort;
     if(strcmp(Name, "NavRate")==0)
     { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
       if(Mode<0) Mode=0; NavRate=Mode; return 1; }
+    if(strcmp(Name, "GNSS")==0)
+    { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
+      GNSS=Mode; return 1; }
     if(strcmp(Name, "PageMask")==0)
     { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
       PageMask=Mode; return 1; }
@@ -825,6 +840,7 @@ uint16_t StratuxPort;
     // Write_Hex    (Line, "EncryptKey[3]",       EncryptKey[3] , 8); strcat(Line, " # [32-bit]\n"); if(fputs(Line, File)==EOF) return EOF;
 #endif
     Write_Hex    (Line, "Verbose"  ,      (uint32_t)Verbose,   2); strcat(Line, " #  [ 0..3]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_Hex    (Line, "GNSS"  ,         (uint32_t)GNSS,      2); strcat(Line, " #  [ mask]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Hex    (Line, "PageMask" ,      (uint32_t)PageMask,  4); strcat(Line, " #  [ mask]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_UnsDec (Line, "PPSdelay"  ,     (uint32_t)PPSdelay    ); strcat(Line, " #  [   ms]\n"); if(fputs(Line, File)==EOF) return EOF;
 #ifdef WITH_BT_PWR
@@ -890,8 +906,9 @@ uint16_t StratuxPort;
     // Write_Hex    (Line, "EncryptKey[3]",       EncryptKey[3] , 8); strcat(Line, " # [32-bit]\n"); Format_String(Output, Line);
 #endif
     Write_Hex    (Line, "Verbose"  ,      (uint32_t)Verbose,   2); strcat(Line, " #  [ 0..3]\n"); Format_String(Output, Line);
+    Write_Hex    (Line, "GNSS"     ,      (uint32_t)GNSS    ,  2); strcat(Line, " #  [ mask]\n"); Format_String(Output, Line);
     Write_Hex    (Line, "PageMask" ,      (uint32_t)PageMask,  4); strcat(Line, " #  [ mask]\n"); Format_String(Output, Line);
-    Write_UnsDec (Line, "PPSdelay"  ,     (uint32_t)PPSdelay    ); strcat(Line, " #  [   ms]\n"); Format_String(Output, Line);
+    Write_UnsDec (Line, "PPSdelay" ,      (uint32_t)PPSdelay    ); strcat(Line, " #  [   ms]\n"); Format_String(Output, Line);
 #ifdef WITH_BT_PWR
     Write_UnsDec (Line, "Bluetooth" ,          BT_ON            ); strcat(Line, " #  [  1|0]\n"); Format_String(Output, Line);
 #endif
