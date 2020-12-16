@@ -16,6 +16,9 @@ TickType_t TimeSync_msTime(void);
 uint32_t TimeSync_Time(TickType_t Tick);                                    // [sec] get Time which  corresponds to given system tick
 uint32_t TimeSync_Time(void);
 
+void TimeSync_Time(uint32_t &Time, TickType_t &msTime, TickType_t Tick);
+void TimeSync_Time(uint32_t &Time, TickType_t &msTime);
+
 void TimeSync_CorrRef(int16_t Corr);                                        // [ms] correct the time reference [RTOS tick]
 
 #endif // __TIMESYNC_H__

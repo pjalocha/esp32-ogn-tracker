@@ -189,6 +189,30 @@ class UBX_CFG_RATE        // 0x06 0x08
    uint16_t timeRef;      // 0=UTC, 1=GPS
 } ;
 
+// for GPS:     0x00, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01 (enable)
+// for SBAS:    0x01, 0x02, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01 (enable)
+// for BeiDou:  0x03, 0x00, 0x10, 0x00, 0x00, 0x00, 0x01, 0x01 (disable)
+// for QZSS:    0x05, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x01 (disable)
+// for Glonass: 0x06, 0x04, 0x0E, 0x00, 0x00, 0x00, 0x01, 0x01 (disable)
+// for Galileo: 0x02, 0x04, 0x08, 0x00, 0x00, 0x00, 0x01, 0x01 (disable)
+class UBX_CFG_GNSS_Block
+{ public:
+   uint8_t gnssId;        // system identifier: 0=GPS, 1=SBAS, 2=Galileo, 3=BeiDou, 4=IMES, 5=QZSS, 6=Glonass
+   uint8_t resTrkCh;      // number of reserved tracking channels
+   uint8_t maxTrkCh;      // 
+   uint8_t reserved;
+   uint32_t flags;        // bit #0 = enable, bit #16..23 = sigCfgMask
+} ;
+
+class UBX_CFG_GNSS        // 0x06 0x3E
+{ public:
+   uint8_t msgVer;        // version = 0
+   uint8_t numTrkChHw;    // number of hardware tracking channels (read-only)
+   uint8_t numTrkChUse;   // number of tracker channels to use (0xFF = use max. allowed by hardware)
+   uint8_t numConfigBlocks; // number of config. blocks which follows: 8 bytes per block
+   UBX_CFG_GNSS_Block Block[6];   // 5 or 6 blocks
+} ;
+
 class UBX_CFG_NAV5        // 0x06 0x24
 { public:
    uint16_t mask;            // bit #0 = apply dynamic mode settings, #1 = apply min. elev. settings, #2 = apply fix mode settings

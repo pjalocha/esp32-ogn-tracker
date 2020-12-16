@@ -192,7 +192,7 @@ static void GPS_PPS_On(void)                          // called on rising edge o
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60, 2);
   CONS_UART_Write('.');
-  Format_UnsDec(CONS_UART_Write, TimeSync_msTime(),3);
+  Format_UnsDec(CONS_UART_Write, TimeSync_msTime(), 3);
   Format_String(CONS_UART_Write, " -> PPS\n");
   xSemaphoreGive(CONS_Mutex);
 #endif
@@ -251,7 +251,7 @@ static void GPS_BurstStart(void)                                           // wh
   CONS_UART_Write('.');
   Format_UnsDec(CONS_UART_Write, TimeSync_msTime(Burst_Tick), 3);
   Format_String(CONS_UART_Write, " -> GPS_BurstStart() GPS:");
-  Format_Hex(CONS_UART_Write, GPS_Status.Flags);
+  Format_Bin(CONS_UART_Write, GPS_Status.Flags);
   Format_String(CONS_UART_Write, "\n");
   xSemaphoreGive(CONS_Mutex);
 #endif
@@ -311,6 +311,21 @@ static void GPS_BurstStart(void)                                           // wh
           uint8_t Len = strlen(GPS_Cmd);
           uint16_t OneSec = 1000;
           Len += Format_UnsDec(GPS_Cmd+Len, OneSec/Parameters.NavRate);
+          Len += NMEA_AppendCheck(GPS_Cmd, Len);
+          GPS_Cmd[Len++]='\r';
+          GPS_Cmd[Len++]='\n';
+          GPS_Cmd[Len]=0;
+          Format_String(GPS_UART_Write, GPS_Cmd, Len, 0);
+          strcpy(GPS_Cmd, "$PMTK353,");
+          GPS_Cmd[Len++]='0'+Parameters.EnableGPS;   // search (or not) for GPS satellites
+          GPS_Cmd[Len++]=',';
+          GPS_Cmd[Len++]='0'+Parameters.EnableGLO;   // search (or not) for GLONASS satellites (L86 supports)
+          GPS_Cmd[Len++]=',';
+          GPS_Cmd[Len++]='0'+Parameters.EnableGAL;   // search (or not) for GALILEO satellites (not clear if already supported)
+          GPS_Cmd[Len++]=',';
+          GPS_Cmd[Len++]='0';                        // GALILEO full mode (whatever it is ?)  (not supported yet)
+          GPS_Cmd[Len++]=',';
+          GPS_Cmd[Len++]='0';                        // search (or not) for BAIDOU satellites (not supported yet)
           Len += NMEA_AppendCheck(GPS_Cmd, Len);
           GPS_Cmd[Len++]='\r';
           GPS_Cmd[Len++]='\n';
@@ -429,7 +444,7 @@ static void GPS_BurstComplete(void)                                        // wh
   CONS_UART_Write('.');
   Format_UnsDec(CONS_UART_Write, TimeSync_msTime(), 3);
   Format_String(CONS_UART_Write, " -> GPS_BurstComplete() GPS:");
-  Format_Hex(CONS_UART_Write, GPS_Status.Flags);
+  Format_Bin(CONS_UART_Write, GPS_Status.Flags);
   Format_String(CONS_UART_Write, "\nGPS[");
   CONS_UART_Write('0'+GPS_PosIdx); CONS_UART_Write(']'); CONS_UART_Write(' ');
   Format_String(CONS_UART_Write, Line);
@@ -446,12 +461,13 @@ static void GPS_BurstComplete(void)                                        // wh
         int32_t msDiff = GPS_Pos[GPS_PosIdx].FracSec;
         if(msDiff>=50) { msDiff-=100; UnixTime++; }                        // [0.01s]
         msDiff*=10;                                                        // [ms]
+        TimeSync_SoftPPS(Burst_Tick, UnixTime, msDiff+Parameters.PPSdelay);
         // if(abs(msDiff)<=200)                                               // if (almost) full-second burst
-        { // TickType_t PPS_Age = Burst_Tick-PPS_Tick;
+        // { // TickType_t PPS_Age = Burst_Tick-PPS_Tick;
           // if(PPS_Age>10000) TimeSync_SoftPPS(Burst_Tick, UnixTime, Parameters.PPSdelay);
           //              else TimeSync_SetTime(Burst_Tick-Parameters.PPSdelay, UnixTime);
-          TimeSync_SoftPPS(Burst_Tick, UnixTime, msDiff+Parameters.PPSdelay);
-        }
+          // TimeSync_SoftPPS(Burst_Tick, UnixTime, msDiff+Parameters.PPSdelay);
+        // }
 #endif
       }
     }
@@ -596,7 +612,7 @@ static void GPS_NMEA(void)                                                 // wh
   static uint8_t Count=0;
   bool RatePass=0;
   Count++; if(Count>=5) { Count=0; RatePass=1; }
-  if( NMEA.isP() || NMEA.isGxRMC() || NMEA.isGxGGA() || NMEA.isGxGSA() || (RatePass && (NMEA.isGPTXT() || NMEA.isGxGSV())) )
+  if( NMEA.isP() || NMEA.isGxRMC() || NMEA.isGxGGA() || NMEA.isGxGSA() || NMEA.isP() || NMEA.isGxGSV() || (RatePass && (NMEA.isGPTXT())) )
   // we would need to patch the GGA here for the GPS which does not calc. nor correct for GeoidSepar
 #endif
   { if(Parameters.Verbose)

@@ -138,6 +138,16 @@ static void ParmForm_GPS(httpd_req_t *Req)  // produce HTML form for GPS paramet
 
   httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
 
+  httpd_resp_sendstr_chunk(Req, "<tr><td>GNSS mode</td><td><input type=\"text\" name=\"GNSS\" size=\"10\" value=\"0x");
+  Len=Format_Hex(Line, Parameters.GNSS);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>PPS delay</td><td><input type=\"text\" name=\"PPSdelay\" size=\"10\" value=\"0x");
+  Len=Format_UnsDec(Line, Parameters.PPSdelay);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
   httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
 
 static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for aircraft parameters
@@ -237,6 +247,11 @@ static void ParmForm_AP(httpd_req_t *Req) // Wi-Fi access point parameters { cha
 
   httpd_resp_sendstr_chunk(Req, "<tr><td>Tx power [dBm]</td><td><input type=\"text\" name=\"APtxPwr\" size=\"10\" value=\"");
   Len=Format_UnsDec(Line, (10*Parameters.APtxPwr+2)>>2, 2, 1);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<tr><td>Min. RSSI [dBm]</td><td><input type=\"text\" name=\"APminSig\" size=\"10\" value=\"");
+  Len=Format_SignDec(Line, Parameters.APminSig);
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 

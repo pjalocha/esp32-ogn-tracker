@@ -54,6 +54,14 @@ template <class Type>
     Word>>=4; }
   return Digits; }
 
+template <class Type>
+ void Format_Bin( void (*Output)(char), Type Word)
+{ const uint8_t Digits = sizeof(Type)<<3;
+  for( Type Mask = (Type)1<<(Digits-1); Mask; Mask>>=1)
+  { bool Bit = Word&Mask;
+    (*Output)('0'+Bit); }
+}
+
 uint8_t Format_HHcMMcSS(char *Out, uint32_t Time);
 uint8_t Format_HHMMSS(char *Out, uint32_t Time);
 void    Format_HHMMSS(void (*Output)(char), uint32_t Time);

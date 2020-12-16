@@ -483,8 +483,11 @@ void vTaskPROC(void* pvParameters)
       RF_RxFIFO.Read(); }                                               // remove this packet from the queue
 
     static uint32_t PrevSlotTime=0;                                     // remember previous time slot to detect a change
-    uint32_t SlotTime = TimeSync_Time();                                // time slot
-    if(TimeSync_msTime()<340) SlotTime--;                               // lasts up to 0.300sec after the PPS
+    uint32_t     Time;                                                  // [sec] time slot
+    TickType_t msTime;                                                  // [msec]
+    TimeSync_Time(Time, msTime);
+    uint32_t SlotTime=Time;
+    if(msTime<340) SlotTime--;                                          // lasts up to 0.300sec after the PPS
 
     if(SlotTime==PrevSlotTime) continue;                                // stil same time slot, go back to RX processing
     PrevSlotTime=SlotTime;                                              // new slot started
@@ -498,13 +501,21 @@ void vTaskPROC(void* pvParameters)
     // GPS_Position *Position = GPS_getPosition();
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-    Format_String(CONS_UART_Write, "getPos(");
+    // Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60, 2);
+    // Format_UnsDec(CONS_UART_Write, Time%60, 2);
+    Format_UnsDec(CONS_UART_Write, Time, 10);
+    CONS_UART_Write('.');
+    // Format_UnsDec(CONS_UART_Write, TimeSync_msTime(), 3);
+    Format_UnsDec(CONS_UART_Write, msTime, 3);
+    Format_String(CONS_UART_Write, " -> getPos(");
     Format_UnsDec(CONS_UART_Write, SlotTime%60, 2);
     Format_String(CONS_UART_Write, ") => ");
-    Format_UnsDec(CONS_UART_Write, (uint16_t)BestIdx);
-    CONS_UART_Write(':');
-    Format_SignDec(CONS_UART_Write, BestResid, 3, 2);
-    Format_String(CONS_UART_Write, "s\n");
+    if(Position)
+    { Format_UnsDec(CONS_UART_Write, (uint16_t)BestIdx);
+      CONS_UART_Write(':');
+      Format_SignDec(CONS_UART_Write, BestResid, 3, 2);
+      Format_String(CONS_UART_Write, "s"); }
+    Format_String(CONS_UART_Write, "\n");
     xSemaphoreGive(CONS_Mutex);
 #endif
 
