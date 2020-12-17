@@ -1301,6 +1301,26 @@ class GPS_Position: public GPS_Time
    //   return 2; }                                                           // => USA/Canada: full 915MHz band
 
   template <class OGNx_Packet>
+   void Decode(const OGNx_Packet &Packet)
+  { FixQuality = Packet.Position.FixQuality;
+    FixMode = Packet.Position.FixMode+2;
+    PDOP = 10+Packet.DecodeDOP();
+    HDOP = PDOP; VDOP = PDOP+PDOP/2;
+    FracSec=0; Sec=Packet.Position.Time;
+    Speed = Packet.DecodeSpeed();
+    ClimbRate = Packet.DecodeClimbRate();
+    TurnRate = Packet.DecodeTurnRate();
+    Heading  = Packet.DecodeHeading();                                              // Heading = track-over-ground
+    Latitude = Packet.DecodeLatitude();
+    Longitude = Packet.DecodeLongitude();
+    Altitude = Packet.DecodeAltitude()*10;
+    hasBaro=0;
+    if(Packet.hasBaro())
+    { StdAltitude = Altitude + 10*Packet.getBaroAltDiff();
+      hasBaro=1; }
+  }
+
+  template <class OGNx_Packet>
    void Encode(OGNx_Packet &Packet, int16_t dTime) const                       // Encode position which is extrapolated by the given fraction of a second
    { Packet.Position.FixQuality = FixQuality<3 ? FixQuality:3;                //
      if((FixQuality>0)&&(FixMode>=2)) Packet.Position.FixMode = FixMode-2;    //

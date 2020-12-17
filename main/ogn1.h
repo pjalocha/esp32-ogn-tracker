@@ -230,7 +230,7 @@ class OGN1_Packet          // Packet structure for the OGN tracker
        { Len += sprintf(Out+Len, " %s=%s", InfoParmName(InfoType), Value); }
        else
        { Len += sprintf(Out+Len, " #%d=%s", InfoType, Value); }
-       Idx+=Chars; }
+     Idx+=Chars; }
      Out[Len]=0; return Len; }
 */
    void Print(void) const
@@ -879,12 +879,12 @@ class OGN1_DiffPacket
    union
    { uint32_t Word;
      struct
-     { uint8_t dTime:4;
-       int32_t dLat :6;
-       int32_t dLon :6;
-       int32_t dAlt :5;
-       int32_t dVel :5;
-       int32_t dHead:6;
+     { uint8_t dTime:4;          // [0..15sec] time difference
+       int32_t dLat :6;          // [-32..+31]
+       int32_t dLon :6;          // [-32..+31]
+       int32_t dAlt :5;          // [-16..+15]
+       int32_t dVel :5;          // [-16..+15]
+       int32_t dHead:6;          // [-32..+31]
      } ;
    } ;
 
@@ -892,10 +892,14 @@ class OGN1_DiffPacket
    bool Encode(const OGN1_Packet &Pos, const OGN1_Packet &RefPos)
    { int8_t dT = RefPos.Position.Time - Pos.Position.Time; if(dT<0) dT+=60;
      if(dT>15) return 0;
-     int32_t dAlt = RefPos.Position.Altitude - RefPos.Position.Altitude;
-     int32_t dLat = RefPos.Position.Latitude - RefPos.Position.Latitude;
-     int32_t dLon = RefPos.Position.Longitude - RefPos.Position.Longitude;
+     int32_t dLat  = (int32_t)RefPos.Position.Latitude  - (int32_t)Pos.Position.Latitude;
+     int32_t dLon  = (int32_t)RefPos.Position.Longitude - (int32_t)Pos.Position.Longitude;
+     int16_t dAlt  = (int16_t)RefPos.Position.Altitude  - (int16_t)Pos.Position.Altitude;
+     int16_t dVel  = (int16_t)RefPos.Position.Speed     - (int16_t)Pos.Position.Speed;        // [0.1m/s] difference in speed
+     int16_t dHead = (int16_t)RefPos.Position.Heading   - (int16_t)Pos.Position.Heading;      // [10bit cordic] difference in heading
+             dHead&=0x03FF; if(dHead&0x0200) dHead|=0xFC00;
      return 1; }
+
 } ;
 */
 

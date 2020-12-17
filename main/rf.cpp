@@ -425,21 +425,6 @@ extern "C"
     TxChan = RF_FreqPlan.getChannel(RF_SlotTime, 1, 1);                        // transmit channel
     RX_Channel = TxChan;
 
-#ifdef WITH_PAW
-   { PAW_Packet Packet; Packet.Clear();
-     Packet.Address = Parameters.Address;
-     Packet.AcftType = Parameters.AcftType;
-     Packet.setCRC();
-     TRX.WriteMode(RF_OPMODE_STANDBY);
-     TRX.PAW_Configure(PAW_SYNC);
-     TRX.WriteTxPower(Parameters.TxPower);
-     TRX.WritePacketPAW(Packet.Byte, 24);
-     TRX.WriteMode(RF_OPMODE_TRANSMITTER);
-     vTaskDelay(10);
-     TRX.WriteMode(RF_OPMODE_STANDBY);
-     TRX.OGN_Configure(0, OGN_SYNC); }
-#endif
-
 #if defined(WITH_FANET) && defined(WITH_RFM95)
     const FANET_Packet *FNTpkt = FNT_TxFIFO.getRead(0);                        // read the packet from the FANET transmitt queue
     if(FNTpkt)                                                                 // was there any ?
@@ -499,6 +484,35 @@ extern "C"
     TimeSlot(TxChan, SlotEnd-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
 #else
     TimeSlot(TxChan, 1240-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
+#endif
+
+#ifdef WITH_PAW
+#ifdef WITH_LORAWAN
+   if(!WANtx && TxPkt0)
+#else
+   if(TxPkt0)
+#endif
+   { PAW_Packet Packet; Packet.Clear();
+     OGN1_Packet TxPkt = TxPkt0->Packet;
+     TxPkt.Dewhiten();
+     XorShift32(RX_Random);
+     if(!TxPkt.Header.Relay && (RX_Random&0xC0)==0x00 && Packet.Copy(TxPkt))
+     { TRX.WriteMode(RF_OPMODE_STANDBY);
+       TRX.PAW_Configure(PAW_SYNC);
+       TRX.WriteTxPower(Parameters.TxPower+6);
+       vTaskDelay(RX_Random&0x3F);
+       TRX.ClearIrqFlags();
+       TRX.WritePacketPAW(Packet.Byte, 24);
+       TRX.WriteMode(RF_OPMODE_TRANSMITTER);
+       vTaskDelay(8);                                                 // wait 5ms
+       uint8_t Break=0;
+       for(uint16_t Wait=400; Wait; Wait--)                           // wait for transmission to end
+       { uint16_t Flags=TRX.ReadIrqFlags();
+         if(Flags&RF_IRQ_PacketSent) Break++;
+         if(Break>=2) break; }
+       TRX.WriteMode(RF_OPMODE_STANDBY);
+       TRX.OGN_Configure(0, OGN_SYNC); }
+   }
 #endif
 
 #ifdef WITH_LORAWAN

@@ -30,8 +30,13 @@ class PAW_Packet
             int8_t  Climb  :7;  // [64fpm]
          } ;
        } ;
-       uint8_t  Seq;            // sequence number to transmit longer messages
-       uint8_t  Msg[3];         // 3-byte part of the longer message
+       union
+       { uint32_t SeqMsg;
+         struct
+         { uint8_t  Seq;        // sequence number to transmit longer messages
+           uint8_t  Msg[3];     // 3-byte part of the longer message
+         } ;
+       } ;
        union
        { uint16_t SpeedWord;
          struct
@@ -69,19 +74,27 @@ class PAW_Packet
    // uint32_t getAddress(void) const { return Address>>8; }              // remove the sync '$'
    // void     setAddress(uint32_t Addr) { Address = (Addr<<8) | 0x24; }  // set new address and set the '$' sync char
 
-   int Copy(const OGN1_Packet &Packet)
+   int Copy(const OGN1_Packet &Packet, bool Ext=1)
    { Clear();
-     OGN = 1;
-     Address  = Packet.Header.Address;
-     AddrType = Packet.Header.AddrType;
-     Relay    = Packet.Header.Relay;
-     if(Packet.Header.NonPos) return 0;
-     AcftType = Packet.Position.AcftType;
-     Altitude = Packet.DecodeAltitude();
-     Heading = Packet.DecodeHeading()/10;
+     Address  = Packet.Header.Address;                     // [24-bit]
+     if(Packet.Header.NonPos) return 0;                    // encode only position packets
+     AcftType = Packet.Position.AcftType;                  // [4-bit] aircraft-type
+     Altitude = Packet.DecodeAltitude();                   // [m]
+     Heading = Packet.DecodeHeading()/10;                  // [deg]
      Speed = (398*(int32_t)Packet.DecodeSpeed()+1024)>>11; // [0.1m/s] => [kts]
-     Latitude  = 0.0001f/60*Packet.DecodeLatitude();
-     Longitude = 0.0001f/60*Packet.DecodeLongitude();
+     Latitude  = 0.0001f/60*Packet.DecodeLatitude();       // [deg]
+     Longitude = 0.0001f/60*Packet.DecodeLongitude();      // [deg]
+     if(Ext)
+     { OGN=1;                                              // extended data flag
+       AddrType = Packet.Header.AddrType;                  // [2-bit]
+       Relay    = Packet.Header.Relay;                     // relay flag
+       Time = Packet.Position.Time;                        // [sec]
+       int32_t ClimbRate = Packet.DecodeClimbRate();       // [0.1m/s]
+       ClimbRate = (ClimbRate*315+512)>>10;                // [64fpm]
+       if(ClimbRate>127) ClimbRate=127;
+       else if(ClimbRate<(-127)) ClimbRate=(-127);
+       Climb = ClimbRate; }
+     SeqMsg = 0;
      setCRC(); return 1; }
 
    uint8_t Dump(char *Out)
@@ -195,6 +208,7 @@ class PAW_RxPacket          // Received PilotAware packet
      Len+=Format_Hex(JSON+Len, AcftCat[Packet.AcftType]);
      JSON[Len++]='\"';
      uint32_t PosTime=Time; if(nsTime<300000000) PosTime--;
+     // if(OGN)
      Len+=Format_String(JSON+Len, ",\"time\":");
      Len+=Format_UnsDec(JSON+Len, PosTime);
      int64_t RxTime=(int64_t)Time-PosTime; RxTime*=1000; RxTime+=nsTime/1000000;
@@ -202,6 +216,7 @@ class PAW_RxPacket          // Received PilotAware packet
      Len+=Format_SignDec(JSON+Len, RxTime, 4, 3, 1);
      Len+=sprintf(JSON+Len, ",\"lat_deg\":%8.7f,\"lon_deg\":%8.7f,\"alt_msl_m\":%d", Packet.Latitude, Packet.Longitude, Packet.Altitude);
      Len+=sprintf(JSON+Len, ",\"track_deg\":%d,\"speed_mps\":%3.1f", Packet.Heading, 0.514*Packet.Speed);
+     if(Packet.OGN) Len+=sprintf(JSON+Len, ",\"climb_mps\":%3.1f", 0.32512*Packet.Climb);
      return Len; }
 
 } ;
