@@ -74,7 +74,7 @@ class PAW_Packet
    // uint32_t getAddress(void) const { return Address>>8; }              // remove the sync '$'
    // void     setAddress(uint32_t Addr) { Address = (Addr<<8) | 0x24; }  // set new address and set the '$' sync char
 
-   int Copy(const OGN1_Packet &Packet, bool Ext=0)
+   int Copy(const OGN1_Packet &Packet, bool Ext=1)
    { Clear();
      Address  = Packet.Header.Address;                     // [24-bit]
      if(Packet.Header.NonPos) return 0;                    // encode only position packets
@@ -88,12 +88,13 @@ class PAW_Packet
      { OGN=1;                                              // extended data flag
        AddrType = Packet.Header.AddrType;                  // [2-bit]
        Relay    = Packet.Header.Relay;                     // relay flag
-       Time = Packet.Position.Time;                        // [sec]
+       // Time = Packet.Position.Time;                        // [sec]
        int32_t ClimbRate = Packet.DecodeClimbRate();       // [0.1m/s]
        ClimbRate = (ClimbRate*315+512)>>10;                // [64fpm]
        if(ClimbRate>127) ClimbRate=127;
        else if(ClimbRate<(-127)) ClimbRate=(-127);
-       Climb = ClimbRate; }
+       Climb = ClimbRate;
+     }
      SeqMsg = 0;
      setCRC(); return 1; }
 
