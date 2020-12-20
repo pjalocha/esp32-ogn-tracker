@@ -168,7 +168,7 @@ class UBX_CFG_PRT         // 0x06 0x00
 
 class UBX_CFG_MSG         // 0x06 0x01
 { public:
-   uint8_t msgClass;      // 0xF0:00=GGA, 0xF0:02=GSA, 0xF0:04=RMC, 0xF0:41=TXT
+   uint8_t msgClass;      // 0xF0:00=GGA, 0xF0:02=GSA, 0xF0:03=GSV, 0xF0:04=RMC, 0xF0:41=TXT
    uint8_t msgID;
    uint8_t rate;          // message send rate
 } ;

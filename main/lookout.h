@@ -96,7 +96,11 @@ class LookOut_Target
      NMEA[Len++]=',';
      Len+=Format_SignDec(NMEA+Len, dZ/2);                          // [m] relative altitude
      NMEA[Len++]=',';
-     NMEA[Len++]='0'+((ID>>24)&0x03);                              // address-type (3=OGN)
+     uint8_t AddrType = (ID>>24)&0x03;
+#ifdef WITH_SKYDEMON                                               // SkyDemon hack which accepts only 1 or 2
+     if(AddrType!=1) AddrType=2;
+#endif
+     NMEA[Len++]='0'+AddrType;                                     // address-type (3=OGN)
      NMEA[Len++]=',';
      uint32_t Addr = ID&0xFFFFFF;                                  // [24-bit] address
      Len+=Format_Hex(NMEA+Len, (uint8_t)(Addr>>16));               // 24-bit address: RND, ICAO, FLARM, OGN
@@ -229,7 +233,11 @@ class LookOut
      { Len+=Format_UnsDec(NMEA+Len, (Tgt->HorDist)>>1, 1); }
      NMEA[Len++]=',';
      if(Tgt)                                               // ID
+#ifdef WITH_SKYDEMON
+     { Len+=Format_Hex(NMEA+Len, Tgt->ID & 0x00FFFFFF); }
+#else
      { Len+=Format_Hex(NMEA+Len, Tgt->ID); }
+#endif
      Len+=NMEA_AppendCheckCRNL(NMEA, Len);
      NMEA[Len]=0;
      return Len; }

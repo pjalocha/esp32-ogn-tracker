@@ -76,7 +76,7 @@ static union
   } ;
 } GPS_Burst;
                                                                                                    // for the autobaud on the GPS port
-const int GPS_BurstTimeout = 200; // [ms]
+const int GPS_BurstTimeout = 50; // [ms]
 
 // static const uint8_t  BaudRates=7;                                                                 // number of possible baudrates choices
 // static       uint8_t  BaudRateIdx=0;                                                               // actual choice
@@ -287,21 +287,20 @@ static void GPS_BurstStart(void)                                           // wh
         }
         UBX_RxMsg::Send(0x06, 0x08, GPS_UART_Write);                     // send the query for the navigation rate
         UBX_RxMsg::Send(0x06, 0x24, GPS_UART_Write);                     // send the query for the navigation mode setting
-        if(!GPS_Status.NMEA)                                             // if NMEA sentences are not there
+        UBX_RxMsg::Send(0x06, 0x3E, GPS_UART_Write);                     // send the query for the GNSS configuration
+        // if(!GPS_Status.NMEA)                                             // if NMEA sentences are not there
         { UBX_CFG_MSG CFG_MSG;                                           // send CFG_MSG to enable the NMEA sentences
           CFG_MSG.msgClass = 0xF0;                                       // NMEA class
           CFG_MSG.rate     =    1;                                       // send every measurement event
-          // CFG_MSG.rate[0]  =    1;
-          // CFG_MSG.rate[1]  =    1;
-          // CFG_MSG.rate[2]  =    1;
-          // CFG_MSG.rate[3]  =    1;
-          // CFG_MSG.rate[4]  =    1;
-          // CFG_MSG.rate[5]  =    1;
           CFG_MSG.msgID    = 0x00;                                        // ID for GGA
           UBX_RxMsg::Send(0x06, 0x01, GPS_UART_Write, (uint8_t *)(&CFG_MSG), sizeof(CFG_MSG));
           CFG_MSG.msgID    = 0x02;                                        // ID for RMC
           UBX_RxMsg::Send(0x06, 0x01, GPS_UART_Write, (uint8_t *)(&CFG_MSG), sizeof(CFG_MSG));
           CFG_MSG.msgID    = 0x04;                                        // ID for GSA
+          UBX_RxMsg::Send(0x06, 0x01, GPS_UART_Write, (uint8_t *)(&CFG_MSG), sizeof(CFG_MSG));
+          CFG_MSG.rate     = Parameters.NavRate*4;                        // send only at some interval
+          if(CFG_MSG.rate<4) CFG_MSG.rate=4;
+          CFG_MSG.msgID    = 0x03;                                        // ID for GSV
           UBX_RxMsg::Send(0x06, 0x01, GPS_UART_Write, (uint8_t *)(&CFG_MSG), sizeof(CFG_MSG));
         }
 #endif
@@ -483,18 +482,18 @@ static void GPS_BurstComplete(void)                                        // wh
       GPS_GeoidSepar=GPS_Pos[GPS_PosIdx].GeoidSeparation;
       GPS_LatCosine=GPS_Pos[GPS_PosIdx].LatitudeCosine;
       // GPS_FreqPlan=GPS_Pos[GPS_PosIdx].getFreqPlan();
-      if(GPS_TimeSinceLock==1)                                            // if we just acquired the lock a moment ago
+      if(GPS_TimeSinceLock==1)                                                 // if we just acquired the lock a moment ago
       { GPS_LockStart(); }
-      if(GPS_TimeSinceLock>1)                                             // if the lock is more persistant
-      { uint8_t PrevIdx=(GPS_PosIdx+PosPipeIdxMask)&PosPipeIdxMask;
-        int16_t TimeDiff = GPS_Pos[GPS_PosIdx].calcTimeDiff(GPS_Pos[PrevIdx]);
-        for( ; ; )
-        { if(TimeDiff>=95) break;
-          uint8_t PrevIdx2=(PrevIdx+PosPipeIdxMask)&PosPipeIdxMask;
-          if(PrevIdx2==GPS_PosIdx) break;
-          if(!GPS_Pos[PrevIdx2].isValid()) break;
-          TimeDiff = GPS_Pos[GPS_PosIdx].calcTimeDiff(GPS_Pos[PrevIdx2]);
-          PrevIdx=PrevIdx2; }
+      if(GPS_TimeSinceLock>1)                                                  // if the lock is more persistant
+      { uint8_t PrevIdx=(GPS_PosIdx+PosPipeIdxMask)&PosPipeIdxMask;            // previous GPS data
+        int16_t TimeDiff = GPS_Pos[GPS_PosIdx].calcTimeDiff(GPS_Pos[PrevIdx]); // difference in time
+        for( ; ; )                                                             // loop
+        { if(TimeDiff>=95) break;                                              // if at least 0.95sec then enough to calc. the differentials
+          uint8_t PrevIdx2=(PrevIdx+PosPipeIdxMask)&PosPipeIdxMask;            // go back one GPS position
+          if(PrevIdx2==GPS_PosIdx) break;                                      // if we looped all the way back: stop
+          if(!GPS_Pos[PrevIdx2].isValid()) break;                              // if GPS position not valid: stop
+          TimeDiff = GPS_Pos[GPS_PosIdx].calcTimeDiff(GPS_Pos[PrevIdx2]);      // time difference between the positions
+          PrevIdx=PrevIdx2; }                                                  //
         TimeDiff=GPS_Pos[GPS_PosIdx].calcDifferentials(GPS_Pos[PrevIdx]);
 #ifdef DEBUG_PRINT
         xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -591,11 +590,15 @@ static void GPS_NMEA(void)                                                 // wh
 { GPS_Status.NMEA=1;
   GPS_Status.BaudConfig = (GPS_getBaudRate() == GPS_TargetBaudRate);
   LED_PCB_Flash(10);                                                        // Flash the LED for 2 ms
-  if(NMEA.isGxGSV()) ProcessGSV(NMEA);                                      // process satellite data
+       if(NMEA.isGxGSV()) ProcessGSV(NMEA);                                      // process satellite data
+  else if(NMEA.isGxRMC())
+  { // if(GPS_Burst.GxRMC) { GPS_BurstComplete(); GPS_Burst.Flags=0; GPS_BurstStart(); }
+    GPS_Burst.GxRMC=1; }
+  else if(NMEA.isGxGGA())
+  { // if(GPS_Burst.GxGGA) { GPS_BurstComplete(); GPS_Burst.Flags=0; GPS_BurstStart(); }
+    GPS_Burst.GxGGA=1; }
+  else if(NMEA.isGxGSA()) GPS_Burst.GxGSA=1;
   GPS_Pos[GPS_PosIdx].ReadNMEA(NMEA);                                          // read position elements from NMEA
-  if(NMEA.isGxRMC()) GPS_Burst.GxRMC=1;
-  if(NMEA.isGxGGA()) GPS_Burst.GxGGA=1;
-  if(NMEA.isGxGSA()) GPS_Burst.GxGSA=1;
 #ifdef DEBUG_PRINT
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60, 2);

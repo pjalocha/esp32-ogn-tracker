@@ -21,7 +21,7 @@ static FILE *LogFile = 0;
 
 static   uint16_t  LogDate = 0;                                   // [~days] date = FatTime>>16
 static TickType_t  LogOpenTime;                                   // [msec] when was the log file (re)open
-static const  TickType_t  LogReopen = 20000;                      // [msec] when to close and re-open the log file
+static const TickType_t LogReopen = 30000;                        // [msec] when to close and re-open the log file
 
 const size_t FIFOsize = 16384;
 static FIFO<char, FIFOsize> Log_FIFO;                             // 16K buffer for SD-log

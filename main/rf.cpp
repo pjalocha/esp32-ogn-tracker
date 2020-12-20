@@ -496,7 +496,7 @@ extern "C"
      OGN1_Packet TxPkt = TxPkt0->Packet;
      TxPkt.Dewhiten();
      XorShift32(RX_Random);
-     if(!TxPkt.Header.Relay && (RX_Random&0xC0)==0x00 && Packet.Copy(TxPkt))
+     if(!TxPkt.Header.Relay && (RX_Random&0xC0)==0x00 && Packet.Copy(TxPkt) && TxPkt.Position.Time<60)
      { TRX.WriteMode(RF_OPMODE_STANDBY);
        TRX.PAW_Configure(PAW_SYNC);
        TRX.WriteTxPower(Parameters.TxPower+6);

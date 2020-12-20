@@ -143,7 +143,7 @@ static void ParmForm_GPS(httpd_req_t *Req)  // produce HTML form for GPS paramet
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>PPS delay</td><td><input type=\"text\" name=\"PPSdelay\" size=\"10\" value=\"0x");
+  httpd_resp_sendstr_chunk(Req, "<tr><td>PPS delay [ms]</td><td><input type=\"text\" name=\"PPSdelay\" size=\"10\" value=\"");
   Len=Format_UnsDec(Line, Parameters.PPSdelay);
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
@@ -551,6 +551,7 @@ static void Top_Bar(httpd_req_t *Req)
 
 static esp_err_t parm_get_handler(httpd_req_t *Req)
 { // char Line[32]; int Len;
+  bool Restart=0;
   uint16_t URLlen=httpd_req_get_url_query_len(Req);
   if(URLlen)
   { char *URL = (char *)malloc(URLlen+1);
@@ -565,6 +566,7 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
     xSemaphoreGive(CONS_Mutex);
 #endif
     char *Line=URL;
+    Restart = strstr(Line,"Restart=1");
     for( ; ; )
     { Parameters.ReadLine(Line);
       Line = strchr(Line, '&'); if(Line==0) break;
@@ -600,21 +602,36 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
 #endif
   ParmForm_Other(Req);
   httpd_resp_sendstr_chunk(Req, "</td></tr>\n<tr><td>\n");
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\">\n");
-  httpd_resp_sendstr_chunk(Req, "<input type=\"submit\" value=\"Reset to defaults\">\n");
-  httpd_resp_sendstr_chunk(Req, "<input type=\"hidden\" name=\"Defaults\" value=\"1\">\n");
-  httpd_resp_sendstr_chunk(Req, "</form>\n");
+  httpd_resp_sendstr_chunk(Req, "\
+<form action=\"/parm.html\" method=\"get\">\n\
+<input type=\"submit\" value=\"Reset to defaults\">\n\
+<input type=\"hidden\" name=\"Defaults\" value=\"1\">\n\
+</form>\n");
+  // httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\">\n");
+  // httpd_resp_sendstr_chunk(Req, "<input type=\"submit\" value=\"Reset to defaults\">\n");
+  // httpd_resp_sendstr_chunk(Req, "<input type=\"hidden\" name=\"Defaults\" value=\"1\">\n");
+  // httpd_resp_sendstr_chunk(Req, "</form>\n");
+  httpd_resp_sendstr_chunk(Req, "\
+<form action=\"/parm.html\" method=\"get\">\n\
+<input type=\"submit\" value=\"Restart\">\n\
+<input type=\"hidden\" name=\"Restart\" value=\"1\">\n\
+</form>\n");
+  // httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\">\n");
+  // httpd_resp_sendstr_chunk(Req, "<input type=\"submit\" value=\"Restart\">\n");
+  // httpd_resp_sendstr_chunk(Req, "<input type=\"hidden\" name=\"Restart\" value=\"1\">\n");
+  // httpd_resp_sendstr_chunk(Req, "</form>\n");
   httpd_resp_sendstr_chunk(Req, "</td></tr>\n</table>\n");
   httpd_resp_sendstr_chunk(Req, "</body>\n</html>\n");
-
-/*
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\">\n");
-  httpd_resp_sendstr_chunk(Req, "<input type=\"submit\" value=\"Restart\">\n");
-  httpd_resp_sendstr_chunk(Req, "<input type=\"hidden\" name=\"Restart\" value=\"1\">");
-  httpd_resp_sendstr_chunk(Req, "</form>\n");
-*/
-  // httpd_resp_sendstr_chunk(Req, 0);
   httpd_resp_send_chunk(Req, 0, 0);
+
+  if(Restart)
+  {
+#ifdef WITH_SPIFFS
+    FlashLog_SaveReq=1;
+#endif
+    vTaskDelay(1000);
+    esp_restart(); }
+
   return ESP_OK; }
 
 static esp_err_t top_get_handler(httpd_req_t *Req)

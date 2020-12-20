@@ -74,7 +74,7 @@ class PAW_Packet
    // uint32_t getAddress(void) const { return Address>>8; }              // remove the sync '$'
    // void     setAddress(uint32_t Addr) { Address = (Addr<<8) | 0x24; }  // set new address and set the '$' sync char
 
-   int Copy(const OGN1_Packet &Packet, bool Ext=1)
+   int Copy(const OGN1_Packet &Packet, bool Ext=0)
    { Clear();
      Address  = Packet.Header.Address;                     // [24-bit]
      if(Packet.Header.NonPos) return 0;                    // encode only position packets
@@ -96,6 +96,33 @@ class PAW_Packet
        Climb = ClimbRate; }
      SeqMsg = 0;
      setCRC(); return 1; }
+
+   int WriteJSON(char *JSON) const
+   { int Len=0;
+     Len+=Format_String(JSON+Len, "\"addr\":\"");
+     Len+=Format_Hex(JSON+Len, (uint8_t) (Address>>16));
+     Len+=Format_Hex(JSON+Len, (uint16_t)(Address));
+     JSON[Len++]='\"';
+     Len+=Format_String(JSON+Len, ",\"addr_type\":");
+     JSON[Len++] = HexDigit(getAddrType());
+     Len+=Format_String(JSON+Len, ",\"acft_type\":\"");
+     JSON[Len++] = HexDigit(AcftType);
+     JSON[Len++]='\"';
+     Len+=Format_String(JSON+Len, ",\"acft_cat\":\"");           // GDL90 aircraft category
+                          // no-info, glider, tow, heli, parachute, drop-plane, hang-glider, para-glider, powered, jet, UFO, balloon, Zeppelin, UAV, ground vehicle, static } ; 
+     const uint8_t AcftCat[16] = { 0,      9,   1,    7,        11,          1,          12,          12,       1,   2,   0,      10,       10,  14, 18, 19 } ;
+     Len+=Format_Hex(JSON+Len, AcftCat[AcftType]);
+     JSON[Len++]='\"';
+     // uint32_t PosTime=Time; if(nsTime<300000000) PosTime--;
+     // Len+=Format_String(JSON+Len, ",\"time\":");
+     // Len+=Format_UnsDec(JSON+Len, PosTime);
+     // int64_t RxTime=(int64_t)Time-PosTime; RxTime*=1000; RxTime+=nsTime/1000000;
+     // Len+=Format_String(JSON+Len, ",\"rx_time\":");
+     // Len+=Format_SignDec(JSON+Len, RxTime, 4, 3, 1);
+     Len+=sprintf(JSON+Len, ",\"lat_deg\":%8.7f,\"lon_deg\":%8.7f,\"alt_msl_m\":%d", Latitude, Longitude, Altitude);
+     Len+=sprintf(JSON+Len, ",\"track_deg\":%d,\"speed_mps\":%3.1f", Heading, 0.514*Speed);
+     if(OGN) Len+=sprintf(JSON+Len, ",\"climb_mps\":%3.1f", 0.32512*Climb);
+     return Len; }
 
    uint8_t Dump(char *Out)
    { uint8_t Len=0;
@@ -191,32 +218,15 @@ class PAW_RxPacket          // Received PilotAware packet
             Packet.Seq, 0.25*SNR, 0.5*CSNR, 0.01*FreqOfs); }
 
    int WriteJSON(char *JSON) const
-   { int Len=0;
-     Len+=Format_String(JSON+Len, "\"addr\":\"");
-     uint32_t Address = Packet.Address;
-     Len+=Format_Hex(JSON+Len, (uint8_t) (Address>>16));
-     Len+=Format_Hex(JSON+Len, (uint16_t)(Address));
-     JSON[Len++]='\"';
-     Len+=Format_String(JSON+Len, ",\"addr_type\":");
-     JSON[Len++] = HexDigit(Packet.getAddrType());
-     Len+=Format_String(JSON+Len, ",\"acft_type\":\"");
-     JSON[Len++] = HexDigit(Packet.AcftType);
-     JSON[Len++]='\"';
-     Len+=Format_String(JSON+Len, ",\"acft_cat\":\"");           // GDL90 aircraft category
-                          // no-info, glider, tow, heli, parachute, drop-plane, hang-glider, para-glider, powered, jet, UFO, balloon, Zeppelin, UAV, ground vehicle, static } ; 
-     const uint8_t AcftCat[16] = { 0,      9,   1,    7,        11,          1,          12,          12,       1,   2,   0,      10,       10,  14, 18, 19 } ;
-     Len+=Format_Hex(JSON+Len, AcftCat[Packet.AcftType]);
-     JSON[Len++]='\"';
+   { int Len = Packet.WriteJSON(JSON);
      uint32_t PosTime=Time; if(nsTime<300000000) PosTime--;
-     // if(OGN)
+     if(Packet.OGN)
+     { }
      Len+=Format_String(JSON+Len, ",\"time\":");
      Len+=Format_UnsDec(JSON+Len, PosTime);
      int64_t RxTime=(int64_t)Time-PosTime; RxTime*=1000; RxTime+=nsTime/1000000;
      Len+=Format_String(JSON+Len, ",\"rx_time\":");
      Len+=Format_SignDec(JSON+Len, RxTime, 4, 3, 1);
-     Len+=sprintf(JSON+Len, ",\"lat_deg\":%8.7f,\"lon_deg\":%8.7f,\"alt_msl_m\":%d", Packet.Latitude, Packet.Longitude, Packet.Altitude);
-     Len+=sprintf(JSON+Len, ",\"track_deg\":%d,\"speed_mps\":%3.1f", Packet.Heading, 0.514*Packet.Speed);
-     if(Packet.OGN) Len+=sprintf(JSON+Len, ",\"climb_mps\":%3.1f", 0.32512*Packet.Climb);
      return Len; }
 
 } ;

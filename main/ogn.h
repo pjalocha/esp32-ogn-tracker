@@ -425,19 +425,23 @@ template <class OGNx_Packet=OGN1_Packet>
 
    uint8_t WritePFLAA(char *NMEA, uint8_t Status, int32_t LatDist, int32_t LonDist, int32_t AltDist)
    { uint8_t Len=0;
-     Len+=Format_String(NMEA+Len, "$PFLAA,");                    // sentence name and alarm-level (but no alarms for trackers)
+     Len+=Format_String(NMEA+Len, "$PFLAA,");                             // sentence name and alarm-level (but no alarms for trackers)
      NMEA[Len++]='0'+Status;
      NMEA[Len++]=',';
      Len+=Format_SignDec(NMEA+Len, LatDist);
      NMEA[Len++]=',';
      Len+=Format_SignDec(NMEA+Len, LonDist);
      NMEA[Len++]=',';
-     Len+=Format_SignDec(NMEA+Len, AltDist);                       // [m] relative altitude
+     Len+=Format_SignDec(NMEA+Len, AltDist);                              // [m] relative altitude
      NMEA[Len++]=',';
-     NMEA[Len++]='0'+Packet.Header.AddrType;                              // address-type (3=OGN)
+     uint8_t AddrType = Packet.Header.AddrType;
+#ifdef WITH_SKYDEMON
+     if(AddrType!=1) AddrType=2;                                          // SkyDemon only accepts 1 or 2
+#endif
+     NMEA[Len++]='0'+AddrType;                                            // address-type (3=OGN)
      NMEA[Len++]=',';
      uint32_t Addr = Packet.Header.Address;                               // [24-bit] address
-     Len+=Format_Hex(NMEA+Len, (uint8_t)(Addr>>16));               // XXXXXX 24-bit address: RND, ICAO, FLARM, OGN
+     Len+=Format_Hex(NMEA+Len, (uint8_t)(Addr>>16));                      // XXXXXX 24-bit address: RND, ICAO, FLARM, OGN
      Len+=Format_Hex(NMEA+Len, (uint16_t)Addr);
      NMEA[Len++]=',';
      Len+=Format_UnsDec(NMEA+Len, Packet.DecodeHeading(), 4, 1);          // [deg] heading (by GPS)
@@ -451,7 +455,7 @@ template <class OGNx_Packet=OGN1_Packet>
      NMEA[Len++]=HexDigit(Packet.Position.AcftType);                      // [0..F] aircraft-type: 1=glider, 2=tow plane, etc.
      Len+=NMEA_AppendCheckCRNL(NMEA, Len);
      NMEA[Len]=0;
-     return Len; }                                                 // return number of formatted characters
+     return Len; }                                                        // return number of formatted characters
 
    void Print(void) const
    { printf("[%02d/%+6.1fdBm/%2d] ", RxChan, -0.5*RxRSSI, RxErr);
