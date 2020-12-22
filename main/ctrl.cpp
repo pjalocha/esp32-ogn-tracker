@@ -77,32 +77,32 @@ static void PrintParameters(void)                               // print paramet
   xSemaphoreGive(CONS_Mutex);                                  // give back UART1 to other tasks
 }
 
+static void PrintPOGNS(void)                                   // print parameters in the $POGNS form
+{ xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Parameters.WritePOGNS(Line);
+  Format_String(CONS_UART_Write, Line);
+  Parameters.WritePOGNS_Pilot(Line);
+  Format_String(CONS_UART_Write, Line);
+  Parameters.WritePOGNS_Acft(Line);
+  Format_String(CONS_UART_Write, Line);
+  Parameters.WritePOGNS_Comp(Line);
+  Format_String(CONS_UART_Write, Line);
+#ifdef WITH_AP
+  Parameters.WritePOGNS_AP(Line);
+  Format_String(CONS_UART_Write, Line);
+#endif
+#ifdef WITH_STRATUX
+  Parameters.WritePOGNS_Stratux(Line);
+  Format_String(CONS_UART_Write, Line);
+#endif
+  xSemaphoreGive(CONS_Mutex);                                          //
+  return; }
+
 #ifdef WITH_CONFIG
 static void ReadParameters(void)  // read parameters requested by the user in the NMEA sent.
 { if((!NMEA.hasCheck()) || NMEA.isChecked() )
   { PrintParameters();
-    if(NMEA.Parms==0)                                                      // if no parameter given
-    { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);                           // print a help message
-      // Format_String(CONS_UART_Write, "$POGNS,<aircraft-type>,<addr-type>,<address>,<RFM69(H)W>,<Tx-power[dBm]>,<freq.corr.[kHz]>,<console baudrate[bps]>,<RF temp. corr.[degC]>,<pressure corr.[Pa]>\n");
-      // Format_String(CONS_UART_Write, "$POGNS[,<Name>=<Value>]\n");
-      Parameters.WritePOGNS(Line);
-      Format_String(CONS_UART_Write, Line);
-      Parameters.WritePOGNS_Pilot(Line);
-      Format_String(CONS_UART_Write, Line);
-      Parameters.WritePOGNS_Acft(Line);
-      Format_String(CONS_UART_Write, Line);
-      Parameters.WritePOGNS_Comp(Line);
-      Format_String(CONS_UART_Write, Line);
-#ifdef WITH_AP
-      Parameters.WritePOGNS_AP(Line);
-      Format_String(CONS_UART_Write, Line);
-#endif
-#ifdef WITH_STRATUX
-      Parameters.WritePOGNS_Stratux(Line);
-      Format_String(CONS_UART_Write, Line);
-#endif
-      xSemaphoreGive(CONS_Mutex);                                          //
-      return; }
+    if(NMEA.Parms==0) { PrintPOGNS(); return; }                              // if no parameter given
     Parameters.ReadPOGNS(NMEA);
     PrintParameters();
     esp_err_t Err = Parameters.WriteToNVS();                                                  // erase and write the parameters into the Flash
@@ -382,6 +382,15 @@ static void ProcessInput(void)
 extern "C"
 void vTaskCTRL(void* pvParameters)
 {
+
+  uint8_t Len=Format_String(Line, "$POGNS,SysStart");
+  Len+=NMEA_AppendCheckCRNL(Line, Len);
+  Line[Len]=0;
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, Line);
+  xSemaphoreGive(CONS_Mutex);
+  PrintPOGNS();
+
   uint32_t PrevTime=0;
   GPS_Position *PrevGPS=0;
   for( ; ; )                                          //
