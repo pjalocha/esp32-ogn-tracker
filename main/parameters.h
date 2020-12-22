@@ -242,7 +242,11 @@ uint16_t StratuxPort;
 #ifdef WITH_GPS_MTK
     NavMode        =         2; // 2 = Avionic mode for MTK
 #endif
+#ifdef WITH_STRATUX
+    NavRate        =         5; // [Hz] Stratux prefers higher rate for AHRS operation
+#else
     NavRate        =         0; // [Hz] 0 = do not attempt to change the navigation rate
+#endif
     GNSS           =      0x67; // enable GPS, SBAS, GLONASS and GALILEO, but not BeiDou
     GeoidSepar     =    10*DEFAULT_GeoidSepar; // [0.1m]
 
