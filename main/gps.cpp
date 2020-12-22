@@ -635,7 +635,7 @@ static void GPS_NMEA(void)                                                 // wh
 }
 
 #ifdef WITH_GPS_UBX
-// #ifdef DEBUG_PRINT
+#ifdef DEBUG_PRINT
 static void DumpUBX(void)
 { Format_String(CONS_UART_Write, "UBX: ");
   Format_UnsDec(CONS_UART_Write, xTaskGetTickCount(), 6, 3);
@@ -645,15 +645,15 @@ static void DumpUBX(void)
   for(uint8_t Idx=0; Idx<UBX.Bytes; Idx++)
   { CONS_UART_Write(' '); Format_Hex(CONS_UART_Write, UBX.Byte[Idx]); }
   Format_String(CONS_UART_Write, "\n"); }
-// #endif // DEBUG_PRINT
+#endif // DEBUG_PRINT
 
 static void GPS_UBX(void)                                                         // when GPS gets an UBX packet
 { GPS_Status.UBX=1;
   GPS_Status.BaudConfig = (GPS_getBaudRate() == GPS_TargetBaudRate);
   LED_PCB_Flash(10);
-// #ifdef DEBUG_PRINT
+#ifdef DEBUG_PRINT
   DumpUBX();
-// #endif
+#endif
   // GPS_Pos[GPS_PosIdx].ReadUBX(UBX);
 #ifdef WITH_GPS_UBX_PASS
   { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);                                    // send ther UBX packet to the console
