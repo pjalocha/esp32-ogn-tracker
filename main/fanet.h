@@ -44,7 +44,7 @@ class FANET_Packet
 
    uint8_t getAddrType(void) const                          // address-type based on prefix
    { uint8_t Pref=getAddrPref();
-     if(Pref==0x11 || Pref==0x20 || Pref==0xDD || Pref==0xDE || Pref==0xDF) return 2;
+     if(Pref==0x08 || Pref==0x11 || Pref==0x20 || Pref==0xDD || Pref==0xDE || Pref==0xDF) return 2;
      return 3; }
 
    void setAddress(uint32_t Addr) { setAddrPref(Addr>>16); setAddrLow(Addr); }
