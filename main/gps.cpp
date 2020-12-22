@@ -270,24 +270,25 @@ static void GPS_BurstStart(void)                                           // wh
           CFG_RATE.navRate = 1;
           CFG_RATE.timeRef = 0;
           UBX_RxMsg::Send(0x06, 0x08, GPS_UART_Write, (uint8_t*)(&CFG_RATE), sizeof(CFG_RATE));
-// #ifdef DEBUG_PRINT
+#ifdef DEBUG_PRINT
           Format_String(CONS_UART_Write, "GPS <- CFG-RATE: ");
           UBX_RxMsg::Send(0x06, 0x08, CONS_HexDump, (uint8_t*)(&CFG_RATE), sizeof(CFG_RATE));
           Format_String(CONS_UART_Write, "\n");
-// #endif
+#endif
         }
         { UBX_CFG_NAV5 CFG_NAV5;
           CFG_NAV5.setDynModel(Parameters.NavMode);
           UBX_RxMsg::Send(0x06, 0x24, GPS_UART_Write, (uint8_t*)(&CFG_NAV5), sizeof(CFG_NAV5));
-// #ifdef DEBUG_PRINT
+#ifdef DEBUG_PRINT
           Format_String(CONS_UART_Write, "GPS <- CFG-NAV5: ");
           UBX_RxMsg::Send(0x06, 0x24, CONS_HexDump, (uint8_t*)(&CFG_NAV5), sizeof(CFG_NAV5));
           Format_String(CONS_UART_Write, "\n");
-// #endif
+#endif
         }
         UBX_RxMsg::Send(0x06, 0x08, GPS_UART_Write);                     // send the query for the navigation rate
         UBX_RxMsg::Send(0x06, 0x24, GPS_UART_Write);                     // send the query for the navigation mode setting
         UBX_RxMsg::Send(0x06, 0x3E, GPS_UART_Write);                     // send the query for the GNSS configuration
+        UBX_RxMsg::Send(0x06, 0x16, GPS_UART_Write);                     // send the query for the SBAS configuration
         // if(!GPS_Status.NMEA)                                             // if NMEA sentences are not there
         { UBX_CFG_MSG CFG_MSG;                                           // send CFG_MSG to enable the NMEA sentences
           CFG_MSG.msgClass = 0xF0;                                       // NMEA class
@@ -634,7 +635,7 @@ static void GPS_NMEA(void)                                                 // wh
 }
 
 #ifdef WITH_GPS_UBX
-#ifdef DEBUG_PRINT
+// #ifdef DEBUG_PRINT
 static void DumpUBX(void)
 { Format_String(CONS_UART_Write, "UBX: ");
   Format_UnsDec(CONS_UART_Write, xTaskGetTickCount(), 6, 3);
@@ -644,13 +645,15 @@ static void DumpUBX(void)
   for(uint8_t Idx=0; Idx<UBX.Bytes; Idx++)
   { CONS_UART_Write(' '); Format_Hex(CONS_UART_Write, UBX.Byte[Idx]); }
   Format_String(CONS_UART_Write, "\n"); }
-#endif // DEBUG_PRINT
+// #endif // DEBUG_PRINT
 
 static void GPS_UBX(void)                                                         // when GPS gets an UBX packet
 { GPS_Status.UBX=1;
   GPS_Status.BaudConfig = (GPS_getBaudRate() == GPS_TargetBaudRate);
   LED_PCB_Flash(10);
-  // DumpUBX();
+// #ifdef DEBUG_PRINT
+  DumpUBX();
+// #endif
   // GPS_Pos[GPS_PosIdx].ReadUBX(UBX);
 #ifdef WITH_GPS_UBX_PASS
   { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);                                    // send ther UBX packet to the console
@@ -705,6 +708,16 @@ static void GPS_UBX(void)                                                       
       UBX.RecalcCheck();                                                          // reclaculate the check sum
       UBX.Send(GPS_UART_Write);                                                   // send this UBX packet
     }
+  }
+  if(UBX.isCFG_SBAS())                                                          // if CFG-SBAS
+  { class UBX_CFG_SBAS *CFG = (class UBX_CFG_SBAS *)UBX.Word;
+    CFG->mode = Parameters.EnableSBAS;
+    CFG->usage=7;
+    CFG->maxSBAS=3;
+    CFG->scanmode1=0;
+    CFG->scanmode2=0;
+    UBX.RecalcCheck();                                                          // reclaculate the check sum
+    UBX.Send(GPS_UART_Write);                                                   // send this UBX packet
   }
 #ifdef DEBUG_PRINT
   if(UBX.isACK())

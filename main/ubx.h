@@ -189,6 +189,16 @@ class UBX_CFG_RATE        // 0x06 0x08
    uint16_t timeRef;      // 0=UTC, 1=GPS
 } ;
 
+class UBX_CFG_SBAS        // 0x06 0x16
+{ public:
+   uint8_t mode;          // #0 = enabled, #1 = test
+   uint8_t usage;         // #0 = range, #1 = diffCorr, #2 = integrity
+   uint8_t maxSBAS;       // number of channels: 0..3
+   uint8_t scanmode2;     // #0 = PRN152, ... #6  = PRN158
+  uint32_t scanmode1;     // #0 = PRN120, ... #31 = PRN151
+} ;                       // when polled from M6:  01 03 03 00 51 62 06 00
+                          // for auto-select mode: 01 07 03 00 00 00 00 00
+
 // for GPS:     0x00, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01 (enable)
 // for SBAS:    0x01, 0x02, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01 (enable)
 // for BeiDou:  0x03, 0x00, 0x10, 0x00, 0x00, 0x00, 0x01, 0x01 (disable)
@@ -373,6 +383,7 @@ class UBX_RxMsg // receiver for the UBX sentences
    bool isACK_ACK    (void) const { return isACK() && (ID==0x01); }
 
    bool isCFG_PRT    (void) const { return isCFG() && (ID==0x00); }
+   bool isCFG_SBAS   (void) const { return isCFG() && (ID==0x16); }
    bool isCFG_NAV5   (void) const { return isCFG() && (ID==0x24); }
 } ;
 
