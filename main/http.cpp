@@ -132,7 +132,7 @@ static void ParmForm_GPS(httpd_req_t *Req)  // produce HTML form for GPS paramet
   SelectList(Req, "manGeoidSepar", GeoidSeparTable, 2, Parameters.manGeoidSepar);
 
   httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"GeoidSepar\" size=\"3\" value=\"");
-  Len=Format_SignDec(Line, Parameters.GeoidSepar, 2, 1);
+  Len=Format_SignDec(Line, Parameters.GeoidSepar, 2, 1, 1);
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\">\n");
 
@@ -162,12 +162,12 @@ static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for aircraft 
   httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
 
   httpd_resp_sendstr_chunk(Req, "<tr><td>Tx power [dBm]</td><td><input type=\"text\" name=\"TxPower\" size=\"10\" value=\"");
-  Len=Format_SignDec(Line, (int16_t)Parameters.TxPower);
+  Len=Format_SignDec(Line, (int16_t)Parameters.TxPower, 1, 0, 1);
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
   httpd_resp_sendstr_chunk(Req, "<tr><td>Freq.corr. [ppm]</td><td><input type=\"text\" name=\"RFchipFreqCorr\" size=\"10\" value=\"");
-  Len=Format_SignDec(Line, Parameters.RFchipFreqCorr, 2, 1);
+  Len=Format_SignDec(Line, Parameters.RFchipFreqCorr, 2, 1, 1);
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
@@ -218,7 +218,7 @@ static void ParmForm_Stratux(httpd_req_t *Req) // Connection to Stratux WiFi par
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
   httpd_resp_sendstr_chunk(Req, "<tr><td>Min. RSSI [dBm]</td><td><input type=\"text\" name=\"StratuxMinSig\" size=\"10\" value=\"");
-  Len=Format_SignDec(Line, Parameters.StratuxMinSig);
+  Len=Format_SignDec(Line, Parameters.StratuxMinSig, 1, 0, 1);
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
@@ -251,7 +251,7 @@ static void ParmForm_AP(httpd_req_t *Req) // Wi-Fi access point parameters { cha
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
   httpd_resp_sendstr_chunk(Req, "<tr><td>Min. RSSI [dBm]</td><td><input type=\"text\" name=\"APminSig\" size=\"10\" value=\"");
-  Len=Format_SignDec(Line, Parameters.APminSig);
+  Len=Format_SignDec(Line, Parameters.APminSig, 1, 0, 1);
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
 
