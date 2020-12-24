@@ -666,6 +666,11 @@ class GPS_Time
    bool isDateValid(void) const                      // is the GPS date valid ?
    { return (Year>=0) && (Month>=0) && (Day>=0); }
 
+   void incrTimeFrac(int8_t Frac)
+   { if(Frac>=100) { incrTime(); Frac-=100; }
+     if(Frac>=100-FracSec) { incrTime(); Frac-=100; }
+     FracSec+=Frac; }
+
    uint8_t incrTime(void)                            // increment HH:MM:SS by one second
    { Sec++;  if(Sec<60) return 0;
      Sec=0;

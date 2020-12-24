@@ -48,7 +48,7 @@ uint32_t GPS_getBaudRate(void);             // [bps]
 
 GPS_Position *GPS_getPosition(void);
 GPS_Position *GPS_getPosition(int8_t Sec);                                                  // return GPS position for given Sec
-GPS_Position *GPS_getPosition(uint8_t &BestIdx, int16_t &BestRes, int8_t Sec, int8_t Frac); // return GPS position closest to the given Sec.Frac
+GPS_Position *GPS_getPosition(uint8_t &BestIdx, int16_t &BestRes, int8_t Sec, int8_t Frac, bool Ready=1); // return GPS position closest to the given Sec.Frac
 
 int16_t GPS_AverageSpeed(void);             // [0.1m/s] calc. average speed based on most recent GPS positions
 

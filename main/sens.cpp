@@ -201,9 +201,11 @@ static void ProcBaro(void)
     uint16_t msTime = TimeSync_msTime(MeasTick);
 
     uint8_t Frac = Sec%10;                                           // [0.1s]
-    if(Frac==0)
-    { GPS_Position *PosPtr = GPS_getPosition(Sec/10);                // get GPS position record for this second
-#ifdef DEBUG_PRINT
+    // if(Frac==0)
+    { // GPS_Position *PosPtr = GPS_getPosition(Sec/10);                // get GPS position record for this second
+      uint8_t BestIdx; int16_t BestRes;
+      GPS_Position *PosPtr = GPS_getPosition(BestIdx, BestRes, Sec/10, Frac*10, 0);
+// #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_String(CONS_UART_Write, "ProcBaro: ");
       Format_UnsDec(CONS_UART_Write, (uint16_t)Sec, 3, 1);
@@ -213,10 +215,12 @@ static void ProcBaro(void)
         CONS_UART_Write('.');
         Format_UnsDec(CONS_UART_Write, (uint16_t)PosPtr->FracSec, 2);
         CONS_UART_Write('s'); }
+      Format_String(CONS_UART_Write, " => ");
+      Format_SignDec(CONS_UART_Write, BestRes, 3, 2);
       Format_String(CONS_UART_Write, "\n");
       xSemaphoreGive(CONS_Mutex);
-#endif
-      if(PosPtr)                                                     // if found:
+// #endif
+      if(PosPtr && abs(BestRes)<=20)                                 // if found and small time error
       { PosPtr->Pressure    = Pressure;                              // [0.25Pa]
         PosPtr->StdAltitude = StdAltitude;                           // store standard pressure altitude
         PosPtr->ClimbRate   = ClimbRate/10;                          // [0.1m/s]

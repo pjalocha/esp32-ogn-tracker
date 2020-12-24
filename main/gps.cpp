@@ -76,7 +76,7 @@ static union
   } ;
 } GPS_Burst;
                                                                                                    // for the autobaud on the GPS port
-const int GPS_BurstTimeout = 50; // [ms]
+const int GPS_BurstTimeout = 100; // [ms]
 
 // static const uint8_t  BaudRates=7;                                                                 // number of possible baudrates choices
 // static       uint8_t  BaudRateIdx=0;                                                               // actual choice
@@ -307,8 +307,7 @@ static void GPS_BurstStart(void)                                           // wh
 #endif
 #ifdef WITH_GPS_MTK
         if(Parameters.NavRate)
-        { strcpy(GPS_Cmd, "$PMTK220,");                                        // MTK command to change the navigation rate
-          uint8_t Len = strlen(GPS_Cmd);
+        { uint8_t Len = Format_String(GPS_Cmd, "$PMTK220,");                   // navigation rate
           uint16_t OneSec = 1000;
           Len += Format_UnsDec(GPS_Cmd+Len, OneSec/Parameters.NavRate);
           Len += NMEA_AppendCheck(GPS_Cmd, Len);
@@ -316,7 +315,18 @@ static void GPS_BurstStart(void)                                           // wh
           GPS_Cmd[Len++]='\n';
           GPS_Cmd[Len]=0;
           Format_String(GPS_UART_Write, GPS_Cmd, Len, 0);
-          strcpy(GPS_Cmd, "$PMTK353,");
+          GPS_Status.ModeConfig=1; }
+        if(Parameters.NavMode)
+        { uint8_t Len = Format_String(GPS_Cmd, "$PMTK886,");                                        // MTK command to change the navigation mode
+          GPS_Cmd[Len++]='0'+Parameters.NavMode;
+          Len += NMEA_AppendCheck(GPS_Cmd, Len);
+          GPS_Cmd[Len++]='\r';
+          GPS_Cmd[Len++]='\n';
+          GPS_Cmd[Len]=0;
+          Format_String(GPS_UART_Write, GPS_Cmd, Len, 0);
+          GPS_Status.ModeConfig=1; }
+        if(Parameters.GNSS)
+        { uint8_t Len = Format_String(GPS_Cmd, "$PMTK353,"); // GNSS configuration
           GPS_Cmd[Len++]='0'+Parameters.EnableGPS;   // search (or not) for GPS satellites
           GPS_Cmd[Len++]=',';
           GPS_Cmd[Len++]='0'+Parameters.EnableGLO;   // search (or not) for GLONASS satellites (L86 supports)
@@ -330,20 +340,7 @@ static void GPS_BurstStart(void)                                           // wh
           GPS_Cmd[Len++]='\r';
           GPS_Cmd[Len++]='\n';
           GPS_Cmd[Len]=0;
-          Format_String(GPS_UART_Write, GPS_Cmd, Len, 0);
-          GPS_Status.ModeConfig=1;
-        }
-        if(Parameters.NavMode)
-        { strcpy(GPS_Cmd, "$PMTK886,");                                        // MTK command to change the navigation mode
-          uint8_t Len = strlen(GPS_Cmd);
-          GPS_Cmd[Len++]='0'+Parameters.NavMode;
-          Len += NMEA_AppendCheck(GPS_Cmd, Len);
-          GPS_Cmd[Len++]='\r';
-          GPS_Cmd[Len++]='\n';
-          GPS_Cmd[Len]=0;
-          Format_String(GPS_UART_Write, GPS_Cmd, Len, 0);
-          GPS_Status.ModeConfig=1;
-        }
+          Format_String(GPS_UART_Write, GPS_Cmd, Len, 0); }
 #endif
       }
       if(!GPS_Status.BaudConfig)                                             // if GPS baud config is not done yet
@@ -472,7 +469,7 @@ static void GPS_BurstComplete(void)                                        // wh
       }
     }
     if(GPS_Pos[GPS_PosIdx].isValid())                                         // position is complete and locked
-    { if(Parameters.manGeoidSepar)                                         // if GeoidSepar is "manual" - this implies the GPS does not correct for it
+    { if(Parameters.manGeoidSepar)                                            // if GeoidSepar is "manual" - this implies the GPS does not correct for it
       { GPS_Pos[GPS_PosIdx].GeoidSeparation = Parameters.GeoidSepar;          // copy the manually set GeoidSepar
         GPS_Pos[GPS_PosIdx].Altitude -= Parameters.GeoidSepar; }              // correct the Altitude - we likely need a separate flag for this
       GPS_Pos[GPS_PosIdx].calcLatitudeCosine();
@@ -525,7 +522,7 @@ static void GPS_BurstComplete(void)                                        // wh
   }
   uint8_t NextPosIdx = (GPS_PosIdx+1)&PosPipeIdxMask;                         // next position to be recorded
   if( GPS_Pos[GPS_PosIdx].isTimeValid() && GPS_Pos[NextPosIdx].isTimeValid() )
-  { int32_t Period = GPS_Pos[GPS_PosIdx].calcTimeDiff(GPS_Pos[NextPosIdx]);
+  { int32_t Period = GPS_Pos[GPS_PosIdx].calcTimeDiff(GPS_Pos[NextPosIdx]);   // [1/100sec]
     if(Period>0) GPS_PosPeriod = (Period+GPS_PosPipeSize/2)/(GPS_PosPipeSize-1);
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -545,9 +542,20 @@ static void GPS_BurstComplete(void)                                        // wh
   // Sec++; if(Sec>=60) Sec=0;
   // GPS_Pos[NextPosIdx].Sec=Sec;                                           // set the correct time for the next position
   GPS_Pos[NextPosIdx].copyTime(GPS_Pos[GPS_PosIdx]);                        // copy time from current position
-  GPS_Pos[NextPosIdx].incrTime();                                        // increment time by 1 sec
+  GPS_Pos[NextPosIdx].incrTimeFrac(GPS_PosPeriod);                             // increment time by the expected period
   Flight.Process(GPS_Pos[GPS_PosIdx]);
   // GPS_Pos[NextPosIdx].copyDate(GPS_Pos[GPS_PosIdx]);
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "GPS -> ");
+  Format_UnsDec(CONS_UART_Write, (uint16_t)GPS_Pos[NextPosIdx].Sec, 2);
+  CONS_UART_Write('.');
+  Format_UnsDec(CONS_UART_Write, (uint16_t)GPS_Pos[NextPosIdx].FracSec, 2);
+  Format_String(CONS_UART_Write, "s ");
+  Format_UnsDec(CONS_UART_Write, GPS_PosPeriod, 3, 2);
+  Format_String(CONS_UART_Write, "s\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
   GPS_PosIdx=NextPosIdx;                                                      // advance the index
   xEventGroupSetBits(GPS_Event, GPSevt_NewPos);
 }
@@ -557,16 +565,16 @@ static void GPS_BurstEnd(void)                                             // wh
 
 // ----------------------------------------------------------------------------
 
-GPS_Position *GPS_getPosition(uint8_t &BestIdx, int16_t &BestRes, int8_t Sec, int8_t Frac) // return GPS position closest to the given Sec.Frac
+GPS_Position *GPS_getPosition(uint8_t &BestIdx, int16_t &BestRes, int8_t Sec, int8_t Frac, bool Ready) // return GPS position closest to the given Sec.Frac
 { int16_t TargetTime = Frac+(int16_t)Sec*100;                            // target time including the seconds
   BestIdx=0; BestRes=0x7FFF;
   for(uint8_t Idx=0; Idx<GPS_PosPipeSize; Idx++)                         // run through the GPS positions stored in the pipe
   { GPS_Position *Pos=GPS_Pos+Idx;
-    if(!Pos->isReady) continue;                                          // skip those not-ready yet
+    if(Ready) if(!Pos->isReady) continue;                                // if only Ready positions requested: skip those not-ready yet
     int16_t Diff = TargetTime - (Pos->FracSec + (int16_t)Pos->Sec*100);  // difference from the target time
     if(Diff<(-3000)) Diff+=6000;                                         // wrap-around 60 sec
     else if(Diff>=3000) Diff-=6000;
-    if(abs(Diff)<abs(BestRes)) { BestRes=Diff; BestIdx=Idx; }          // store the smallest difference from target
+    if(abs(Diff)<abs(BestRes)) { BestRes=Diff; BestIdx=Idx; }            // store the smallest difference from target
   }
   return BestRes==0x7FFF ? 0:GPS_Pos+BestIdx; }
 
