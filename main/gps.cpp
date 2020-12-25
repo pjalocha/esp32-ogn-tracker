@@ -398,8 +398,8 @@ static void GPS_BurstStart(void)                                           // wh
         GPS_Cmd[Len]=0;
         Format_String(GPS_UART_Write, GPS_Cmd, Len, 0);
 #endif // WITH_GPS_SRF
-        GPS_UART_Flush(500);                                                 // wait for all data to be sent to the GPS
-        GPS_UART_SetBaudrate(GPS_TargetBaudRate); GPS_BaudRate=GPS_TargetBaudRate;   // switch serial port to the new baudrate
+        // GPS_UART_Flush(500);                                                 // wait for all data to be sent to the GPS
+        // GPS_UART_SetBaudrate(GPS_TargetBaudRate); GPS_BaudRate=GPS_TargetBaudRate;   // switch serial port to the new baudrate
       }
       QueryWait=60;
     }
@@ -539,6 +539,7 @@ static void GPS_BurstComplete(void)                                        // wh
   GPS_Pos[NextPosIdx].Clear();                                              // clear the next position
   GPS_Pos[NextPosIdx].copyTime(GPS_Pos[GPS_PosIdx]);                        // copy time from current position
   GPS_Pos[NextPosIdx].incrTimeFrac(GPS_PosPeriod);                          // increment time by the expected period
+  GPS_Pos[NextPosIdx].copyBaro(GPS_Pos[GPS_PosIdx], (int16_t)GPS_PosPeriod);
   Flight.Process(GPS_Pos[GPS_PosIdx]);
   // GPS_Pos[NextPosIdx].copyDate(GPS_Pos[GPS_PosIdx]);
 #ifdef DEBUG_PRINT

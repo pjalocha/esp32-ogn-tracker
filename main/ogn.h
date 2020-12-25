@@ -667,13 +667,13 @@ class GPS_Time
    bool isDateValid(void) const                      // is the GPS date valid ?
    { return (Year>=0) && (Month>=0) && (Day>=0); }
 
-   void incrTimeFrac(int16_t msFrac)                 // [ms]
+   int8_t incrTimeFrac(int16_t msFrac)                 // [ms]
    { mSec+=msFrac;
-     if(mSec>=1000) { incrTime(); mSec-=1000; }
-     else if(mSec<0) { decrTime(); mSec+=1000; }
-   }
+     if(mSec>=1000) { mSec-=1000; return incrTime(); }
+     else if(mSec<0) { mSec+=1000; return decrTime(); }
+     return 0; }
 
-   uint8_t incrTime(void)                            // increment HH:MM:SS by one second
+   int8_t incrTime(void)                             // increment HH:MM:SS by one second
    { Sec++;  if(Sec<60) return 0;
      Sec=0;
      Min++;  if(Min<60) return 0;
@@ -682,14 +682,14 @@ class GPS_Time
      Hour=0;
      return 1; }                                     // return 1 if date needs to be incremented
 
-   uint8_t decrTime(void)                            // decrement HH:MM:SS by one second
+   int8_t decrTime(void)                             // decrement HH:MM:SS by one second
    { if(Sec>0) { Sec--; return 0; }
      Sec=60;
      if(Min>60) { Min--; return 0; }
      Min=60;
      if(Hour>0) { Hour--; return 0; }
      Hour=24;
-     return 1; }                                     // return 1 if date needs to be decremented
+     return -1; }                                     // return 1 if date needs to be decremented
 
    int32_t calcTimeDiff(const GPS_Time &RefTime) const
    { int32_t TimeDiff = msDayTime() - RefTime.msDayTime();                                  // [ms]
@@ -880,20 +880,19 @@ class GPS_Position: public GPS_Time
      if(FixMode==1)     return 0;                    // if GSA says "no lock" (when GSA is not there, FixMode=0)
      if(Satellites<=0)  return 0;                    // if number of satellites none or invalid
      return 1; }
-/*
-   void copyTime(GPS_Position &RefPosition)           // copy HH:MM:SS.SSS from another record
-   { FracSec = RefPosition.FracSec;
-     Sec     = RefPosition.Sec;
-     Min     = RefPosition.Min;
-     Hour    = RefPosition.Hour; }
 
-   void copyDate(GPS_Position &RefPosition)           // copy YY:MM:DD from another record
-   { Day     = RefPosition.Day;
-     Month   = RefPosition.Month;
-     Year    = RefPosition.Year; }
+   void copyBaro(GPS_Position &RefPos, int16_t dTime=0)
+   { if(!RefPos.hasBaro) { hasBaro=0; return; }
+     StdAltitude = RefPos.StdAltitude;
+     Pressure    = RefPos.Pressure;
+     Temperature = RefPos.Temperature;
+     Humidity    = RefPos.Humidity;
+     if(dTime)
+     { int32_t dAlt = calcAltitudeExtrapolation(dTime);                         // [0.1m]
+       StdAltitude += dAlt;                                                     // [0.1m]
+       Pressure += 4000*dAlt/Atmosphere::PressureLapseRate(Pressure/4, Temperature); } // [0.25Pa] ([Pa], [0.1degC])
+     hasBaro=1; }
 
-   void copyTimeDate(GPS_Position &RefPosition) { copyTime(RefPosition); copyDate(RefPosition); }
-*/
 #ifndef __AVR__ // there is not printf() with AVR
    void PrintDateTime(void) const { printf("%02d.%02d.%04d %02d:%02d:%06.3f", Day, Month, 2000+Year, Hour, Min, Sec+0.001*mSec ); }
    void PrintTime(void)     const { printf("%02d:%02d:%06.3f", Hour, Min, Sec+0.001*mSec ); }
