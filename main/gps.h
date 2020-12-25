@@ -25,7 +25,7 @@ extern           int16_t GPS_GeoidSepar;    // [0.1m]
 extern          uint16_t GPS_LatCosine;     // [1.0/(1<<12)] Latitude Cosine for distance calculations
 extern          uint32_t GPS_TimeSinceLock; // [sec] time since GPS has a valid lock
 extern          uint32_t GPS_Random;        // random number produced from the GPS data
-extern          uint16_t GPS_PosPeriod;     // [0.01sec] how often (which period) the GPS/MAV is sending the positions
+extern          uint16_t GPS_PosPeriod;     // [msec] how often (which period) the GPS/MAV is sending the positions
 extern          uint16_t GPS_SatSNR;        // [0.25dB] average SNR for satellites being used for navigation
 
 typedef union
@@ -48,7 +48,7 @@ uint32_t GPS_getBaudRate(void);             // [bps]
 
 GPS_Position *GPS_getPosition(void);
 GPS_Position *GPS_getPosition(int8_t Sec);                                                  // return GPS position for given Sec
-GPS_Position *GPS_getPosition(uint8_t &BestIdx, int16_t &BestRes, int8_t Sec, int8_t Frac, bool Ready=1); // return GPS position closest to the given Sec.Frac
+GPS_Position *GPS_getPosition(uint8_t &BestIdx, int16_t &BestRes, int8_t Sec, int16_t Frac, bool Ready=1); // return GPS position closest to the given Sec.Frac
 
 int16_t GPS_AverageSpeed(void);             // [0.1m/s] calc. average speed based on most recent GPS positions
 

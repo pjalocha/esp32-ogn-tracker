@@ -41,7 +41,7 @@ static UBX_RxMsg   UBX;                  // UBX messages catcher
 static MAV_RxMsg   MAV;                  // MAVlink message catcher
 #endif
 
-uint16_t GPS_PosPeriod = 0;                    // [0.01s] time between succecive GPS readouts
+uint16_t GPS_PosPeriod = 0;                    // [mss] time between succecive GPS readouts
 
 // uint8_t  GPS_PowerMode = 2;                    // 0=shutdown, 1=reduced power, 2=normal
 
@@ -455,9 +455,8 @@ static void GPS_BurstComplete(void)                                        // wh
       { uint32_t UnixTime=GPS_Pos[GPS_PosIdx].getUnixTime();
         GPS_FatTime=GPS_Pos[GPS_PosIdx].getFatTime();
 #ifndef WITH_MAVLINK                                                       // with MAVlink we sync. with the SYSTEM_TIME message
-        int32_t msDiff = GPS_Pos[GPS_PosIdx].FracSec;
-        if(msDiff>=50) { msDiff-=100; UnixTime++; }                        // [0.01s]
-        msDiff*=10;                                                        // [ms]
+        int32_t msDiff = GPS_Pos[GPS_PosIdx].mSec;
+        if(msDiff>=500) { msDiff-=1000; UnixTime++; }                      // [ms]
         TimeSync_SoftPPS(Burst_Tick, UnixTime, msDiff+Parameters.PPSdelay);
         // if(abs(msDiff)<=200)                                               // if (almost) full-second burst
         // { // TickType_t PPS_Age = Burst_Tick-PPS_Tick;
@@ -486,7 +485,7 @@ static void GPS_BurstComplete(void)                                        // wh
       { uint8_t PrevIdx=(GPS_PosIdx+PosPipeIdxMask)&PosPipeIdxMask;            // previous GPS data
         int16_t TimeDiff = GPS_Pos[GPS_PosIdx].calcTimeDiff(GPS_Pos[PrevIdx]); // difference in time
         for( ; ; )                                                             // loop
-        { if(TimeDiff>=95) break;                                              // if at least 0.95sec then enough to calc. the differentials
+        { if(TimeDiff>=950) break;                                             // if at least 0.950sec then enough to calc. the differentials
           uint8_t PrevIdx2=(PrevIdx+PosPipeIdxMask)&PosPipeIdxMask;            // go back one GPS position
           if(PrevIdx2==GPS_PosIdx) break;                                      // if we looped all the way back: stop
           if(!GPS_Pos[PrevIdx2].isValid()) break;                              // if GPS position not valid: stop
@@ -500,7 +499,7 @@ static void GPS_BurstComplete(void)                                        // wh
         Format_String(CONS_UART_Write, "->");
         Format_UnsDec(CONS_UART_Write, (uint16_t)PrevIdx);
         CONS_UART_Write(' ');
-        Format_SignDec(CONS_UART_Write, TimeDiff, 3, 2);
+        Format_SignDec(CONS_UART_Write, TimeDiff, 4, 3);
         Format_String(CONS_UART_Write, "s\n");
         xSemaphoreGive(CONS_Mutex);
 #endif
@@ -522,7 +521,7 @@ static void GPS_BurstComplete(void)                                        // wh
   }
   uint8_t NextPosIdx = (GPS_PosIdx+1)&PosPipeIdxMask;                         // next position to be recorded
   if( GPS_Pos[GPS_PosIdx].isTimeValid() && GPS_Pos[NextPosIdx].isTimeValid() )
-  { int32_t Period = GPS_Pos[GPS_PosIdx].calcTimeDiff(GPS_Pos[NextPosIdx]);   // [1/100sec]
+  { int32_t Period = GPS_Pos[GPS_PosIdx].calcTimeDiff(GPS_Pos[NextPosIdx]);   // [msec]
     if(Period>0) GPS_PosPeriod = (Period+GPS_PosPipeSize/2)/(GPS_PosPipeSize-1);
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -530,19 +529,16 @@ static void GPS_BurstComplete(void)                                        // wh
     CONS_UART_Write('0'+GPS_PosIdx); CONS_UART_Write(']'); CONS_UART_Write(' ');
     Format_UnsDec(CONS_UART_Write, (uint16_t)GPS_Pos[GPS_PosIdx].Sec, 2);
     CONS_UART_Write('.');
-    Format_UnsDec(CONS_UART_Write, (uint16_t)GPS_Pos[GPS_PosIdx].FracSec, 2);
+    Format_UnsDec(CONS_UART_Write, (uint16_t)GPS_Pos[GPS_PosIdx].mSec, 3);
     Format_String(CONS_UART_Write, "s ");
-    Format_UnsDec(CONS_UART_Write, GPS_PosPeriod, 3, 2);
+    Format_SignDec(CONS_UART_Write, Period, 4, 3);
     Format_String(CONS_UART_Write, "s\n");
     xSemaphoreGive(CONS_Mutex);
 #endif
   }
-  GPS_Pos[NextPosIdx].Clear();                                           // clear the next position
-  // int8_t Sec = GPS_Pos[GPS_PosIdx].Sec;                                      //
-  // Sec++; if(Sec>=60) Sec=0;
-  // GPS_Pos[NextPosIdx].Sec=Sec;                                           // set the correct time for the next position
+  GPS_Pos[NextPosIdx].Clear();                                              // clear the next position
   GPS_Pos[NextPosIdx].copyTime(GPS_Pos[GPS_PosIdx]);                        // copy time from current position
-  GPS_Pos[NextPosIdx].incrTimeFrac(GPS_PosPeriod);                             // increment time by the expected period
+  GPS_Pos[NextPosIdx].incrTimeFrac(GPS_PosPeriod);                          // increment time by the expected period
   Flight.Process(GPS_Pos[GPS_PosIdx]);
   // GPS_Pos[NextPosIdx].copyDate(GPS_Pos[GPS_PosIdx]);
 #ifdef DEBUG_PRINT
@@ -550,9 +546,9 @@ static void GPS_BurstComplete(void)                                        // wh
   Format_String(CONS_UART_Write, "GPS -> ");
   Format_UnsDec(CONS_UART_Write, (uint16_t)GPS_Pos[NextPosIdx].Sec, 2);
   CONS_UART_Write('.');
-  Format_UnsDec(CONS_UART_Write, (uint16_t)GPS_Pos[NextPosIdx].FracSec, 2);
+  Format_UnsDec(CONS_UART_Write, (uint16_t)GPS_Pos[NextPosIdx].mSec, 3);
   Format_String(CONS_UART_Write, "s ");
-  Format_UnsDec(CONS_UART_Write, GPS_PosPeriod, 3, 2);
+  Format_UnsDec(CONS_UART_Write, GPS_PosPeriod, 4, 3);
   Format_String(CONS_UART_Write, "s\n");
   xSemaphoreGive(CONS_Mutex);
 #endif
@@ -565,15 +561,15 @@ static void GPS_BurstEnd(void)                                             // wh
 
 // ----------------------------------------------------------------------------
 
-GPS_Position *GPS_getPosition(uint8_t &BestIdx, int16_t &BestRes, int8_t Sec, int8_t Frac, bool Ready) // return GPS position closest to the given Sec.Frac
-{ int16_t TargetTime = Frac+(int16_t)Sec*100;                            // target time including the seconds
+GPS_Position *GPS_getPosition(uint8_t &BestIdx, int16_t &BestRes, int8_t Sec, int16_t Frac, bool Ready) // return GPS position closest to the given Sec.Frac
+{ int32_t TargetTime = Frac+(int32_t)Sec*1000;                            // target time including the seconds
   BestIdx=0; BestRes=0x7FFF;
   for(uint8_t Idx=0; Idx<GPS_PosPipeSize; Idx++)                         // run through the GPS positions stored in the pipe
   { GPS_Position *Pos=GPS_Pos+Idx;
     if(Ready) if(!Pos->isReady) continue;                                // if only Ready positions requested: skip those not-ready yet
-    int16_t Diff = TargetTime - (Pos->FracSec + (int16_t)Pos->Sec*100);  // difference from the target time
-    if(Diff<(-3000)) Diff+=6000;                                         // wrap-around 60 sec
-    else if(Diff>=3000) Diff-=6000;
+    int32_t Diff = TargetTime - (Pos->mSec + (int32_t)Pos->Sec*1000);    // difference from the target time
+    if(Diff<(-30000)) Diff+=60000;                                       // wrap-around 60 sec
+    else if(Diff>=30000) Diff-=60000;
     if(abs(Diff)<abs(BestRes)) { BestRes=Diff; BestIdx=Idx; }            // store the smallest difference from target
   }
   return BestRes==0x7FFF ? 0:GPS_Pos+BestIdx; }
@@ -589,7 +585,7 @@ GPS_Position *GPS_getPosition(void)                                       // ret
 
 GPS_Position *GPS_getPosition(int8_t Sec)                                // return the GPS_Position which corresponds to given Sec (may be incomplete and not valid)
 { for(uint8_t Idx=0; Idx<GPS_PosPipeSize; Idx++)
-  { int8_t PosSec = GPS_Pos[Idx].Sec; if(GPS_Pos[Idx].FracSec>=50) { PosSec++; if(PosSec>=60) PosSec-=60; }
+  { int8_t PosSec = GPS_Pos[Idx].Sec; if(GPS_Pos[Idx].mSec>=500) { PosSec++; if(PosSec>=60) PosSec-=60; }
     if(Sec==PosSec) return GPS_Pos+Idx; }
   return 0; }
 

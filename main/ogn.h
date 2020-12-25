@@ -652,13 +652,14 @@ class GPS_Time
 { public:
    int8_t  Year, Month, Day;    // Date (UTC) from GPS
    int8_t  Hour, Min, Sec;      // Time-of-day (UTC) from GPS
-   int8_t  FracSec;             // [1/100 sec] some GPS-es give second fraction with the time-of-day
-   int8_t  Spare;
+   int16_t mSec;                // [ms]
+   // int8_t  FracSec;             // [1/100 sec] some GPS-es give second fraction with the time-of-day
+   // int8_t  Spare;
 
   public:
 
    void setDefaultDate() { Year=00; Month=1; Day=1; } // default Date is 01-JAN-2000
-   void setDefaultTime() { Hour=0;  Min=0;   Sec=0; FracSec=0; } // default Time is 00:00:00.00
+   void setDefaultTime() { Hour=0;  Min=0;   Sec=0; mSec=0; } // default Time is 00:00:00.00
 
    bool isTimeValid(void) const                      // is the GPS time-of-day valid
    { return (Hour>=0) && (Min>=0) && (Sec>=0); }     // all data must have been correctly read: negative means not correctly read)
@@ -666,10 +667,11 @@ class GPS_Time
    bool isDateValid(void) const                      // is the GPS date valid ?
    { return (Year>=0) && (Month>=0) && (Day>=0); }
 
-   void incrTimeFrac(int8_t Frac)
-   { if(Frac>=100) { incrTime(); Frac-=100; }
-     if(Frac>=100-FracSec) { incrTime(); Frac-=100; }
-     FracSec+=Frac; }
+   void incrTimeFrac(int16_t msFrac)                 // [ms]
+   { mSec+=msFrac;
+     if(mSec>=1000) { incrTime(); mSec-=1000; }
+     else if(mSec<0) { decrTime(); mSec+=1000; }
+   }
 
    uint8_t incrTime(void)                            // increment HH:MM:SS by one second
    { Sec++;  if(Sec<60) return 0;
@@ -689,11 +691,11 @@ class GPS_Time
      Hour=24;
      return 1; }                                     // return 1 if date needs to be decremented
 
-   int32_t calcTimeDiff(GPS_Time &RefTime) const
-   { int32_t TimeDiff = ((int32_t)Min*6000+(int16_t)Sec*100+FracSec) - ((int32_t)RefTime.Min*6000+(int16_t)RefTime.Sec*100+RefTime.FracSec);
-     if(TimeDiff<(-180000)) TimeDiff+=360000;                                               // wrap-around 60min
-     else if(TimeDiff>=180000) TimeDiff-=360000;
-     return TimeDiff; }                                                                     // [0.01s]
+   int32_t calcTimeDiff(const GPS_Time &RefTime) const
+   { int32_t TimeDiff = msDayTime() - RefTime.msDayTime();                                  // [ms]
+          if(TimeDiff<(-(int32_t)mSecsPerDay/2)) TimeDiff+=mSecsPerDay;                              // wrap-around one day
+     else if(TimeDiff>= (int32_t)mSecsPerDay/2 ) TimeDiff-=mSecsPerDay;
+     return TimeDiff; }                                                                     // [ms]
 
    uint8_t MonthDays(void)                           // number of days per month
    { const uint16_t Table = 0x0AD5;                  // 1010 1101 0101 0=30days, 1=31days
@@ -717,7 +719,7 @@ class GPS_Time
    void decrTimeDate(void) { if(decrTime()) decrDate(); }
 
    void copyTime(GPS_Time &RefTime)                // copy HH:MM:SS.SSS from another record
-   { FracSec = RefTime.FracSec;
+   { mSec    = RefTime.mSec;
      Sec     = RefTime.Sec;
      Min     = RefTime.Min;
      Hour    = RefTime.Hour; }
@@ -728,8 +730,12 @@ class GPS_Time
      Year    = RefTime.Year; }
 
    void copyTimeDate(GPS_Time &RefTime) { copyTime(RefTime); copyDate(RefTime); }
-   uint32_t getDayTime(void) const
-   { return Times60((uint32_t)(Times60((uint16_t)Hour) + Min)) + Sec; } // this appears to save about 100 bytes of code
+
+   uint32_t msDayTime(void) const                                                          // [ms]
+   { return getDayTime()*1000+mSec; }
+
+   uint32_t getDayTime(void) const                                                         // [sec] time within the day
+   { return Times60((uint32_t)(Times60((uint16_t)Hour) + Min)) + Sec; } // this appears to save about 100 bytes of code on STM32
      // return (uint32_t)Hour*SecsPerHour + (uint16_t)Min*SecsPerMin + Sec; }              // compared to this line
 
    uint32_t getUnixTime(void) const                         // return the Unix timestamp (tested 2000-2037)
@@ -747,30 +753,29 @@ class GPS_Time
      Hour  = DayTime/SecsPerHour; DayTime -= (uint32_t)Hour*SecsPerHour;  //
      Min   = DayTime/SecsPerMin;  DayTime -= (uint16_t)Min*SecsPerMin;
      Sec   = DayTime;
-     FracSec=0;
+     mSec=0;
      Days -= 10957+1;                                       // [day] since 2000 minus 1 day
      Year  = (Days*4)/((365*4)+1);                          // [year] since 1970
      Days -= 365*Year + (Year/4);
      Month = Days/31;
      Day   = Days-(uint16_t)Month*31+1; Month++;
      uint32_t CheckTime = getUnixTime();
-     if(CheckTime<Time) incrDate((Time-CheckTime)/SecsPerDay);
-     // hasTime=1;
-  }
+     if(CheckTime<Time) incrDate((Time-CheckTime)/SecsPerDay); }
 
   void setUnixTime_ms(uint64_t Time_ms)
   { uint32_t Time=Time_ms/1000;
     setUnixTime(Time);
-    FracSec = (Time_ms-(uint64_t)Time*1000)/10; }
+    mSec = Time_ms-(uint64_t)Time*1000; }
 
   uint64_t getUnixTime_ms(void) const
-  { return (uint64_t)getUnixTime()*1000 + (uint32_t)FracSec*10; }
+  { return (uint64_t)getUnixTime()*1000 + mSec; }
 
   private:
 
-   static const uint32_t SecsPerMin =       60;
-   static const uint32_t SecsPerHour =   60*60;
-   static const uint32_t SecsPerDay = 24*60*60;
+   static const uint32_t SecsPerMin  =       60;
+   static const uint32_t SecsPerHour =    60*60;
+   static const uint32_t SecsPerDay  = 24*60*60;
+   static const uint32_t mSecsPerDay = 24*60*60*1000;
 
    uint8_t isLeapYear(void) const { return (Year&3)==0; }
 
@@ -890,11 +895,11 @@ class GPS_Position: public GPS_Time
    void copyTimeDate(GPS_Position &RefPosition) { copyTime(RefPosition); copyDate(RefPosition); }
 */
 #ifndef __AVR__ // there is not printf() with AVR
-   void PrintDateTime(void) const { printf("%02d.%02d.%04d %02d:%02d:%05.2f", Day, Month, 2000+Year, Hour, Min, Sec+0.01*FracSec ); }
-   void PrintTime(void)     const { printf("%02d:%02d:%05.2f", Hour, Min, Sec+0.01*FracSec ); }
+   void PrintDateTime(void) const { printf("%02d.%02d.%04d %02d:%02d:%06.3f", Day, Month, 2000+Year, Hour, Min, Sec+0.001*mSec ); }
+   void PrintTime(void)     const { printf("%02d:%02d:%06.3f", Hour, Min, Sec+0.001*mSec ); }
 
-   int PrintDateTime(char *Out) const { return sprintf(Out, "%02d.%02d.%04d %02d:%02d:%02d.%02d", Day, Month, Year, Hour, Min, Sec, FracSec ); }
-   int PrintTime(char *Out)     const { return sprintf(Out, "%02d:%02d:%02d.%02d", Hour, Min, Sec, FracSec ); }
+   int PrintDateTime(char *Out) const { return sprintf(Out, "%02d.%02d.%04d %02d:%02d:%02d.%03d", Day, Month, Year, Hour, Min, Sec, mSec ); }
+   int PrintTime(char *Out)     const { return sprintf(Out, "%02d:%02d:%02d.%03d", Hour, Min, Sec, mSec ); }
 
    void Print(void) const
    { printf("Time/Date = "); PrintDateTime(); printf(" "); // printf(" = %10ld.%03dsec\n", (long int)UnixTime, mSec);
@@ -935,7 +940,7 @@ class GPS_Position: public GPS_Time
      Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, (uint16_t)Hour, 2);
      Out[Len++]=':'; Len+=Format_UnsDec(Out+Len, (uint16_t)Min,  2);
      Out[Len++]=':'; Len+=Format_UnsDec(Out+Len, (uint16_t)Sec,  2);
-     Out[Len++]='.'; Len+=Format_UnsDec(Out+Len, (uint16_t)FracSec,  2);
+     Out[Len++]='.'; Len+=Format_UnsDec(Out+Len, (uint16_t)mSec, 3);
      Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, (uint16_t)FixQuality);
      Out[Len++]='/'; Len+=Format_UnsDec(Out+Len, (uint16_t)FixMode);
      Out[Len++]='/'; Len+=Format_UnsDec(Out+Len, (uint16_t)Satellites, 2);
@@ -973,8 +978,8 @@ class GPS_Position: public GPS_Time
      Min   = TIMEUTC->min;
      Sec   = TIMEUTC->sec;
      if(TIMEUTC->nano<0) { decrTimeDate(); TIMEUTC->nano+=1000000000; }
-     FracSec =  (TIMEUTC->nano+5000000)/10000000; // [ms]
-     if(FracSec>=100) { incrTimeDate(); FracSec-=100; }
+     mSec  =  (TIMEUTC->nano+500000)/1000000;             // [ms]
+     if(mSec>=1000) { incrTimeDate(); mSec-=1000; }
      hasTime = (TIMEUTC->valid&0x02)!=0;
      return hasTime; }
 
@@ -1035,7 +1040,7 @@ class GPS_Position: public GPS_Time
      Len+=Format_UnsDec(GGA+Len, (uint16_t)Min, 2);
      Len+=Format_UnsDec(GGA+Len, (uint16_t)Sec, 2);
      GGA[Len++]='.';
-     Len+=Format_UnsDec(GGA+Len, (uint16_t)FracSec, 2);
+     Len+=Format_UnsDec(GGA+Len, (uint16_t)mSec, 3);
      GGA[Len++]=',';
      Len+=Format_Latitude(GGA+Len, Latitude);
      GGA[Len]=GGA[Len-1]; GGA[Len-1]=','; Len++;
@@ -1137,36 +1142,36 @@ class GPS_Position: public GPS_Time
    int16_t calcDifferentials(GPS_Position &RefPos) // calculate climb rate and turn rate with an earlier reference position
    { ClimbRate=0; TurnRate=0;
      if(RefPos.FixQuality==0) return 0;
-     int16_t TimeDiff = calcTimeDiff(RefPos);
-     if(TimeDiff<5) return 0;
+     int16_t TimeDiff = calcTimeDiff(RefPos); // [ms]
+     if(TimeDiff<10) return 0;
      TurnRate = Heading-RefPos.Heading;
      if(TurnRate>1800) TurnRate-=3600; else if(TurnRate<(-1800)) TurnRate+=3600;
      ClimbRate = Altitude-RefPos.Altitude;
      if(hasBaro && RefPos.hasBaro && (abs(Altitude-StdAltitude)<2500) )
      { ClimbRate = StdAltitude-RefPos.StdAltitude; }
      Accel = Speed-RefPos.Speed;
-     if(TimeDiff==20)
+     if(TimeDiff==200)
      { ClimbRate*=5;
        TurnRate *=5;
        Accel    *=5; }
-     else if(TimeDiff==50)
+     else if(TimeDiff==500)
      { ClimbRate*=2;
        TurnRate *=2;
        Accel    *=2; }
-     else if(TimeDiff==100)
+     else if(TimeDiff==1000)
      { }
-     else if(TimeDiff==200)
+     else if(TimeDiff==2000)
      { ClimbRate=(ClimbRate+1)>>1;
         TurnRate=( TurnRate+1)>>1;
         Accel   =( Accel   +1)>>1; }
      else if(TimeDiff!=0)
-     { ClimbRate = ((int32_t)ClimbRate*100)/TimeDiff;
-        TurnRate = ((int32_t) TurnRate*100)/TimeDiff;
-        Accel    = ((int32_t) Accel   *100)/TimeDiff; }
-     return TimeDiff; } // [0.01s]
+     { ClimbRate = ((int32_t)ClimbRate*1000)/TimeDiff;
+        TurnRate = ((int32_t) TurnRate*1000)/TimeDiff;
+        Accel    = ((int32_t) Accel   *1000)/TimeDiff; }
+     return TimeDiff; } // [ms]
 
    void Write(MAV_GPS_RAW_INT *MAV) const
-   { MAV->time_usec = (int64_t)1000000*getUnixTime()+10000*FracSec;
+   { MAV->time_usec = (int64_t)1000000*getUnixTime()+1000*mSec;  // [usec]
      MAV->lat = ((int64_t)50*Latitude+1)/3;
      MAV->lon = ((int64_t)50*Longitude+1)/3;
      MAV->alt = 100*Altitude;
@@ -1253,7 +1258,7 @@ class GPS_Position: public GPS_Time
      if(PDOP>0) Packet.EncodeDOP(PDOP-10);                                 // encode PDOP from GSA
            else Packet.EncodeDOP(HDOP-10);                                 // or if no GSA: use HDOP
      int8_t ShortTime=Sec;                                                 // the 6-bit time field in the OGN packet
-     if(FracSec>=50) { ShortTime+=1; if(ShortTime>=60) ShortTime-=60; }    // round to the closest full second
+     if(mSec>=500) { ShortTime+=1; if(ShortTime>=60) ShortTime-=60; }      // round to the closest full second
      Packet.Position.Time=ShortTime;                                       // Time
      Packet.EncodeLatitude(Latitude);                                      // Latitude
      Packet.EncodeLongitude(Longitude);                                    // Longitude
@@ -1288,7 +1293,7 @@ class GPS_Position: public GPS_Time
    void EncodeStatus(OGNx_Packet &Packet) const
    { Packet.Status.ReportType=0;
      int ShortTime=Sec;
-     if(FracSec>=50) { ShortTime+=1; if(ShortTime>=60) ShortTime-=60; }
+     if(mSec>=500) { ShortTime+=1; if(ShortTime>=60) ShortTime-=60; }
      Packet.Status.Time=ShortTime;
      Packet.Status.FixQuality = FixQuality<3 ? FixQuality:3;
      Packet.Status.Satellites = Satellites<15 ? Satellites:15;
@@ -1315,7 +1320,7 @@ class GPS_Position: public GPS_Time
     FixMode = Packet.Position.FixMode+2;
     PDOP = 10+Packet.DecodeDOP();
     HDOP = PDOP; VDOP = PDOP+PDOP/2;
-    FracSec=0; Sec=Packet.Position.Time;
+    mSec=0; Sec=Packet.Position.Time;
     Speed = Packet.DecodeSpeed();
     ClimbRate = Packet.DecodeClimbRate();
     TurnRate = Packet.DecodeTurnRate();
@@ -1339,9 +1344,9 @@ class GPS_Position: public GPS_Time
      int32_t Lat, Lon, Alt; int16_t Head;
      calcExtrapolation(Lat, Lon, Alt, Head, dTime);
      int16_t ShortTime=Sec;                                                   // the 6-bit time field in the OGN packet
-     dTime += FracSec;
-     while(dTime>= 50 ) { dTime-=100; ShortTime++; if(ShortTime>=60) ShortTime-=60; }
-     while(dTime<(-50)) { dTime+=100; ShortTime--; if(ShortTime<  0) ShortTime+=60; }
+     dTime += mSec;
+     while(dTime>= 500 ) { dTime-=1000; ShortTime++; if(ShortTime>=60) ShortTime-=60; }
+     while(dTime<(-500)) { dTime+=1000; ShortTime--; if(ShortTime<  0) ShortTime+=60; }
      Packet.Position.Time=ShortTime;                                          // Time
      Packet.EncodeLatitude(Lat);                                              // Latitude
      Packet.EncodeLongitude(Lon);                                             // Longitude
@@ -1354,55 +1359,55 @@ class GPS_Position: public GPS_Time
             else Packet.clrBaro();                                            //or no-baro if pressure sensor data not there
    }
 
-   void Extrapolate(int32_t dTime)                                            // [0.01sec] extrapolate the position by dTime
-   { int16_t dSpeed = ((int32_t)Accel*dTime)/100;
+   void Extrapolate(int32_t dTime)                                            // [ms] extrapolate the position by dTime
+   { int16_t dSpeed = ((int32_t)Accel*dTime)/1000;
      Speed += dSpeed/2;
      int16_t HeadAngle = ((int32_t)Heading<<12)/225;                          // [cordic] heading angle
-     int16_t TurnAngle = (((dTime*TurnRate)/25)<<9)/225;                      // [cordic]
+     int16_t TurnAngle = (((dTime*TurnRate)/250)<<9)/225;                     // [cordic]
              HeadAngle += TurnAngle/2;
      int32_t LatSpeed = ((int32_t)Speed*Icos(HeadAngle)+0x800)>>12;           // [0.1m/s]
      int32_t LonSpeed = ((int32_t)Speed*Isin(HeadAngle)+0x800)>>12;           // [0.1m/s]
              HeadAngle += TurnAngle-TurnAngle/2;
      Speed += dSpeed-dSpeed/2; if(Speed<0) Speed=0;
-     Latitude  += calcLatitudeExtrapolation (dTime, LatSpeed);
-     Longitude += calcLongitudeExtrapolation(dTime, LonSpeed);
+     Latitude  += calcLatitudeExtrapolation (dTime, LatSpeed);                //
+     Longitude += calcLongitudeExtrapolation(dTime, LonSpeed);                //
      int32_t dAlt = calcAltitudeExtrapolation(dTime);                         // [0.1m]
      Altitude += dAlt;                                                        // [0.1m]
      if(hasBaro)
      { StdAltitude += dAlt;                                                   // [0.1m]
        Pressure += 4000*dAlt/Atmosphere::PressureLapseRate(Pressure/4, Temperature); } // [0.25Pa] ([Pa], [0.1degC])
-     Heading += (dTime*TurnRate)/100;                                         // [0.1deg]
+     Heading += (dTime*TurnRate)/1000;                                        // [0.1deg]
      if(Heading<0) Heading+=3600; else if(Heading>=3600) Heading-=3600;       // [0.1deg]
-     int16_t fTime   = FracSec+dTime;                                         // [0.01sec]
-     while(fTime>=100) { incrTimeDate(); fTime-=100; }
-     while(fTime<   0) { decrTimeDate(); fTime+=100; }
-     FracSec=fTime; }
+     int16_t fTime   = mSec+dTime;                                            // [msec]
+     while(fTime>=1000) { incrTimeDate(); fTime-=1000; }
+     while(fTime<    0) { decrTimeDate(); fTime+=1000; }
+     mSec=fTime; }
 
    // extrapolate GPS position by a fraction of a second
-   void calcExtrapolation(int32_t &Lat, int32_t &Lon, int32_t &Alt, int16_t &Head, int32_t dTime) const // [0.01sec]
+   void calcExtrapolation(int32_t &Lat, int32_t &Lon, int32_t &Alt, int16_t &Head, int32_t dTime) const // [msec]
    { int16_t HeadAngle = ((int32_t)Heading<<12)/225;                         // []
-     int16_t TurnAngle = (((dTime*TurnRate)/25)<<9)/225;                     // []
+     int16_t TurnAngle = (((dTime*TurnRate)/250)<<9)/225;                    // []
              HeadAngle += TurnAngle;
      int32_t LatSpeed = ((int32_t)Speed*Icos(HeadAngle)+0x800)>>12;                // [0.1m/s]
      int32_t LonSpeed = ((int32_t)Speed*Isin(HeadAngle)+0x800)>>12;                // [0.1m/s]
      Lat = Latitude  + calcLatitudeExtrapolation (dTime, LatSpeed);
      Lon = Longitude + calcLongitudeExtrapolation(dTime, LonSpeed);
      Alt = Altitude  + calcAltitudeExtrapolation(dTime);
-     Head = Heading  + (dTime*TurnRate)/100;
+     Head = Heading  + (dTime*TurnRate)/1000;
      if(Head<0) Head+=3600; else if(Head>=3600) Head-=3600; }
 
-   int32_t calcAltitudeExtrapolation(int32_t Time)  const                    // [0.01s]
-   { return Time*ClimbRate/100; }                                            // [0.1m]
+   int32_t calcAltitudeExtrapolation(int32_t Time)  const                    // [ms]
+   { return Time*ClimbRate/1000; }                                           // [0.1m]
 
-   int32_t calcLatitudeExtrapolation(int32_t Time, int32_t LatSpeed)  const  // [0.01s] [0.1m/s]
-   { return (Time*LatSpeed*177+0x4000)>>15; }                                       // [0.1m]
+   int32_t calcLatitudeExtrapolation(int32_t Time, int32_t LatSpeed)  const  // [ms] [0.1m/s]
+   { return (Time/10*LatSpeed*177+0x4000)>>15; }                                // [0.1m]
 
-   int32_t calcLongitudeExtrapolation(int32_t Time, int32_t LonSpeed)  const // [0.01s]
+   int32_t calcLongitudeExtrapolation(int32_t Time, int32_t LonSpeed)  const // [ms]
    { int16_t LatCosine = calcLatCosine(calcLatAngle16(Latitude));
      return calcLongitudeExtrapolation(Time, LonSpeed, LatCosine); }
 
-   int32_t calcLongitudeExtrapolation(int32_t Time, int32_t LonSpeed, int16_t LatCosine)  const // [0.01s]
-   { return ((((int32_t)Time*LonSpeed*177+4)>>3))/LatCosine; }
+   int32_t calcLongitudeExtrapolation(int32_t Time, int32_t LonSpeed, int16_t LatCosine)  const // [ms]
+   { return (((Time/10*LonSpeed*177+4)>>3))/LatCosine; }
 
    // static int32_t calcLatDistance(int32_t Lat1, int32_t Lat2)             // [m] distance along latitude
    // { return ((int64_t)(Lat2-Lat1)*0x2f684bda+0x80000000)>>32; }
@@ -1577,7 +1582,7 @@ class GPS_Position: public GPS_Time
      else if(DOP>255) DOP=255;
      VDOP=DOP; return 0; }
 
-   int8_t ReadTime(const char *Value)                         // read the Time field: HHMMSS.ss and check if it is a new one or the same one
+   int8_t ReadTime(const char *Value)                         // read the Time field: HHMMSS.sss and check if it is a new one or the same one
    { int8_t Prev; int8_t Same=1;
      Prev=Hour;
      Hour=Read_Dec2(Value);  if(Hour<0) return -1;            // read hour (two digits), return when invalid
@@ -1588,10 +1593,13 @@ class GPS_Position: public GPS_Time
      Prev=Sec;
      Sec=Read_Dec2(Value+4); if(Sec<0)  return -1;            // read second (two digits), return when invalid
      if(Prev!=Sec) Same=0;
-     Prev=FracSec;
+     int16_t mPrev = mSec;
      if(Value[6]=='.')                                        // is there a fraction
-     { FracSec=Read_Dec2(Value+7); if(FracSec<0) return -1; } // read the fraction, return when invalid
-     if(Prev!=FracSec) Same=0;                                // return 0 when time is valid but did not change
+     { uint16_t Frac=0; int8_t Len=Read_UnsDec(Frac, Value+7); if(Len<1) return -1; // read the fraction, return when invalid
+            if(Len==1) mSec = Frac*100;
+       else if(Len==2) mSec = Frac*10;
+       else if(Len==3) mSec = Frac; }
+     if(mPrev!=mSec) Same=0;                                  // return 0 when time is valid but did not change
      return Same; }                                           // return 1 when time did not change (both RMC and GGA were for same time)
 
    int8_t ReadDate(const char *Param)                         // read the field DDMMYY

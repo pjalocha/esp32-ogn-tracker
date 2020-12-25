@@ -280,7 +280,7 @@ static void Table_GPS(httpd_req_t *Req)
   Len+=Format_UnsDec(Line+Len, GPS->Hour , 2); Line[Len++]=':';
   Len+=Format_UnsDec(Line+Len, GPS->Min  , 2); Line[Len++]=':';
   Len+=Format_UnsDec(Line+Len, GPS->Sec  , 2); Line[Len++]='.';
-  Len+=Format_UnsDec(Line+Len, GPS->FracSec, 2);
+  Len+=Format_UnsDec(Line+Len, GPS->mSec, 3);
   Len+=Format_String(Line+Len, "</td></tr>\n");
   httpd_resp_send_chunk(Req, Line, Len);
 

@@ -65,7 +65,7 @@ static void LCD_UpdateTime(uint32_t Time, GPS_Position *GPS, bool Redraw=0)
   if(GPS && GPS->isTimeValid())
   { if(GPS->isDateValid()) { Time=GPS->getUnixTime(); Back[Idx]=RGB565_GREEN; }
                       else { Time=GPS->getDayTime();  Back[Idx]=RGB565_GREENYELLOW; }
-    if(GPS->FracSec>=50) Time++; }
+    if(GPS->mSec>=500) Time++; }
   uint8_t Len=Format_HHcMMcSS(Msg[Idx], Time); Msg[Idx][Len]=0;
   bool Redo = Redraw || Back[Idx]!=Back[Idx^1];
   if(Redo) LCD_DrawString(Msg[Idx], LCD_WIDTH-LCD_StringWidth(Msg[Idx])-4, LCD_HEIGHT-LCD_FontHeight(), RGB565_BLACK, Back[Idx]);

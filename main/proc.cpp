@@ -513,7 +513,7 @@ void vTaskPROC(void* pvParameters)
     if(Position)
     { Format_UnsDec(CONS_UART_Write, (uint16_t)BestIdx);
       CONS_UART_Write(':');
-      Format_SignDec(CONS_UART_Write, BestResid, 3, 2);
+      Format_SignDec(CONS_UART_Write, BestResid, 4, 3);
       Format_String(CONS_UART_Write, "s"); }
     Format_String(CONS_UART_Write, "\n");
     xSemaphoreGive(CONS_Mutex);
@@ -578,7 +578,7 @@ void vTaskPROC(void* pvParameters)
       PosPacket.Packet.calcAddrParity();                               // parity of (part of) the header
       if(BestResid==0) Position->Encode(PosPacket.Packet);             // encode position/altitude/speed/etc. from GPS position
       else                                                             // extrapolate the position when if not at an exact UTC second
-      { while(BestResid>=50) BestResid-=100;                           // remove full seconds
+      { while(BestResid>=500) BestResid-=1000;                         // remove full seconds
         Position->Encode(PosPacket.Packet, BestResid); }
       PosPacket.Packet.Position.AcftType = Parameters.AcftType;        // aircraft-type
       PosPacket.Packet.Position.Stealth = 0; // Parameters.Stealth;

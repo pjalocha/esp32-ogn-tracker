@@ -196,8 +196,8 @@ class UBX_CFG_SBAS        // 0x06 0x16
    uint8_t maxSBAS;       // number of channels: 0..3
    uint8_t scanmode2;     // #0 = PRN152, ... #6  = PRN158
   uint32_t scanmode1;     // #0 = PRN120, ... #31 = PRN151
-} ;                       // when polled from M6:  01 03 03 00 51 62 06 00
-                          // for auto-select mode: 01 07 03 00 00 00 00 00
+} ;                       // when polled from M6:  01 03 03 00 51 62 06 00 => 129, 130, 137, 141, 142, 144, 148, 150
+                          // for auto-select mode: 01 07 03 00 00 00 00 00 => in UE it finds and uses: 123, 125, 136
 
 // for GPS:     0x00, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01 (enable)
 // for SBAS:    0x01, 0x02, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01 (enable)

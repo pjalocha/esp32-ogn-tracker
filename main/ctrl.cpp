@@ -175,7 +175,7 @@ static void ProcessCtrlC(void)                                  // print system 
   Format_UnsDec(CONS_UART_Write, GPS_getBaudRate(), 1);
   Format_String(CONS_UART_Write, "bps");
   CONS_UART_Write(',');
-  Format_UnsDec(CONS_UART_Write, GPS_PosPeriod, 3, 2);
+  Format_UnsDec(CONS_UART_Write, GPS_PosPeriod, 4, 3);
   CONS_UART_Write('s');
   if(GPS_Status.PPS)         Format_String(CONS_UART_Write, ",PPS");
   if(GPS_Status.NMEA)        Format_String(CONS_UART_Write, ",NMEA");
