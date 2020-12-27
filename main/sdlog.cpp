@@ -7,6 +7,14 @@
 
 #include "mbedtls/md5.h"
 #include "mbedtls/rsa.h"
+#include "mbedtls/platform.h"
+#include "mbedtls/x509_csr.h"
+#include "mbedtls/entropy.h"
+#include "mbedtls/ctr_drbg.h"
+#include "mbedtls/ecdsa.h"
+#include "mbedtls/sha256.h"
+#include "mbedtls/ecp.h"
+#include "mbedtls/pk.h"
 
 #include "hal.h"
 #include "gps.h"
@@ -34,10 +42,13 @@ void Log_Write(char Byte)                                         // write a byt
 int Log_Free(void) { return Log_FIFO.Free(); }                    // how much space left in the buffer
 
 static int Log_Open(void)
-{ LogDate=GPS_FatTime>>16;                                        // get the FAT-time date part
-  int32_t Day   =  LogDate    &0x1F;                              // get day, month, year
-  int32_t Month = (LogDate>>5)&0x0F;
-  int32_t Year  = (LogDate>>9)-20;
+{ // LogDate=GPS_DateTime.getFatDate();                              // get the FAT-time date part
+  // int32_t Day   =  LogDate    &0x1F;                              // get day, month, year
+  // int32_t Month = (LogDate>>5)&0x0F;
+  // int32_t Year  = (LogDate>>9)-20;
+  int32_t Day   =  GPS_DateTime.Day;                                 // get day, month, year
+  int32_t Month =  GPS_DateTime.Month;
+  int32_t Year  =  GPS_DateTime.Year-20;
   uint32_t Date = 0;
   if(Year>=0) Date = Day*10000 + Month*100 + Year;                // create DDMMYY number for easy printout
   strcpy(LogFileName, "/sdcard/CONS/TR000000.LOG");
@@ -284,9 +295,54 @@ static void IGC_Check(void)                                          // check if
 
 #ifdef WITH_SDLOG
 
+/*
+// Uncomment to force use of a specific curve
+#define ECPARAMS    MBEDTLS_ECP_DP_SECP192R1
+
+#if !defined(ECPARAMS)
+#define ECPARAMS    mbedtls_ecp_curve_list()->grp_id
+#endif
+
+static mbedtls_ecdsa_context SignCtx;
+static mbedtls_pk_context Key;
+static mbedtls_x509write_csr Req;
+static mbedtls_entropy_context Entropy;
+static mbedtls_ctr_drbg_context CtrDrbgCtx;
+
+static int IGC_GenKey(void)
+{ const char *Pers = "ecdsa";
+  mbedtls_x509write_csr_init(&Req);
+  mbedtls_pk_init(&Key);
+  mbedtls_ecdsa_init(&SignCtx);
+  mbedtls_ctr_drbg_init(&CtrDrbgCtx);
+  mbedtls_entropy_init(&Entropy);
+  int Ret = mbedtls_ctr_drbg_seed( &CtrDrbgCtx, mbedtls_entropy_func, &Entropy,
+                               (const unsigned char *)Pers, strlen(Pers) );
+  if(Ret!=0) return Ret;
+  Ret = mbedtls_ecdsa_genkey(&SignCtx, ECPARAMS, mbedtls_ctr_drbg_random, &CtrDrbgCtx);
+  return Ret; }
+*/
+#endif // WITH_SDLOG
+
+// ============================================================================================
+
+#ifdef WITH_SDLOG
+
 extern "C"
  void vTaskSDLOG(void* pvParameters)
-{ uint32_t ID = getUniqueAddress();
+{
+/*
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "vTaskSDLOG() Start generating key pair\n");
+  xSemaphoreGive(CONS_Mutex);
+  int Ret=IGC_GenKey();
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "vTaskSDLOG() End generating key pair => ");
+  Format_SignDec(CONS_UART_Write, Ret);
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+*/
+  uint32_t ID = getUniqueAddress();
   IGC_Serial[2] = Flight.Code36(ID%36); ID/=36;
   IGC_Serial[1] = Flight.Code36(ID%36); ID/=36;
   IGC_Serial[0] = Flight.Code36(ID%36);

@@ -17,7 +17,7 @@ const  uint8_t GPS_PosPipeSize         =  4; // number of GPS positions held in 
 extern uint8_t      GPS_PosIdx;                   // Pipe index, increments with every GPS position received
 extern GPS_Position GPS_Pos[GPS_PosPipeSize];    // GPS position pipe
 
-extern          uint32_t GPS_FatTime;       // [2 sec] UTC time in FAT format (for FatFS)
+extern          GPS_Time GPS_DateTime;      // Time and date from the GPS
 extern           int32_t GPS_Altitude;      // [0.1m] altitude (height above Geoid)
 extern           int32_t GPS_Latitude;      // [0.0001/60 deg]
 extern           int32_t GPS_Longitude;     // [0.0001/60 deg]
@@ -40,9 +40,9 @@ typedef union
              bool RateConfig:1; // navigation rate is configured
              bool           :1; //
            } ;
-         } Status;
+         } Status;                          //
 
-extern Status GPS_Status;
+extern Status GPS_Status;                   // GPS status bits
 
 uint32_t GPS_getBaudRate(void);             // [bps]
 
@@ -62,7 +62,7 @@ extern EventGroupHandle_t GPS_Event;
 const EventBits_t GPSevt_PPS    = 0x01;
 const EventBits_t GPSevt_NewPos = 0x02;
 
-extern FlightMonitor Flight;
+extern FlightMonitor Flight;                // detect/monitor takeoff/flight/landing
 
 #ifdef __cplusplus
   extern "C"

@@ -102,6 +102,10 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
      { if(Data[1]!='G') return 0;
        return Data[2]=='N'; }
 
+   uint8_t isBD(void) const                     // for Beidou GSA and GSV
+     { if(Data[1]!='B') return 0;
+       return Data[2]=='D'; }
+
    uint8_t isGx(void) const                     // GPS or GLONASS sentence ?
      { return Data[1]=='G'; }
 
@@ -141,6 +145,18 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
        if(Data[4]!='G') return 0;
        return Data[5]=='A'; }
 
+   uint8_t isGxVTG(void) const                  // velocity relative to the ground
+     { if(!isGx()) return 0;
+       if(Data[3]!='V') return 0;
+       if(Data[4]!='T') return 0;
+       return Data[5]=='G'; }
+
+   uint8_t isGxZDA(void) const                  // UTC time+date, time zone
+     { if(!isGx()) return 0;
+       if(Data[3]!='Z') return 0;
+       if(Data[4]!='D') return 0;
+       return Data[5]=='A'; }
+
    uint8_t isGPGSA(void) const                   // GPS satellite data
      { if(!isGP()) return 0;
        if(Data[3]!='G') return 0;
@@ -160,7 +176,7 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
        return Data[5]=='A'; }
 
    uint8_t isGxGSV(void) const                   // Satellite data
-     { if(!isGx()) return 0;
+     { if(!isGx() && !isBD()) return 0;          // we include as well $BDGSV
        if(Data[3]!='G') return 0;
        if(Data[4]!='S') return 0;
        return Data[5]=='V'; }

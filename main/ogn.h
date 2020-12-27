@@ -653,8 +653,6 @@ class GPS_Time
    int8_t  Year, Month, Day;    // Date (UTC) from GPS
    int8_t  Hour, Min, Sec;      // Time-of-day (UTC) from GPS
    int16_t mSec;                // [ms]
-   // int8_t  FracSec;             // [1/100 sec] some GPS-es give second fraction with the time-of-day
-   // int8_t  Spare;
 
   public:
 
@@ -742,10 +740,14 @@ class GPS_Time
    { uint16_t Days = DaysSinceYear2000() + DaysSimce1jan();
      return Times60(Times60(Times24((uint32_t)(Days+10957)))) + getDayTime(); }
 
-   uint32_t getFatTime(void) const                          // return timestamp in FAT format
-   { uint16_t Date = ((uint16_t)(Year+20)<<9) | ((uint16_t)Month<<5) | Day;
-     uint16_t Time = ((uint16_t)Hour<<11) | ((uint16_t)Min<<5) | (Sec>>1);
-     return ((uint32_t)Date<<16) | Time; }
+   uint16_t getFatDate(void) const                          // return date in FAT format
+   { return ((uint16_t)(Year+20)<<9) | ((uint16_t)Month<<5) | Day; }
+
+   uint16_t getFatTime(void) const                          // return time in FAT format
+   { return ((uint16_t)Hour<<11) | ((uint16_t)Min<<5) | (Sec>>1); }
+
+   uint32_t getFatDateTime(void) const                      // return date+time in FAT format
+   { return ((uint32_t)getFatDate()<<16) | getFatTime(); }
 
    void setUnixTime(uint32_t Time)                          // works except for the 1.1.2000
    { uint32_t Days = Time/SecsPerDay;                       // [day] since 1970
@@ -769,6 +771,34 @@ class GPS_Time
 
   uint64_t getUnixTime_ms(void) const
   { return (uint64_t)getUnixTime()*1000 + mSec; }
+
+   int8_t ReadTime(const char *Value)                         // read the Time field: HHMMSS.sss and check if it is a new one or the same one
+   { int8_t Prev; int8_t Same=1;
+     Prev=Hour;
+     Hour=Read_Dec2(Value);  if(Hour<0) return -1;            // read hour (two digits), return when invalid
+     if(Prev!=Hour) Same=0;
+     Prev=Min;
+     Min=Read_Dec2(Value+2); if(Min<0)  return -1;            // read minute (two digits), return when invalid
+     if(Prev!=Min) Same=0;
+     Prev=Sec;
+     Sec=Read_Dec2(Value+4); if(Sec<0)  return -1;            // read second (two digits), return when invalid
+     if(Prev!=Sec) Same=0;
+     int16_t mPrev = mSec;
+     if(Value[6]=='.')                                        // is there a fraction
+     { uint16_t Frac=0; int8_t Len=Read_UnsDec(Frac, Value+7); if(Len<1) return -1; // read the fraction, return when invalid
+            if(Len==1) mSec = Frac*100;
+       else if(Len==2) mSec = Frac*10;
+       else if(Len==3) mSec = Frac;
+       else if(Len==4) mSec = Frac/10; 
+       else return -1; }
+     if(mPrev!=mSec) Same=0;                                  // return 0 when time is valid but did not change
+     return Same; }                                           // return 1 when time did not change (both RMC and GGA were for same time)
+
+   int8_t ReadDate(const char *Param)                         // read the field DDMMYY
+   { Day=Read_Dec2(Param);     if(Day<0)   return -1;         // read calendar year (two digits - thus need to be extended to four)
+     Month=Read_Dec2(Param+2); if(Month<0) return -1;         // read calendar month
+     Year=Read_Dec2(Param+4);  if(Year<0)  return -1;         // read calendar day
+     return 0; }                                              // return 0 when field valid and was read correctly
 
   private:
 
@@ -1398,15 +1428,21 @@ class GPS_Position: public GPS_Time
    int32_t calcAltitudeExtrapolation(int32_t Time)  const                    // [ms]
    { return Time*ClimbRate/1000; }                                           // [0.1m]
 
+   // int32_t calcLatitudeExtrapolation(int32_t Time, int32_t LatSpeed)  const  // [ms] [0.1m/s]
+   // { return (Time/10*LatSpeed*177+0x4000)>>15; }                             // [0.1m]
+
    int32_t calcLatitudeExtrapolation(int32_t Time, int32_t LatSpeed)  const  // [ms] [0.1m/s]
-   { return (Time/10*LatSpeed*177+0x4000)>>15; }                                // [0.1m]
+   { return (Time*LatSpeed*283+0x40000)>>19; }                             // [0.1m]
 
    int32_t calcLongitudeExtrapolation(int32_t Time, int32_t LonSpeed)  const // [ms]
    { int16_t LatCosine = calcLatCosine(calcLatAngle16(Latitude));
      return calcLongitudeExtrapolation(Time, LonSpeed, LatCosine); }
 
+   // int32_t calcLongitudeExtrapolation(int32_t Time, int32_t LonSpeed, int16_t LatCosine)  const // [ms]
+   // { return (((Time/10*LonSpeed*177+4)>>3))/LatCosine; }
+
    int32_t calcLongitudeExtrapolation(int32_t Time, int32_t LonSpeed, int16_t LatCosine)  const // [ms]
-   { return (((Time/10*LonSpeed*177+4)>>3))/LatCosine; }
+   { return (((Time*LonSpeed*283+64)>>7))/LatCosine; }
 
    // static int32_t calcLatDistance(int32_t Lat1, int32_t Lat2)             // [m] distance along latitude
    // { return ((int64_t)(Lat2-Lat1)*0x2f684bda+0x80000000)>>32; }
@@ -1580,32 +1616,6 @@ class GPS_Position: public GPS_Time
      if(DOP<10) DOP=10;
      else if(DOP>255) DOP=255;
      VDOP=DOP; return 0; }
-
-   int8_t ReadTime(const char *Value)                         // read the Time field: HHMMSS.sss and check if it is a new one or the same one
-   { int8_t Prev; int8_t Same=1;
-     Prev=Hour;
-     Hour=Read_Dec2(Value);  if(Hour<0) return -1;            // read hour (two digits), return when invalid
-     if(Prev!=Hour) Same=0;
-     Prev=Min;
-     Min=Read_Dec2(Value+2); if(Min<0)  return -1;            // read minute (two digits), return when invalid
-     if(Prev!=Min) Same=0;
-     Prev=Sec;
-     Sec=Read_Dec2(Value+4); if(Sec<0)  return -1;            // read second (two digits), return when invalid
-     if(Prev!=Sec) Same=0;
-     int16_t mPrev = mSec;
-     if(Value[6]=='.')                                        // is there a fraction
-     { uint16_t Frac=0; int8_t Len=Read_UnsDec(Frac, Value+7); if(Len<1) return -1; // read the fraction, return when invalid
-            if(Len==1) mSec = Frac*100;
-       else if(Len==2) mSec = Frac*10;
-       else if(Len==3) mSec = Frac; }
-     if(mPrev!=mSec) Same=0;                                  // return 0 when time is valid but did not change
-     return Same; }                                           // return 1 when time did not change (both RMC and GGA were for same time)
-
-   int8_t ReadDate(const char *Param)                         // read the field DDMMYY
-   { Day=Read_Dec2(Param);     if(Day<0)   return -1;         // read calendar year (two digits - thus need to be extended to four)
-     Month=Read_Dec2(Param+2); if(Month<0) return -1;         // read calendar month
-     Year=Read_Dec2(Param+4);  if(Year<0)  return -1;         // read calendar day
-     return 0; }                                              // return 0 when field valid and was read correctly
 
   public:
 

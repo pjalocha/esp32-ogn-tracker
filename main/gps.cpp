@@ -53,16 +53,16 @@ static   TickType_t PPS_Tick;              // [msec] System Tick when the PPS ar
 static   TickType_t Burst_Tick;            // [msec] System Tick when the data burst from GPS started
 
          uint32_t   GPS_TimeSinceLock;     // [sec] time since the GPS has a lock
-         uint32_t   GPS_FatTime   = 0;     // [sec] UTC date/time in FAT format
           int32_t   GPS_Altitude  = 0;     // [0.1m] last valid altitude
-          int32_t   GPS_Latitude  = 0;     //
-          int32_t   GPS_Longitude = 0;     //
+          int32_t   GPS_Latitude  = 0;     // [1/60000deg]
+          int32_t   GPS_Longitude = 0;     // [1/60000deg]
+         GPS_Time   GPS_DateTime = { 0, 0, 0, 0, 0, 0, 0 } ;
           int16_t   GPS_GeoidSepar= 0;     // [0.1m]
-         uint16_t   GPS_LatCosine = 3000;  //
+         uint16_t   GPS_LatCosine = 3000;  // [1.0/4096]
          uint32_t   GPS_Random = 0x12345678; // random number from the LSB of the GPS data
          uint16_t   GPS_SatSNR = 0;        // [0.25dB]
 
-         Status     GPS_Status;
+         Status     GPS_Status;            // GPS status flags
 
 static union
 { uint8_t Flags;
@@ -244,14 +244,15 @@ static void GPS_LockEnd(void)                       // called when GPS looses a 
 // ----------------------------------------------------------------------------
 
 static void GPS_BurstStart(void)                                           // when GPS starts sending the data on the serial port
-{ Burst_Tick=xTaskGetTickCount();
+{ GPS_Burst.Active=1;
+  Burst_Tick=xTaskGetTickCount();
 #ifdef DEBUG_PRINT
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   Format_UnsDec(CONS_UART_Write, TimeSync_Time(Burst_Tick)%60, 2);
   CONS_UART_Write('.');
   Format_UnsDec(CONS_UART_Write, TimeSync_msTime(Burst_Tick), 3);
-  Format_String(CONS_UART_Write, " -> GPS_BurstStart() GPS:");
-  Format_Bin(CONS_UART_Write, GPS_Status.Flags);
+  Format_String(CONS_UART_Write, " -> GPS_BurstStart   () GPS:");
+  Format_Hex(CONS_UART_Write, GPS_Status.Flags);
   Format_String(CONS_UART_Write, "\n");
   xSemaphoreGive(CONS_Mutex);
 #endif
@@ -421,7 +422,7 @@ static void GPS_Random_Update(GPS_Position *Pos)
   XorShift32(GPS_Random); }
 
 static void GPS_BurstComplete(void)                                        // when GPS has sent the essential data for position fix
-{
+{ GPS_Burst.Complete=1;
 #ifdef WITH_MAVLINK
   GPS_Position *GPS = GPS_Pos+GPS_PosIdx;
   if(GPS->hasTime && GPS->hasGPS && GPS->hasBaro)
@@ -441,7 +442,7 @@ static void GPS_BurstComplete(void)                                        // wh
   CONS_UART_Write('.');
   Format_UnsDec(CONS_UART_Write, TimeSync_msTime(), 3);
   Format_String(CONS_UART_Write, " -> GPS_BurstComplete() GPS:");
-  Format_Bin(CONS_UART_Write, GPS_Status.Flags);
+  Format_Hex(CONS_UART_Write, GPS_Status.Flags);
   Format_String(CONS_UART_Write, "\nGPS[");
   CONS_UART_Write('0'+GPS_PosIdx); CONS_UART_Write(']'); CONS_UART_Write(' ');
   Format_String(CONS_UART_Write, Line);
@@ -453,7 +454,7 @@ static void GPS_BurstComplete(void)                                        // wh
     if(GPS_Pos[GPS_PosIdx].isTimeValid())                                     // if time is valid already
     { if(GPS_Pos[GPS_PosIdx].isDateValid())                                   // if date is valid as well
       { uint32_t UnixTime=GPS_Pos[GPS_PosIdx].getUnixTime();
-        GPS_FatTime=GPS_Pos[GPS_PosIdx].getFatTime();
+        // GPS_FatTime=GPS_Pos[GPS_PosIdx].getFatTime();
 #ifndef WITH_MAVLINK                                                       // with MAVlink we sync. with the SYSTEM_TIME message
         int32_t msDiff = GPS_Pos[GPS_PosIdx].mSec;
         if(msDiff>=500) { msDiff-=1000; UnixTime++; }                      // [ms]
@@ -558,7 +559,18 @@ static void GPS_BurstComplete(void)                                        // wh
 }
 
 static void GPS_BurstEnd(void)                                             // when GPS stops sending the data on the serial port
-{ }
+{
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_UnsDec(CONS_UART_Write, TimeSync_Time(Burst_Tick)%60, 2);
+  CONS_UART_Write('.');
+  Format_UnsDec(CONS_UART_Write, TimeSync_msTime(Burst_Tick), 3);
+  Format_String(CONS_UART_Write, " -> GPS_BurstEnd     () GPS:");
+  Format_Hex(CONS_UART_Write, GPS_Status.Flags);
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
+  GPS_Burst.Flags=0; }                                                     // clear all flags: active and complete
 
 // ----------------------------------------------------------------------------
 
@@ -598,12 +610,15 @@ static void GPS_NMEA(void)                                                 // wh
   LED_PCB_Flash(10);                                                        // Flash the LED for 2 ms
        if(NMEA.isGxGSV()) ProcessGSV(NMEA);                                      // process satellite data
   else if(NMEA.isGxRMC())
-  { // if(GPS_Burst.GxRMC) { GPS_BurstComplete(); GPS_Burst.Flags=0; GPS_BurstStart(); }
+  { int8_t SameTime = GPS_DateTime.ReadTime((const char *)NMEA.ParmPtr(0)); // 1=same time, 0=diff. time, -1=error
+    if(SameTime==0 && GPS_Burst.GxRMC) { GPS_BurstComplete(); GPS_BurstEnd(); GPS_BurstStart(); }
     GPS_Burst.GxRMC=1; }
   else if(NMEA.isGxGGA())
-  { // if(GPS_Burst.GxGGA) { GPS_BurstComplete(); GPS_Burst.Flags=0; GPS_BurstStart(); }
+  { int8_t SameTime = GPS_DateTime.ReadTime((const char *)NMEA.ParmPtr(0)); // 1=same time, 0=diff. time, -1=error
+    if(SameTime==0 && GPS_Burst.GxGGA) { GPS_BurstComplete(); GPS_BurstEnd(); GPS_BurstStart(); }
     GPS_Burst.GxGGA=1; }
-  else if(NMEA.isGxGSA()) GPS_Burst.GxGSA=1;
+  else if(NMEA.isGxGSA())
+  { GPS_Burst.GxGSA=1; }
   GPS_Pos[GPS_PosIdx].ReadNMEA(NMEA);                                          // read position elements from NMEA
 #ifdef DEBUG_PRINT
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -618,10 +633,11 @@ static void GPS_NMEA(void)                                                 // wh
 #endif
 #ifndef WITH_GPS_NMEA_PASS
   // these NMEA from GPS we want to pass to the console
-  static uint8_t Count=0;
-  bool RatePass=0;
-  Count++; if(Count>=5) { Count=0; RatePass=1; }
-  if( NMEA.isP() || NMEA.isGxRMC() || NMEA.isGxGGA() || NMEA.isGxGSA() || NMEA.isP() || NMEA.isGxGSV() || (RatePass && (NMEA.isGPTXT())) )
+  // static uint8_t Count=0;
+  // bool RatePass=0;
+  // Count++; if(Count>=5) { Count=0; RatePass=1; }
+  // if( NMEA.isP() || NMEA.isGxRMC() || NMEA.isGxGGA() || NMEA.isGxGSA() || NMEA.isGxGSV() || NMEA.isGPTXT()) )
+  if( NMEA.isP() || NMEA.isBD() || NMEA.isGx() )
   // we would need to patch the GGA here for the GPS which does not calc. nor correct for GeoidSepar
 #endif
   { if(Parameters.Verbose)
@@ -1041,17 +1057,17 @@ void vTaskGPS(void* pvParameters)
 */
     if(LineIdle==0)                                                        // if any bytes were received ?
     { if(!GPS_Burst.Active) GPS_BurstStart();                              // if not already started then declare burst started
-      GPS_Burst.Active=1;
       if( (!GPS_Burst.Complete) && (GPS_Burst.GxGGA && GPS_Burst.GxRMC && GPS_Burst.GxGSA) ) // if GGA+RMC+GSA received
-      { GPS_Burst.Complete=1; GPS_BurstComplete(); }                       // declare burst complete
+      { GPS_BurstComplete(); }                                             // declare burst complete
     }
     else if(LineIdle>=GPS_BurstTimeout)                                    // if GPS sends no more data for GPS_BurstTimeout ticks
     { if(GPS_Burst.Active)                                                 // if burst was active
-      { if(!GPS_Burst.Complete && GPS_Burst.GxGGA && GPS_Burst.GxRMC) GPS_BurstComplete(); // if not complete yet, then declare burst complete
-        GPS_BurstEnd(); }                                                  // declare burst ended
+      { if(!GPS_Burst.Complete && GPS_Burst.GxGGA && GPS_Burst.GxRMC)
+        { GPS_BurstComplete(); }                                           // if not complete yet, then declare burst complete
+      }
       else if(LineIdle>=1500)                                              // if idle for more than 1.5 sec
       { GPS_Status.Flags=0; }
-      GPS_Burst.Flags=0;                                                   // clear all flags: active and complete
+      if(GPS_Burst.Flags) GPS_BurstEnd();                                  // declare burst ended, if not yet done
     }
 
     if(NoValidData>=2000)                                                  // if no valid data from GPS for 2sec
