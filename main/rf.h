@@ -29,7 +29,7 @@
   // extern  int8_t       RF_Temp;              // [degC] temperature of the RF chip: uncalibrated
   extern RFM_TRX           TRX;               // RF transceiver
   extern FreqPlan  RF_FreqPlan;               // frequency hopping pattern calculator
-  extern uint16_t    TX_Credit;               // counts transmitted packets vs. time to avoid using more than 1% of the time
+  extern  int32_t    TX_Credit;               // [ms] counts transmitter time to avoid using more than 1%
   extern uint16_t RX_OGN_Count64;             // counts received packets for the last 64 seconds
   extern uint32_t RX_Random;                  // Random number from LSB of RSSI readouts
 

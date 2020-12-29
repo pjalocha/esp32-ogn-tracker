@@ -271,7 +271,7 @@ static void ReadStatus(OGN_Packet &Packet)
     Line[Len++]=',';
     Len+=Format_SignDec(Line+Len, -5*TRX.averRSSI, 2, 1);                     // average RF level (over all channels)
     Line[Len++]=',';
-    Len+=Format_UnsDec(Line+Len, (uint16_t)TX_Credit);
+    Len+=Format_SignDec(Line+Len, TX_Credit/100, 2, 1);
     Line[Len++]=',';
     Len+=Format_SignDec(Line+Len, (int16_t)TRX.chipTemp);                     // the temperature of the RF chip
     Line[Len++]=',';
@@ -609,8 +609,11 @@ void vTaskPROC(void* pvParameters)
       xSemaphoreGive(CONS_Mutex);
 #endif
       XorShift32(RX_Random);
-      if( (AverSpeed>10) || ((RX_Random&0x3)==0) )                        // send only some positions if the speed is less than 1m/s
-        RF_TxFIFO.Write();                                                // complete the write into the TxFIFO
+      static uint8_t TxBackOff=0;
+      if(TxBackOff) TxBackOff--;
+      else
+      { RF_TxFIFO.Write();                                                // complete the write into the TxFIFO
+        TxBackOff = AverSpeed>=10 ? 1 : 3+(RX_Random&0x1); }
       Position->Sent=1;
 #ifdef WITH_FANET
     if( (SlotTime&0x07)==(RX_Random&0x07) )                                              // every 8sec
@@ -747,15 +750,16 @@ void vTaskPROC(void* pvParameters)
     StatPacket.Packet.Status.Hardware=HARDWARE_ID;
     StatPacket.Packet.Status.Firmware=SOFTWARE_ID;
 
+    static uint8_t StatTxBackOff = 16;
     ReadStatus(StatPacket.Packet);                               // read status data and put them into the StatPacket
     XorShift32(RX_Random);                                       // generate a new random number
-    if( ((RX_Random&0x0F)==0) && (RF_TxFIFO.Full()<2) )          // decide whether to transmit the status/info packet
+    if( StatTxBackOff==0 && RF_TxFIFO.Full()<2 )                 // decide whether to transmit the status/info packet
     { OGN_TxPacket<OGN_Packet> *StatusPacket = RF_TxFIFO.getWrite(); // ask for space in the Tx queue
       uint8_t doTx=1;
-      if(RX_Random&0x10)                                         // decide to transmit info packet, not status
+      if(RX_Random&0x10)                                         // decide to transmit info or status packet ?
       { doTx=ReadInfo(StatPacket.Packet); }                      // and overwrite the StatPacket with the Info data
       if(doTx)
-      {
+      { StatTxBackOff=16+(RX_Random%15);
 #ifdef WITH_LOG
         FlashLog(&StatPacket, PosTime);                         // log the status packet
 #endif
@@ -765,6 +769,7 @@ void vTaskPROC(void* pvParameters)
         RF_TxFIFO.Write();                                       // finalize write into the Tx queue
       }
     }
+    if(StatTxBackOff) StatTxBackOff--;
 
     while(RF_TxFIFO.Full()<2)
     { OGN_TxPacket<OGN_Packet> *RelayPacket = RF_TxFIFO.getWrite();

@@ -41,7 +41,7 @@ static uint32_t  RF_SlotTime;               // [sec] UTC time which belongs to t
        FIFO<FANET_Packet, 4> FNT_TxFIFO;
 #endif
 
-       uint16_t TX_Credit  =0;              // counts transmitted packets vs. time to avoid using more than 1% of the time
+       int32_t TX_Credit  = 0;              // [ms] counts transmitter time avoid using more than 1%
 
        uint8_t RX_OGN_Packets=0;            // [packets] counts received packets
 static LowPass2<uint32_t, 4,2,4> RX_RSSI;   // low pass filter to average the RX noise
@@ -156,8 +156,8 @@ static void TimeSlot(uint8_t TxChan, uint32_t SlotLen, const uint8_t *PacketByte
   if( (TxTime==0) || (TxTime>=MaxTxTime) ) TxTime = RX_Random%MaxTxTime;   // if TxTime out of limits, setup a random TxTime
   TickType_t Tx    = Start + TxTime;                                       // Tx = the moment to start transmission
   ReceiveUntil(Tx);                                                        // listen until this time comes
-  if( (TX_Credit) && (PacketByte) )                                        // when packet to transmit is given and there is still TX credit left:
-    TX_Credit-=Transmit(TxChan, PacketByte, Rx_RSSI, MaxWait);             // attempt to transmit the packet
+  if( (TX_Credit>0) && (PacketByte) )                                      // when packet to transmit is given and there is still TX credit left:
+    if(Transmit(TxChan, PacketByte, Rx_RSSI, MaxWait)) TX_Credit-=5;       // attempt to transmit the packet
   ReceiveUntil(End);                                                       // listen till the end of the time-slot
 }
 
@@ -402,7 +402,7 @@ extern "C"
     } while(TimeSync_msTime()<350);                                            // keep going until 400 ms after PPS
     RX_RSSI.Process(RxRssiSum/RxRssiCount);                                    // [-0.5dBm] average noise on channel
 
-    TX_Credit+=2; if(TX_Credit>7200) TX_Credit=7200;                           // count the transmission credit
+    TX_Credit+=1000; if(TX_Credit>3600000) TX_Credit=3600000;                  // [ms] count the transmission credit
 
     XorShift32(RX_Random);
     uint32_t TxTime = (RX_Random&0x3F)+1; TxTime*=6; TxTime+=50;               // random transmission time: (1..64)*6+50 [ms]
@@ -478,8 +478,8 @@ extern "C"
     uint16_t SlotEnd = 1240;
     if(WAN_BackOff) WAN_BackOff--;
     else                                                                       // decide to transmit in this slot
-    { if(WANdev.State==0 || WANdev.State==2)                                   // 
-      { XorShift32(RX_Random); if((RX_Random&0x1F)==0x10) { WANtx=1; SlotEnd=1200; } } // random decision 1/32
+    { if(WANdev.State==0 || WANdev.State==2)                                   //
+      { WANtx=1; SlotEnd=1200; }
     }
     TimeSlot(TxChan, SlotEnd-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
 #else
@@ -487,6 +487,7 @@ extern "C"
 #endif
 
 #ifdef WITH_PAW
+   static uint8_t PAWtxBackOff = 4;
 #ifdef WITH_LORAWAN
    if(!WANtx && TxPkt0)
 #else
@@ -496,7 +497,7 @@ extern "C"
      OGN1_Packet TxPkt = TxPkt0->Packet;
      TxPkt.Dewhiten();
      XorShift32(RX_Random);
-     if(!TxPkt.Header.Relay && (RX_Random&0xC0)==0x00 && Packet.Copy(TxPkt) && TxPkt.Position.Time<60)
+     if(PAWtxBackOff==0 && !TxPkt.Header.Relay && Packet.Copy(TxPkt) && TxPkt.Position.Time<60)
      { TRX.WriteMode(RF_OPMODE_STANDBY);
        TRX.PAW_Configure(PAW_SYNC);
        TRX.WriteTxPower(Parameters.TxPower+6);
@@ -511,8 +512,11 @@ extern "C"
          if(Flags&RF_IRQ_PacketSent) Break++;
          if(Break>=2) break; }
        TRX.WriteMode(RF_OPMODE_STANDBY);
-       TRX.OGN_Configure(0, OGN_SYNC); }
+       TRX.OGN_Configure(0, OGN_SYNC);
+       PAWtxBackOff = 2+(RX_Random%5); XorShift32(RX_Random);
+       TX_Credit-=8; }
    }
+   if(PAWtxBackOff) PAWtxBackOff--;
 #endif
 
 #ifdef WITH_LORAWAN
@@ -531,8 +535,8 @@ extern "C"
       int TxPktLen=0;
       if(WANdev.State==0)
       { uint8_t *TxPacket; TxPktLen=WANdev.getJoinRequest(&TxPacket); // produce Join-Request packet
-        TRX.LoRa_SendPacket(TxPacket, TxPktLen); RespDelay=5000;          // transmit join-request packet
-        WAN_BackOff=30;
+        TRX.LoRa_SendPacket(TxPacket, TxPktLen); RespDelay=5000;      // transmit join-request packet
+        WAN_BackOff=48+(RX_Random%21); XorShift32(RX_Random);
       } else if(WANdev.State==2)
       { const uint8_t *PktData=TxPktData0;
         if(PktData==0) PktData=TxPktData1;
@@ -546,7 +550,7 @@ extern "C"
           else
           { TxPktLen=WANdev.getDataPacket(&TxPacket, PktData, 20, 1, ((RX_Random>>16)&0xF)==0x8 ); }
           TRX.LoRa_SendPacket(TxPacket, TxPktLen); RespDelay=1000;
-          WAN_BackOff=32; }
+          WAN_BackOff=50+(RX_Random%21); XorShift32(RX_Random); }
       }
       if(RespDelay)
       { vTaskDelay(8);
