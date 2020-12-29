@@ -85,8 +85,8 @@ const int GPS_BurstTimeout = 100; // [ms]
 // uint32_t GPS_getBaudRate (void) { return BaudRate[BaudRateIdx]; }
 // uint32_t GPS_nextBaudRate(void) { BaudRateIdx++; if(BaudRateIdx>=BaudRates) BaudRateIdx=0; return GPS_getBaudRate(); }
 
-static uint32_t GPS_BaudRate = 4800; // [bps]
-static uint32_t GPS_nextBaudRate(void)
+static uint32_t GPS_BaudRate = 4800;     // [bps] current baudrate on the GPS port
+static uint32_t GPS_nextBaudRate(void)   // produce next (possible) GPS baudrate (for autobaud)
 { if(GPS_BaudRate>=230400) GPS_BaudRate=4800;
   else if(GPS_BaudRate==38400) GPS_BaudRate=57600;
   else GPS_BaudRate<<=1;
@@ -243,9 +243,10 @@ static void GPS_LockEnd(void)                       // called when GPS looses a 
 
 // ----------------------------------------------------------------------------
 
-static void GPS_BurstStart(void)                                           // when GPS starts sending the data on the serial port
+static void GPS_BurstStart(int CharDelay=0)  // when GPS starts sending the data on the serial port
 { GPS_Burst.Active=1;
   Burst_Tick=xTaskGetTickCount();
+  if(CharDelay) Burst_Tick -= (CharDelay*10000)/GPS_BaudRate;           // correct for the data already received on the GPS port
 #ifdef DEBUG_PRINT
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   Format_UnsDec(CONS_UART_Write, TimeSync_Time(Burst_Tick)%60, 2);
@@ -611,11 +612,11 @@ static void GPS_NMEA(void)                                                 // wh
        if(NMEA.isGxGSV()) ProcessGSV(NMEA);                                      // process satellite data
   else if(NMEA.isGxRMC())
   { int8_t SameTime = GPS_DateTime.ReadTime((const char *)NMEA.ParmPtr(0)); // 1=same time, 0=diff. time, -1=error
-    if(SameTime==0 && GPS_Burst.GxRMC) { GPS_BurstComplete(); GPS_BurstEnd(); GPS_BurstStart(); }
+    if(SameTime==0 && GPS_Burst.GxRMC) { GPS_BurstComplete(); GPS_BurstEnd(); GPS_BurstStart(NMEA.Len); }
     GPS_Burst.GxRMC=1; }
   else if(NMEA.isGxGGA())
   { int8_t SameTime = GPS_DateTime.ReadTime((const char *)NMEA.ParmPtr(0)); // 1=same time, 0=diff. time, -1=error
-    if(SameTime==0 && GPS_Burst.GxGGA) { GPS_BurstComplete(); GPS_BurstEnd(); GPS_BurstStart(); }
+    if(SameTime==0 && GPS_Burst.GxGGA) { GPS_BurstComplete(); GPS_BurstEnd(); GPS_BurstStart(NMEA.Len); }
     GPS_Burst.GxGGA=1; }
   else if(NMEA.isGxGSA())
   { GPS_Burst.GxGSA=1; }
@@ -733,7 +734,7 @@ static void GPS_UBX(void)                                                       
   if(UBX.isCFG_SBAS())                                                          // if CFG-SBAS
   { class UBX_CFG_SBAS *CFG = (class UBX_CFG_SBAS *)UBX.Word;
     CFG->mode = Parameters.EnableSBAS;
-    CFG->usage=7;
+    CFG->usage=3;                                                               // integrity | diff.corr. | range
     CFG->maxSBAS=3;
     CFG->scanmode1=0;
     CFG->scanmode2=0;
