@@ -469,7 +469,8 @@ class FANET_RxPacket: public FANET_Packet
          } else Len+=Format_String(Out+Len, ".../...g...");
          Out[Len++]='t';
          if(Service&0x40)
-         { int16_t Fahr=Temp; Fahr+=4*Temp/5; Fahr+=32;
+         { // int16_t Fahr=Temp; Fahr+=4*Temp/5; Fahr/=2; Fahr+=32;          //
+           int16_t Fahr = (((int16_t)Temp*115+64)>>7) + 32;                 // [0.5degC] => [degF]
            if(Fahr>=0) Len+=Format_UnsDec(Out+Len, Fahr, 3);
                   else Len+=Format_SignDec(Out+Len, Fahr, 2);
          } else Len+=Format_String(Out+Len, "...");
