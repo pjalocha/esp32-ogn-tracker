@@ -328,8 +328,10 @@ extern "C"
       if(RxLen>0)                                                                // if Downlink data received
       { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
         Format_String(CONS_UART_Write, "LoRaWAN Msg: ");
-        Format_UnsDec(CONS_UART_Write, (uint16_t)RxLen);
-        Format_String(CONS_UART_Write, "B");
+        // Format_UnsDec(CONS_UART_Write, (uint16_t)RxLen);
+        // Format_String(CONS_UART_Write, "B");
+        for(int Idx=0; Idx<RxLen; Idx++)
+        { Format_Hex(CONS_UART_Write, WANdev.Packet[Idx]); }
         Format_String(CONS_UART_Write, "\n");
         xSemaphoreGive(CONS_Mutex); }
     }
