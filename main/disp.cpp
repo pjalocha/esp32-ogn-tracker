@@ -26,11 +26,11 @@
 
 #ifdef WITH_U8G2_OLED
 const uint8_t DISP_Pages = 12;
-static uint8_t DISP_Page = 0;
+static uint8_t DISP_Page = DEFAULT_DispPage ; //Fab501 before 0
 #endif
 #if defined(WITH_ST7789) || defined(WITH_ILI9341)
 const uint8_t DISP_Pages = 9;
-static uint8_t DISP_Page = 0;
+static uint8_t DISP_Page = DEFAULT_DispPage ; //Fab501 before 0
 #endif
 
 
