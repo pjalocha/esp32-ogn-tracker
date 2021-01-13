@@ -272,9 +272,10 @@ static void ProcBaro(void)
 
     Len=0;                                                           // start preparing the PGRMZ NMEA sentence
     Len+=Format_String(Line+Len, "$PGRMZ,");
-    Len+=Format_SignDec(Line+Len, StdAltitude, 2, 1);                // [m] standard altitude (calc. from pressure)
+    int32_t StdFeet=(StdAltitude*3360+512)>>10;
+    Len+=Format_SignDec(Line+Len, StdFeet/10, 1, 0, 1);              // [feet] standard altitude (calc. from pressure)
     Line[Len++]=',';
-    Len+=Format_String(Line+Len, "m,");                              // normally f for feet, but metres and m works with XcSoar
+    Len+=Format_String(Line+Len, "f,");                              // normally f for feet, but metres and m works with XcSoar
     Len+=Format_String(Line+Len, "3");                               // 1 no fix, 2 - 2D, 3 - 3D; assume 3D for now
     Len+=NMEA_AppendCheckCRNL(Line, Len);
     if(Parameters.Verbose)
