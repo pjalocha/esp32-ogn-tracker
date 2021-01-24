@@ -472,7 +472,7 @@ template <class OGNx_Packet=OGN1_Packet>
      Len+=Format_SignDec(Out+Len, -(int16_t)RxRSSI/2); Out[Len++]='d'; Out[Len++]='B'; Out[Len++]='m';
      Out[Len++]=' ';
      Len+=Format_UnsDec(Out+Len, (uint16_t)Packet.Position.Time, 2);
-     Out[Len++]=' ';
+     Out[Len++]='s'; Out[Len++]=' ';
      Len+=Format_Latitude(Out+Len, Packet.DecodeLatitude());
      Out[Len++]=' ';
      Len+=Format_Longitude(Out+Len, Packet.DecodeLongitude());
@@ -482,6 +482,9 @@ template <class OGNx_Packet=OGN1_Packet>
      Len+=Format_UnsDec(Out+Len, Packet.DecodeSpeed(), 2, 1); Out[Len++]='m'; Out[Len++]='/'; Out[Len++]='s';
      Out[Len++]=' ';
      Len+=Format_SignDec(Out+Len, Packet.DecodeClimbRate(), 2, 1); Out[Len++]='m'; Out[Len++]='/'; Out[Len++]='s';
+     Out[Len++]=' ';
+     Out[Len++]='r';
+     Len+=Format_Hex(Out+Len, Rank);
      Out[Len++]='\n'; Out[Len]=0;
      return Len; }
 
@@ -984,6 +987,8 @@ class GPS_Position: public GPS_Time
      Out[Len++]='/'; Len+=Format_SignDec(Out+Len, GeoidSeparation, 4, 1); Out[Len++]='m';
      Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, Speed,     2, 1); Out[Len++]='m'; Out[Len++]='/'; Out[Len++]='s';
      Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, Heading,   4, 1); Out[Len++]='d'; Out[Len++]='e'; Out[Len++]='g';
+     Out[Len++]=' '; Len+=Format_SignDec(Out+Len, ClimbRate, 2, 1); Out[Len++]='m'; Out[Len++]='/'; Out[Len++]='s';
+     Out[Len++]=' '; Len+=Format_SignDec(Out+Len, TurnRate, 2, 1); Out[Len++]='d'; Out[Len++]='e'; Out[Len++]='g'; Out[Len++]='/'; Out[Len++]='s';
      if(hasBaro)
      { Out[Len++]=' '; Len+=Format_SignDec(Out+Len, Temperature, 2, 1); Out[Len++]='C';
        Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, Pressure/4        ); Out[Len++]='P'; Out[Len++]='a';
@@ -1030,12 +1035,13 @@ class GPS_Position: public GPS_Time
      return 1; }
 
    int8_t ReadNMEA(NMEA_RxMsg &RxMsg)
-   { if(RxMsg.isGPGGA()) return ReadGGA(RxMsg);
-     if(RxMsg.isGNGGA()) return ReadGGA(RxMsg);
-     if(RxMsg.isGPRMC()) return ReadRMC(RxMsg);
-     if(RxMsg.isGNRMC()) return ReadRMC(RxMsg);
-     if(RxMsg.isGPGSA()) return ReadGSA(RxMsg);
-     if(RxMsg.isGNGSA()) return ReadGSA(RxMsg);
+   { // if(RxMsg.isGPGGA()) return ReadGGA(RxMsg);
+     if(RxMsg.isGxGGA()) return ReadGGA(RxMsg);
+     // if(RxMsg.isGPRMC()) return ReadRMC(RxMsg);
+     if(RxMsg.isGxRMC()) return ReadRMC(RxMsg);
+     // if(RxMsg.isGPGSA()) return ReadGSA(RxMsg);
+     if(RxMsg.isGxGSA()) return ReadGSA(RxMsg);
+     if(RxMsg.isPGRMZ()) return ReadPGRMZ(RxMsg); // (pressure) altitude
      // if(RxMsg.isGxGSV()) return ReadGSV(RxMsg);
      return 0; }
 
@@ -1046,6 +1052,17 @@ class GPS_Position: public GPS_Time
      Err=ReadRMC(NMEA); if(Err!=(-1)) return Err;
      // Err=ReadGSV(NMEA); if(Err!=(-1)) return Err;
      return 0; }
+
+   int8_t ReadPGRMZ(NMEA_RxMsg &RxMsg)
+   { if(RxMsg.Parms<3) return -2;
+     int8_t Ret=Read_Float1(StdAltitude, (const char *)(RxMsg.ParmPtr(0)));
+     if(Ret<=0) return -1;
+     char Unit=RxMsg.ParmPtr(1)[0];
+     hasBaro=1; Pressure=0; Temperature=0;
+     if(Unit=='m' || Unit=='M') return 1;
+     if(Unit!='f' && Unit!='F') return -1;
+     StdAltitude = (StdAltitude*312+512)>>10;
+     return 1; }
 
    int8_t ReadGGA(NMEA_RxMsg &RxMsg)
    { if(RxMsg.Parms<14) return -2;                                                        // no less than 14 paramaters

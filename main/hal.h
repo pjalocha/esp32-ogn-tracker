@@ -96,6 +96,10 @@ void RFM_TransferBlock(uint8_t *Data, uint8_t Len);
 void RFM_RESET(uint8_t On);              // RF module reset
 bool RFM_IRQ_isOn(void);                 // query the IRQ state
 void RFM_Delay(int ms);                  // [ms] idle delay
+#ifdef WITH_SX1262
+void RFM_Busy_SetInput(void);
+bool RFM_Busy_isOn(void);
+#endif
 
 #ifdef WITH_OLED
 int OLED_DisplayON(uint8_t ON, uint8_t DispIdx=0);                   // when OFF then low-power mode

@@ -199,7 +199,7 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
        if(Data[4]!='X') return 0;
        return Data[5]=='T'; }
 
-   uint8_t isP(void) const
+   uint8_t isP(void) const                       // Private thus specific to the euqipment
    { return Data[1]=='P'; }
 
    uint8_t isPOGN(void) const                    // OGN dedicated NMEA sentence
@@ -219,6 +219,13 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
    uint8_t isPOGNS(void)                         // tracker parameters setup
      { if(!isPOGN()) return 0;
        return Data[5]=='S'; }
+
+   uint8_t isPGRMZ(void)                         // barometric pressure report
+     { if(!isP()) return 0;
+       if(Data[2]!='G') return 0;
+       if(Data[3]!='R') return 0;
+       if(Data[4]!='M') return 0;
+       return Data[5]=='Z'; }
 
    uint8_t isPOGNL(void)                         // log file list request
      { if(!isPOGN()) return 0;

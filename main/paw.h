@@ -88,13 +88,12 @@ class PAW_Packet
      { OGN=1;                                              // extended data flag
        AddrType = Packet.Header.AddrType;                  // [2-bit]
        Relay    = Packet.Header.Relay;                     // relay flag
-       // Time = Packet.Position.Time;                        // [sec]
+       Time = Packet.Position.Time;                        // [sec]
        int32_t ClimbRate = Packet.DecodeClimbRate();       // [0.1m/s]
        ClimbRate = (ClimbRate*315+512)>>10;                // [64fpm]
        if(ClimbRate>127) ClimbRate=127;
        else if(ClimbRate<(-127)) ClimbRate=(-127);
-       Climb = ClimbRate;
-     }
+       Climb = ClimbRate; }
      SeqMsg = 0;
      setCRC(); return 1; }
 
