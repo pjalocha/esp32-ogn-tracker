@@ -242,23 +242,28 @@ class RFM_TRX
    uint8_t *Cmd_Write(uint8_t Cmd, const uint8_t *Data, uint8_t Len)  // command code, Data[Len]
    { return Block_Write(Data, Len, Cmd); }
 
+   uint8_t *Cmd_Read(uint8_t Cmd, uint8_t Len)
+   { Block_Buffer[0] = Cmd; memset(Block_Buffer+1, 0, Len+1);
+     (*TransferBlock) (Block_Buffer, Len+2);
+     return  Block_Buffer+2;  }
+
    uint8_t *Regs_Write(uint16_t Addr, const uint8_t *Data, uint8_t Len)  // register-write code, 2-byte Address, Data[Len]
    { Block_Buffer[0] = CMD_WRITEREGISTER; Block_Buffer[1] = Addr>>8; Block_Buffer[2] = Addr; memcpy(Block_Buffer+3, Data, Len);
      (*TransferBlock) (Block_Buffer, Len+3);
      return  Block_Buffer+3; }
 
    uint8_t *Regs_Read(uint16_t Addr, const uint8_t *Data, uint8_t Len)  // register-read code, 2-byte Address, zero, Data[Len]
-   { Block_Buffer[0] = CMD_READREGISTER; Block_Buffer[1] = Addr>>8; Block_Buffer[2] = Addr; Block_Buffer[2] = 0; memcpy(Block_Buffer+4, Data, Len);
+   { Block_Buffer[0] = CMD_READREGISTER; Block_Buffer[1] = Addr>>8; Block_Buffer[2] = Addr;  memset(Block_Buffer+3, 0, Len+1);
      (*TransferBlock) (Block_Buffer, Len+4);
      return  Block_Buffer+4; }
 
-   uint8_t *Buff_Write(uint8_t Ofs, const uint8_t *Data, uint8_t Len)   // buffer-write code, 1-byt offset, Data[Len]
+   uint8_t *Buff_Write(uint8_t Ofs, const uint8_t *Data, uint8_t Len)   // buffer-write code, 1-byte offset, Data[Len]
    { Block_Buffer[0] = CMD_WRITEBUFFER; Block_Buffer[1] = Ofs; memcpy(Block_Buffer+2, Data, Len);
      (*TransferBlock) (Block_Buffer, Len+2);
      return  Block_Buffer+2; }
 
-   uint8_t *Buff_Read(uint8_t Ofs, const uint8_t *Data, uint8_t Len)   // buffer-read code, 1-byt offset, zero, Data[Len]
-   { Block_Buffer[0] = CMD_READBUFFER; Block_Buffer[1] = Ofs; Block_Buffer[2] = 0; memcpy(Block_Buffer+3, Data, Len);
+   uint8_t *Buff_Read(uint8_t Ofs, uint8_t Len)                         // buffer-read code, 1-byte offset, zero, Data[Len]
+   { Block_Buffer[0] = CMD_READBUFFER; Block_Buffer[1] = Ofs; memset(Block_Buffer+2, 0, Len+1);
      (*TransferBlock) (Block_Buffer, Len+3);
      return  Block_Buffer+3; }
 #endif
@@ -283,7 +288,6 @@ class RFM_TRX
 #endif
                                       // the following are in units of the synthesizer with 8 extra bits of precision
    uint32_t BaseFrequency;            // [32MHz/2^19/2^8] base frequency = channel #0
-//    int32_t FrequencyCorrection;      // [32MHz/2^19/2^8] frequency correction (due to Xtal offset)
    uint32_t ChannelSpacing;           // [32MHz/2^19/2^8] spacing between channels
     int16_t FreqCorr;                 // [0.1ppm]
     int16_t Channel;                  // [       integer] channel being used
@@ -319,29 +323,23 @@ class RFM_TRX
 
    static uint32_t calcSynthFrequency(uint32_t Frequency) { return (((uint64_t)Frequency<<16)+7812)/15625; }
 
-   // static uint32_t calcSynthFrequency(uint32_t Frequency)
-   // { uint32_t Synth = (((uint64_t)Frequency<<16)+7812)/15625;
-   //   printf("RFM::calcSynthFrequency(%d) = > %08X\n", Frequency, Synth);
-   //   return Synth; }
-
   public:
-   void setBaseFrequency(uint32_t Frequency=868200000) { BaseFrequency=calcSynthFrequency(Frequency); } // [Hz]
-   void setChannelSpacing(uint32_t  Spacing=   200000) { ChannelSpacing=calcSynthFrequency(Spacing); }  // [Hz]
+   void setBaseFrequency(uint32_t Frequency=868200000) { BaseFrequency=calcSynthFrequency(Frequency); } // [Hz] => [synth]
+   void setChannelSpacing(uint32_t  Spacing=   200000) { ChannelSpacing=calcSynthFrequency(Spacing); }  // [Hz] => [synth]
    void setFrequencyCorrection(int16_t ppmFreqCorr=0)  { FreqCorr = ppmFreqCorr; }                      // [0.1ppm]
-//    void setFrequencyCorrection(int32_t Correction=0)
-//    { if(Correction<0) FrequencyCorrection = -calcSynthFrequency(-Correction);
-//                 else  FrequencyCorrection =  calcSynthFrequency( Correction); }
 
-   void setFrequency(uint32_t Freq)       // [Hz]
-   { Freq = calcSynthFrequency(Freq);
-     int32_t Corr = ((int64_t)Freq*FreqCorr+5000000)/10000000;
-     Freq+=Corr; WriteFreq((Freq+128)>>8); }
-   void setChannel(int16_t newChannel)
+   void setFrequency(uint32_t Freq)                                 // [Hz] set for given frequency
+   { Freq = calcSynthFrequency(Freq);                               // [32MHz/2^27]
+     int32_t Corr = ((int64_t)Freq*FreqCorr+5000000)/10000000;      // [32MHz/2^27]
+     Freq+=Corr; WriteFreq(Freq); }                                 // [32MHz/2^27] write into the RF chip
+
+   void setChannel(int16_t newChannel)                              // set for given channel
    { Channel=newChannel;
-     uint32_t Freq = BaseFrequency+ChannelSpacing*Channel;
-      int32_t Corr = ((int64_t)Freq*FreqCorr+5000000)/10000000;
-              Freq += Corr;
-     WriteFreq((Freq+128)>>8); }
+     uint32_t Freq = BaseFrequency+ChannelSpacing*Channel;          // [32MHz/2^27]
+      int32_t Corr = ((int64_t)Freq*FreqCorr+5000000)/10000000;     // [32MHz/2^27]
+              Freq += Corr;                                         // [32MHz/2^27]
+     WriteFreq(Freq); }                                             // [32MHz/2^27] write into the RF chip
+
    uint8_t getChannel(void) const { return Channel; }
 
 #ifdef USE_BLOCK_SPI
@@ -369,13 +367,10 @@ class RFM_TRX
    void WriteBytes(const uint8_t *Data, uint8_t Len, uint8_t Addr=0)
    { Block_Write(Data, Len, Addr); }
 
-// #ifdef WITH_SX1262
-//    void WriteCmd(uint8_t Cmd, uint8_t *Data, uint8_t Len)
-//    { Block_Write(Data, Len, Cmd); }
-// #endif
-
-   void WriteFreq(uint32_t Freq)                       // [32MHz/2^19] Set center frequency in units of RFM69 synth.
+#if defined(WITH_RFM95) || defined(WITH_SX1272) || defined(WITH_RFM69)
+   void WriteFreq(uint32_t Freq)                       // [32MHz/2^27] Set center frequency in units of RFM69 synth.
    { const uint8_t Addr = REG_FRFMSB;
+     Freq = (Freq+128)>>8;                             // [32MHz/2^19]
      // printf("RFM::WriteFreq(%06X)\n", Freq);
      uint8_t Buff[4];
      Buff[0] = Freq>>16;
@@ -387,10 +382,34 @@ class RFM_TRX
    uint32_t ReadFreq(uint8_t Addr=REG_FRFMSB)
    { uint8_t *Data = Block_Read(3, Addr);
      uint32_t Freq=Data[0]; Freq<<=8; Freq|=Data[1]; Freq<<=8; Freq|=Data[2];
-     return Freq; }
+     return Freq; }                             // [32MHz/2^19]
 
    void WriteFIFO(const uint8_t *Data, uint8_t Len)
    { Block_Write(Data, Len, REG_FIFO); }
+
+   uint8_t *ReadFIFO(uint8_t Len)
+   { return Block_Read(Len, REG_FIFO); }
+#endif
+
+#ifdef WITH_SX1262
+   void WriteFreq(uint32_t Freq)               // [32MHz/2^27] Set center frequency
+   { uint8_t Buff[4];
+     Freq = (Freq+2)>>2;                       // [32MHz/2^25]
+     Buff[0] = Freq>>24;
+     Buff[1] = Freq>>16;
+     Buff[2] = Freq>> 8;
+     Buff[3] = Freq    ;
+     Cmd_Write(CMD_SETRFFREQUENCY, Buff, 4); }
+
+   void WriteFIFO(const uint8_t *Data, uint8_t Len)
+   { const uint8_t BaseOfs[2] = { 0x80, 0x00 };  // TX, RX offsets in the 256-byte buffer
+     Cmd_Write(CMD_SETBUFFERBASEADDRESS, BaseOfs, 2);
+     Buff_Write(BaseOfs[0], Data, Len); }
+
+   uint8_t *ReadFIFO(uint8_t Len)
+   { uint8_t *BuffStat = Cmd_Read(CMD_GETRXBUFFERSTATUS, 2);        // length, offset
+     return Buff_Read(BuffStat[1], BuffStat[0]); }
+#endif
 
    void WritePacketOGN(const uint8_t *Data, uint8_t Len=26)         // write the packet data (26 bytes)
    { uint8_t Packet[2*Len];
@@ -400,7 +419,7 @@ class RFM_TRX
        Packet[PktIdx++]=ManchesterEncode[Byte>>4];                               // software manchester encode every byte
        Packet[PktIdx++]=ManchesterEncode[Byte&0x0F];
      }
-     Block_Write(Packet, 2*Len, REG_FIFO); }
+     WriteFIFO(Packet, 2*Len); }
 
    void WritePacketPAW(const uint8_t *Data, uint8_t Len=24)
    { uint8_t Packet[Len+1];
@@ -408,13 +427,10 @@ class RFM_TRX
      { Packet[Idx] = Data[Idx]; }
      PAW_Packet::Whiten(Packet, Len);
      Packet[Len] = PAW_Packet::CRC8(Packet, Len);
-     Block_Write(Packet, Len+1, REG_FIFO); }
+     WriteFIFO(Packet, Len+1); }
 
-   uint8_t *ReadFIFO(uint8_t Len)
-   { return Block_Read(Len, REG_FIFO); }
-
-   void ReadPacketOGN(uint8_t *Data, uint8_t *Err, uint8_t Len=26)             // read packet data from FIFO
-   { uint8_t *Packet = Block_Read(2*Len, REG_FIFO);                         // read 2x26 bytes from the RF chip RxFIFO
+   void ReadPacketOGN(uint8_t *Data, uint8_t *Err, uint8_t Len=26)          // read packet data from FIFO
+   { uint8_t *Packet = ReadFIFO(2*Len);                                     // read 2x26 bytes from the RF chip RxFIFO
      uint8_t PktIdx=0;
      for(uint8_t Idx=0; Idx<Len; Idx++)                                     // loop over packet bytes
      { uint8_t ByteH = Packet[PktIdx++];
@@ -469,13 +485,14 @@ class RFM_TRX
   public:
    uint32_t WriteFreq(uint32_t Freq) const                       // [32MHz/2^19] Set center frequency in units of RFM69 synth.
    { const uint8_t Addr = REG_FRFMSB;
+     Freq = (Freq+128)>>8;                                       // [32MHz/2^19]
      Select();
      TransferByte(Addr | 0x80);
      uint32_t Old  =  TransferByte(Freq>>16);
      Old = (Old<<8) | TransferByte(Freq>>8);
      Old = (Old<<8) | TransferByte(Freq);                        // actual change in the frequency happens only when the LSB is written
      Deselect();
-     return Old; }                                               // return the previously set frequency
+     return Old<<8; }                                            // return the previously set frequency
 
    void WriteFIFO(const uint8_t *Data, uint8_t Len)
    { const uint8_t Addr=REG_FIFO;                                // write to FIFO
@@ -547,6 +564,19 @@ class RFM_TRX
 //              ^ 8 or 9 ?
 #endif
 
+#ifdef WITH_SX1262
+   void WriteTxPowerMin(void) { }
+   void FSK_WriteSYNC(uint8_t WriteSize, uint8_t SyncTol, const uint8_t *SyncData) { }
+   void OGN_Configure(int16_t Channel, const uint8_t *Sync) { }
+   void ClearIrqFlags(void) { }
+   uint16_t ReadIrqFlags(void) { return 0x0000; }
+   void setModeSleep(void) { }
+   void setModeStandby(void) { }
+   void setModeTX(void) { }
+   void setModeRX(void) { }
+#endif
+
+#if defined(WITH_RFM95) || defined(WITH_SX1272) || defined(WITH_RFM69)
    void    WriteMode(uint8_t Mode=RF_OPMODE_STANDBY) { WriteByte(Mode, REG_OPMODE); } // SLEEP/STDBY/FSYNTH/TX/RX
    uint8_t ReadMode (void) { return ReadByte(REG_OPMODE); }
    uint8_t ModeReady(void) { return ReadByte(REG_IRQFLAGS1)&0x80; }
@@ -564,6 +594,7 @@ class RFM_TRX
    void setModeLoRaRXcont(void)   { WriteMode(RF_OPMODE_LORA_RX_CONT); }    // Lora continues recieve
    void setModeLoRaRXsingle(void) { WriteMode(RF_OPMODE_LORA_RX_SINGLE); }  // LoRa single receive
    bool  isModeLoRaTX(void)       { return ReadMode()==RF_OPMODE_LORA_TX; } // LoRa still transmitting ?
+#endif
 #endif
 
 #ifdef WITH_RFM69
@@ -599,7 +630,7 @@ class RFM_TRX
 
    void WriteTxPowerMin(void) { WriteTxPower_W(-18); } // set minimal Tx power and setup for reception
 
-   int OGN_Configure(int16_t Channel, const uint8_t *Sync)
+   void OGN_Configure(int16_t Channel, const uint8_t *Sync)
    { WriteMode(RF_OPMODE_STANDBY);          // mode = STDBY
      ClearIrqFlags();
      WriteByte(  0x02, REG_DATAMODUL);      // [0x00] Packet mode, FSK, 0x02: BT=0.5, 0x01: BT=1.0, 0x03: BT=0.3
@@ -624,8 +655,14 @@ class RFM_TRX
      WriteByte(  0x30, REG_TESTDAGC);       // [0x30] 0x20 when AfcLowBetaOn, 0x30 otherwise-> page 25
      WriteByte(  0x00, REG_AFCFEI);         // [0x00] AfcAutoOn=0, AfcAutoclearOn=0
      WriteByte(  0x00, REG_AFCCTRL);        // [0x00] 0x20 = AfcLowBetaOn=1 -> page 64 -> page 33
-     WriteByte(   +10, REG_TESTAFC);        // [0x00] [488Hz] if AfcLowBetaOn
-     return 0; }
+     WriteByte(   +10, REG_TESTAFC); }      // [0x00] [488Hz] if AfcLowBetaOn
+#endif
+
+
+#ifdef WITH_SX1262
+   void setModulation(uint8_t Mode=0) { Cmd_Write(CMD_SETPACKETTYPE, &Mode, 1); }
+   void setLoRa(void) { setModulation(0x01); } // switch to FSK
+   void setFSK(void)  { setModulation(0x00); } // switch to LoRa
 #endif
 
 // #ifdef WITH_RFM95
@@ -656,15 +693,13 @@ class RFM_TRX
 
    void WriteTxPowerMin(void) { WriteTxPower(0); }
 
-   int setLoRa(void)                            // switch to LoRa: has to go througth the SLEEP mode
+   void setLoRa(void)                            // switch to LoRa: has to go througth the SLEEP mode
    { WriteMode(RF_OPMODE_LORA_SLEEP);
-     WriteMode(RF_OPMODE_LORA_SLEEP);
-     return 0; }
+     WriteMode(RF_OPMODE_LORA_SLEEP); }
 
-   int setFSK(void)                             // switch to FSK: has to go through the SLEEP mode
+   void setFSK(void)                             // switch to FSK: has to go through the SLEEP mode
    { WriteMode(RF_OPMODE_SLEEP);
-     WriteMode(RF_OPMODE_SLEEP);
-     return 0; }
+     WriteMode(RF_OPMODE_SLEEP); }
 
    int LoRa_Configure(RFM_LoRa_Config CFG, uint8_t MaxSize=64)
    { WriteByte(0x00,   REG_LORA_HOPPING_PERIOD);                                // disable fast-hopping
@@ -696,7 +731,7 @@ class RFM_TRX
      RFM_LoRa_Config CFG = RFM_FNTcfg; CFG.CR=CR;
      return LoRa_Configure(CFG, FANET_Packet::MaxBytes); }
 
-   int WAN_Configure(uint8_t CR=1)                   // configure for FANET/LoRa
+   int WAN_Configure(uint8_t CR=1)                   // configure for LoRaWAN
    { WriteTxPower(0);
      RFM_LoRa_Config CFG = RFM_WANcfg; CFG.CR=CR;
      return LoRa_Configure(CFG, 40); }
@@ -801,7 +836,7 @@ class RFM_TRX
 
      return 0; }
 
-   int OGN_Configure(int16_t Channel, const uint8_t *Sync)
+   void OGN_Configure(int16_t Channel, const uint8_t *Sync)
    { // WriteMode(RF_OPMODE_STANDBY);              // mode: STDBY, modulation: FSK, no LoRa
      // usleep(1000);
      WriteTxPower(0);
@@ -824,9 +859,7 @@ class RFM_TRX
      WriteByte(  0x49, REG_PARAMP);             // BT=0.5 shaping, 40us ramp up/down
      WriteByte(  0x0E, REG_RXCONFIG);           // => p.90 (or 0x8E ?)
      WriteByte(  0x07, REG_RSSICONFIG);         // 256 samples for RSSI, no offset, => p.90,82
-     WriteByte(  0x20, REG_LNA);                // max. LNA gain, => p.89
-
-     return 0; }
+     WriteByte(  0x20, REG_LNA); }              // max. LNA gain, => p.89
 
    uint8_t ReadLowBat(void)  { return ReadByte(REG_LOWBAT ); }
 
@@ -867,32 +900,28 @@ class RFM_TRX
     Format_Hex(CONS_UART_Write, ReadByte(REG_PACONFIG));
     Format_String(CONS_UART_Write, "\n"); }
 
-#endif
+#endif // WITH_RFM95
 
-     uint8_t ReadVersion(void) { chipVer=ReadByte(REG_VERSION); return chipVer; }           // 0x24 for RFM69 or 0x12 for RFM95
+#if defined(WITH_RFM95) || defined(WITH_SX1272) || defined(WITH_RFM69)
+     uint8_t ReadVersion(void) { chipVer=ReadByte(REG_VERSION); return chipVer; } // 0x24 for RFM69 or 0x12 for RFM95
+     uint8_t ReadRSSI(void)    { return ReadByte(REG_RSSIVALUE); }         // read value: RSS = -Value/2
+#endif
+#ifdef WITH_SX1262
+     uint8_t ReadVersion(void) { return 0x12; }
+     uint8_t ReadRSSI(void) { uint8_t *RSSI=Cmd_Read(CMD_GETRSSIINST, 1); return RSSI[0]; }
+#endif
 
 #ifdef WITH_RFM69
      void    TriggerRSSI(void) { WriteByte(0x01, REG_RSSICONFIG); }        // trigger measurement
      uint8_t ReadyRSSI(void)   { return ReadByte(REG_RSSICONFIG) & 0x02; } // ready ?
-#endif
-     uint8_t ReadRSSI(void)    { return ReadByte(REG_RSSIVALUE); }         // read value: RSS = -Value/2
-
-#ifdef WITH_RFM69
      void    TriggerTemp(void) { WriteByte(0x08, REG_TEMP1); }             // trigger measurement
      uint8_t RunningTemp(void) { return ReadByte(REG_TEMP1) & 0x04; }      // still running ?
      int8_t ReadTemp(void)     { chipTemp=165-ReadByte(REG_TEMP2); return chipTemp; } // [deg]
 #endif
+
 #if defined(WITH_RFM95) || defined(WITH_SX1272)
      int8_t ReadTemp(void)     { chipTemp = 15-ReadByte(REG_TEMP); return chipTemp; } // [degC]
 #endif
-/*
-     void Dump(uint8_t EndAddr=0x20)
-     { printf("RFM_TRX[] =");
-       for(uint8_t Addr=1; Addr<=EndAddr; Addr++)
-       { printf(" %02X", ReadByte(Addr)); }
-       printf("\n");
-     }
-*/
 } ;
 
 #endif // __RFM_H__

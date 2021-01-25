@@ -70,5 +70,3 @@
 #define REG_OCPCONFIG           0x08E7
 #define REG_XTATRIM             0x0911
 #define REG_XTBTRIM             0x0912
-
-

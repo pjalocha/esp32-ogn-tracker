@@ -132,7 +132,7 @@ static uint8_t Transmit(uint8_t TxChan, const uint8_t *PacketByte, uint8_t Thres
 
   TRX.ClearIrqFlags();
   TRX.WritePacketOGN(PacketByte);                                // write packet into FIFO
-  TRX.setModeTX();                                             // transmit
+  TRX.setModeTX();                                               // transmit
   vTaskDelay(5);                                                 // wait 5ms (about the OGN packet time)
   uint8_t Break=0;
   for(uint16_t Wait=400; Wait; Wait--)                           // wait for transmission to end

@@ -913,7 +913,7 @@ void RFM_RESET_SetInput  (void)         { gpio_set_direction(PIN_RFM_RST, GPIO_M
 void RFM_RESET_SetOutput (void)         { gpio_set_direction(PIN_RFM_RST, GPIO_MODE_OUTPUT); }
 void RFM_RESET_SetLevel  (uint8_t High) { gpio_set_level(PIN_RFM_RST, High&1); }
 
-#ifdef WITH_RFM95       // for RFM95 reset is low-active
+#if defined(WITH_RFM95) || defined(WITH_SX1272) || defined(WITH_SX1262) // for RFM95 reset is low-active
 void RFM_RESET(uint8_t On) { if(On&1) { RFM_RESET_SetOutput(); RFM_RESET_SetLevel(0); } else RFM_RESET_SetInput(); }
 #endif
 
