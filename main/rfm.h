@@ -197,13 +197,23 @@ class RFM_FSK_RxPktData                 // OGN packet received by the RF chip
 
 #ifdef WITH_SX1262
 #include "sx1262.h"
+
+#define RF_IRQ_PacketSent     0x0001 // packet transmission was completed
+#define RF_IRQ_PayloadReady   0x0002 // 
+#define RF_IRQ_PreambleDetect 0x0004 //
+#define RF_IRQ_SyncAddrMatch  0x0008 //
+#define RF_IRQ_CrcErr         0x0040 //
+#define RF_IRQ_Timeout        0x0200 //
+
 #endif
+
+#if defined(WITH_RFM69) || defined(WITH_RFM95) || defined(WITH_SX1272)
                                      // bits in IrqFlags1 and IrfFlags2
 #define RF_IRQ_ModeReady      0x8000 // mode change done (between some modes)
-#define RF_IRQ_RxReady        0x4000
-#define RF_IRQ_TxReady        0x2000 //
+#define RF_IRQ_RxReady        0x4000 // receiver ready
+#define RF_IRQ_TxReady        0x2000 // transmitter ready
 #define RF_IRQ_PllLock        0x1000 //
-#define RF_IRQ_Rssi           0x0800
+#define RF_IRQ_Rssi           0x0800 //
 #define RF_IRQ_Timeout        0x0400
 #define RF_IRQ_PreambleDetect 0x0200
 #define RF_IRQ_SyncAddrMatch  0x0100
@@ -216,6 +226,8 @@ class RFM_FSK_RxPktData                 // OGN packet received by the RF chip
 #define RF_IRQ_PayloadReady   0x0004
 #define RF_IRQ_CrcOk          0x0002
 #define RF_IRQ_LowBat         0x0001
+
+#endif
 
 #include "manchester.h"
 
@@ -565,15 +577,16 @@ class RFM_TRX
 #endif
 
 #ifdef WITH_SX1262
-   void WriteTxPowerMin(void) { }
+   void WriteTxPower(int8_t TxPower) { }
+   void WriteTxPowerMin(void) { WriteTxPower(0); }
    void FSK_WriteSYNC(uint8_t WriteSize, uint8_t SyncTol, const uint8_t *SyncData) { }
    void OGN_Configure(int16_t Channel, const uint8_t *Sync) { }
-   void ClearIrqFlags(void) { }
-   uint16_t ReadIrqFlags(void) { return 0x0000; }
-   void setModeSleep(void) { }
-   void setModeStandby(void) { }
-   void setModeTX(void) { }
-   void setModeRX(void) { }
+   void ClearIrqFlags(uint16_t Mask=0xFFFF) { uint8_t Data[2]; Data[0]=Mask>>8; Data[1]=Mask; Cmd_Write(CMD_CLEARIRQSTATUS, Data, 2); }
+   uint16_t ReadIrqFlags(void) { uint8_t *Stat=Cmd_Read(CMD_GETIRQSTATUS, 2); return 0x0000; }
+   void setModeSleep(void) { uint8_t Config[3] = { 0,0,0 }; Cmd_Write(CMD_SETSLEEP, Config, 3); }
+   void setModeStandby(void) { uint8_t Config[1] = { 1 }; Cmd_Write(CMD_SETSTANDBY, Config, 1); }
+   void setModeTX(uint32_t Timeout=0) { uint8_t T[3]; T[0]=Timeout>>16; T[1]=Timeout>>8; T[2]=Timeout; Cmd_Write(CMD_SETTX, T, 3); }
+   void setModeRX(uint32_t Timeout=0) { uint8_t T[3]; T[0]=Timeout>>16; T[1]=Timeout>>8; T[2]=Timeout; Cmd_Write(CMD_SETRX, T, 3); }
 #endif
 
 #if defined(WITH_RFM95) || defined(WITH_SX1272) || defined(WITH_RFM69)
