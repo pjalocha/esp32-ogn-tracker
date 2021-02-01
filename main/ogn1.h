@@ -317,10 +317,12 @@ class OGN1_Packet          // Packet structure for the OGN tracker
        Len+=Format_UnsDec(JSON+Len, DecodeHeading(), 2, 1);
        Len+=Format_String(JSON+Len, ",\"speed_mps\":");
        Len+=Format_UnsDec(JSON+Len, DecodeSpeed(), 2, 1);
-       Len+=Format_String(JSON+Len, ",\"climb_mps\":");
-       Len+=Format_SignDec(JSON+Len, DecodeClimbRate(), 2, 1, 1);
-       Len+=Format_String(JSON+Len, ",\"turn_dps\":");
-       Len+=Format_SignDec(JSON+Len, DecodeTurnRate(), 2, 1, 1);
+       if(hasClimbRate())
+       { Len+=Format_String(JSON+Len, ",\"climb_mps\":");
+         Len+=Format_SignDec(JSON+Len, DecodeClimbRate(), 2, 1, 1); }
+       if(hasTurnRate())
+       { Len+=Format_String(JSON+Len, ",\"turn_dps\":");
+         Len+=Format_SignDec(JSON+Len, DecodeTurnRate(), 2, 1, 1); }
        Len+=Format_String(JSON+Len, ",\"DOP\":");
        Len+=Format_UnsDec(JSON+Len, 10+DecodeDOP(), 2, 1); }
      if(!Header.Encrypted && Header.NonPos)                         // non-encrypted status and info
@@ -746,7 +748,7 @@ class OGN1_Packet          // Packet structure for the OGN tracker
    { return (uint16_t)Position.Heading<<6; }
 
    void clrTurnRate(void)       { Position.TurnRate=0x80; }               // mark turn-rate as absent
-   bool hasTurnRate(void) const { return Position.TurnRate==0x80; }
+   bool hasTurnRate(void) const { return Position.TurnRate!=0x80; }
 
    void EncodeTurnRate(int16_t Turn)                                      // [0.1 deg/sec]
    { Position.TurnRate = EncodeSR2V5(Turn); }
@@ -755,7 +757,7 @@ class OGN1_Packet          // Packet structure for the OGN tracker
    { return DecodeSR2V5(Position.TurnRate); }
 
    void clrClimbRate(void)       { Position.ClimbRate=0x100; }            // mark climb rate as absent
-   bool hasClimbRate(void) const { return Position.ClimbRate==0x100; }
+   bool hasClimbRate(void) const { return Position.ClimbRate!=0x100; }
 
    void EncodeClimbRate(int16_t Climb)
    { Position.ClimbRate = EncodeSR2V6(Climb); }

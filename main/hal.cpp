@@ -279,6 +279,9 @@ GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    Foll
 #ifdef WITH_TBEAM_V10
 #define PIN_RFM_RST  GPIO_NUM_23  // Reset 23
 #define PIN_RFM_IRQ  GPIO_NUM_26  // packet done on receive or transmit
+#ifdef WITH_SX1262
+#define PIN_RFM_BUSY GPIO_NUM_32  // for the T-Beam with SX1262
+#endif
 #define PIN_RFM_SS   GPIO_NUM_18  // SPI chip-select
 #define PIN_RFM_SCK  GPIO_NUM_5   // SPI clock
 #define PIN_RFM_MISO GPIO_NUM_19  // SPI MISO
@@ -910,7 +913,7 @@ void RFM_RESET_SetInput  (void)         { gpio_set_direction(PIN_RFM_RST, GPIO_M
 void RFM_RESET_SetOutput (void)         { gpio_set_direction(PIN_RFM_RST, GPIO_MODE_OUTPUT); }
 void RFM_RESET_SetLevel  (uint8_t High) { gpio_set_level(PIN_RFM_RST, High&1); }
 
-#ifdef WITH_RFM95       // for RFM95 reset is low-active
+#if defined(WITH_RFM95) || defined(WITH_SX1272) || defined(WITH_SX1262) // for RFM95 reset is low-active
 void RFM_RESET(uint8_t On) { if(On&1) { RFM_RESET_SetOutput(); RFM_RESET_SetLevel(0); } else RFM_RESET_SetInput(); }
 #endif
 
@@ -925,7 +928,10 @@ void RFM_RESET(uint8_t On) { }
 
 void RFM_IRQ_SetInput(void) { gpio_set_direction(PIN_RFM_IRQ, GPIO_MODE_INPUT); }
 bool RFM_IRQ_isOn(void)      { return gpio_get_level(PIN_RFM_IRQ); }
-
+#ifdef WITH_SX1262
+void RFM_Busy_SetInput(void) { gpio_set_direction(PIN_RFM_BUSY, GPIO_MODE_INPUT); }
+bool RFM_Busy_isOn(void)      { return gpio_get_level(PIN_RFM_BUSY); }
+#endif
 void RFM_Delay(int ms) { vTaskDelay(ms); }
 
 static spi_device_handle_t RFM_SPI;
@@ -1864,6 +1870,9 @@ void IO_Configuration(void)
 #endif
 
   RFM_IRQ_SetInput();
+#ifdef WITH_SX1262
+  RFM_Busy_SetInput();
+#endif
   RFM_RESET_SetOutput();
   RFM_RESET(0);
 
