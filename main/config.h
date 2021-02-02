@@ -35,6 +35,7 @@
 // #define WITH_U8G2_FLIP                     // flip the OLED screen (rotate by 180deg)
 
 #define WITH_RFM95                         // RF chip selection:  both HELTEC and TTGO use sx1276 which is same as RFM95
+//#define WITH_SX1262                         // SX1262 Support
 
 // #define WITH_SLEEP                         // with software sleep mode controlled by the long-press on the button
 
@@ -73,6 +74,8 @@
 // #define WITH_GDL90
 // #define WITH_PGAV5
 #define WITH_LOOKOUT
+
+#define WITH_SKYDEMON			//Adapt NMEA Output for SKYDEMON
 
 #define WITH_CONFIG                        // interpret the console input: $POGNS to change parameters
 
