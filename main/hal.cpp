@@ -267,7 +267,7 @@ GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    Foll
 #define PIN_RFM_MOSI GPIO_NUM_27  // SPI MOSI
 #endif // HELTEC TTGO
 
-#ifdef WITH_TBEAM
+#if defined(WITH_TBEAM) || defined(WITH_TBEAM_V10) || defined(WITH_LORA32)
 #define PIN_RFM_RST  GPIO_NUM_23  // Reset - not clear if T-Beam is using it, or maybe only the older version
 #define PIN_RFM_IRQ  GPIO_NUM_26  // packet done on receive or transmit
 #define PIN_RFM_SS   GPIO_NUM_18  // SPI chip-select
@@ -277,16 +277,10 @@ GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    Foll
 #endif // TBEAM
 
 #ifdef WITH_TBEAM_V10
-#define PIN_RFM_RST  GPIO_NUM_23  // Reset 23
-#define PIN_RFM_IRQ  GPIO_NUM_26  // packet done on receive or transmit
 #ifdef WITH_SX1262
 #define PIN_RFM_BUSY GPIO_NUM_32  // for the T-Beam with SX1262
 #endif
-#define PIN_RFM_SS   GPIO_NUM_18  // SPI chip-select
-#define PIN_RFM_SCK  GPIO_NUM_5   // SPI clock
-#define PIN_RFM_MISO GPIO_NUM_19  // SPI MISO
-#define PIN_RFM_MOSI GPIO_NUM_27  // SPI MOSI
-#endif // TBEAM
+#endif
 
 #ifdef WITH_FollowMe
 // #define PIN_RFM_RST  GPIO_NUM_32  // Reset
@@ -333,6 +327,13 @@ GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    Foll
 #define PIN_GPS_RXD  GPIO_NUM_16
 #define PIN_GPS_PPS  GPIO_NUM_26
 #endif // M5_JACEK
+
+#ifdef WITH_LORA32
+#define PIN_GPS_TXD  GPIO_NUM_12
+#define PIN_GPS_RXD  GPIO_NUM_35
+#define PIN_GPS_PPS  GPIO_NUM_34
+#define PIN_GPS_ENA  GPIO_NUM_13
+#endif // LORA32
 
 #ifdef WITH_TBEAM_V10
 #define PIN_AXP_IRQ GPIO_NUM_35
@@ -407,7 +408,7 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 #define PIN_OLED_RST GPIO_NUM_16  // OLED RESET: low-active
 #endif // HELTEC || TTGO
 
-#if defined(WITH_TBEAM) || defined(WITH_TBEAM_V10) // T-Beam
+#if defined(WITH_TBEAM) || defined(WITH_TBEAM_V10) || defined(WITH_LORA32) // T-Beam
 #define PIN_I2C_SCL GPIO_NUM_22   // SCL pin => this way the pin pattern fits the BMP280 module
 #define PIN_I2C_SDA GPIO_NUM_21   // SDA pin
 #define OLED_I2C_ADDR 0x3C        // I2C address of the OLED display
@@ -423,6 +424,14 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 // #if defined(WITH_HELTEC) || defined(WITH_TTGO)
 // #define PIN_OLED_RST GPIO_NUM_16  // OLED RESET: low-active
 // #endif
+
+#ifdef WITH_LORA32
+#define PIN_SD_CS     GPIO_NUM_13 // SD card interface in SPI mode
+#define PIN_SD_SCK    GPIO_NUM_14
+#define PIN_SD_MISO   GPIO_NUM_2
+#define PIN_SD_MOSI   GPIO_NUM_15
+#define SD_SPI_DMA              2
+#endif
 
 #ifdef WITH_JACEK
 
