@@ -82,4 +82,6 @@ void xorshift64(uint64_t &Seed);
 uint8_t EncodeAscii85(    char *Ascii, uint32_t    Word );  // Encode 32-bit Word into 5-char Ascii-85 string
 uint8_t DecodeAscii85(uint32_t &Word,  const char *Ascii);  // Decode 5-char Ascii-85 to 32-bit Word
 
+int APRS2IGC(char *Out, const char *Inp, int GeoidSepar);   // convert APRS message to IGC B-record
+
 #endif // __OGNCONV_H__
