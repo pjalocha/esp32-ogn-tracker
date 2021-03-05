@@ -462,7 +462,7 @@ extern "C"
 */
       vTaskDelay(8);
       for( uint8_t Wait=50; Wait; Wait--)
-      { vTaskDelay(1); if(!TRX.isModeLoRaTX()) brek; }
+      { vTaskDelay(1); if(!TRX.isModeLoRaTX()) break; }
         // uint8_t Mode=TRX.ReadMode();
         // if(Mode!=RF_OPMODE_LORA_TX) break; }
       TRX.setFSK();
