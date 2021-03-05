@@ -42,12 +42,10 @@ Start with:
 
 ```
 cd
-git clone -b v4.0 --recursive https://github.com/espressif/esp-idf.git
+git clone -b v4.1 --recursive https://github.com/espressif/esp-idf.git
 cd esp-idf
 ./install.sh
 ```
-Note: there is a fix to compile as well with v4.1: not clear yet, if there is any advantage.
-
 If you are doing this on a Raspberry PI and see error messages about *virtualenv* you may need the following:
 ```
 sudo apt-get install libffi-dev
@@ -160,7 +158,7 @@ SDA 14
 SCL 13
 RES 33
 DC   2
-BLK 32
+BLK 15
 ```
 In this arrangement all signals are on one side of the board except for the VCC line
 
