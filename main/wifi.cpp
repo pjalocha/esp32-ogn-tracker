@@ -73,6 +73,11 @@ esp_err_t WIFI_StartAP(const char *SSID, const char *Pass, int MaxConnections)
       else WIFI_Config.ap.password[0]=0;
   WIFI_Config.ap.max_connection = MaxConnections;
   WIFI_Config.ap.authmode = (Pass && Pass[0]) ? WIFI_AUTH_WPA_WPA2_PSK:WIFI_AUTH_OPEN;
+  // tcpip_adapter_ip_info_t IPinfo;                             // attempt to change the IP range to 192.168.1.1 but does not work
+  // IP4_ADDR(&IPinfo.ip, 192,168,1,1);
+  // IP4_ADDR(&IPinfo.gw, 192,168,1,1);
+  // IP4_ADDR(&IPinfo.netmask, 255,255,255,0);
+  // tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_AP, &IPinfo);
   Err = esp_wifi_set_config(ESP_IF_WIFI_AP, &WIFI_Config); if(Err!=ESP_OK) return Err;
   Err = esp_wifi_set_mode(WIFI_MODE_AP); if(Err!=ESP_OK) return Err;
   Err = esp_wifi_start();

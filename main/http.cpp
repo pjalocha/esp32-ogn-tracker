@@ -16,6 +16,7 @@
 #include "gps.h"
 #include "log.h"
 #include "http.h"
+#include "ognconv.h"
 
 // #define DEBUG_PRINT
 
@@ -691,6 +692,33 @@ static int LogFileName(char *Name, time_t Time, const char *Ext=0)
   if(Ext) Len+=Format_String(Name+Len, Ext);
   Name[Len]=0; return Len; }
 
+// send give log file in the IGC format
+static esp_err_t SendLog_IGC(httpd_req_t *Req, const char *FileName, uint32_t FileTime)
+{ char ContDisp[64];
+  char Line[1000]; int Len=0;
+  Len=Format_String(ContDisp, "attachement; filename=\""); Len+=LogFileName(ContDisp+Len, FileTime, ".IGC"); ContDisp[Len++]='\"'; ContDisp[Len]=0;
+  httpd_resp_set_hdr(Req, "Content-Disposition", ContDisp);
+  httpd_resp_set_type(Req, "text/plain");
+  FILE *File = fopen(FileName, "rb"); if(File==0) { httpd_resp_send_chunk(Req, 0, 0); return ESP_OK; }
+  // here we should write the IGC header
+  OGN_LogPacket<OGN_Packet> Packet;
+  for( ; ; )
+  { if(fread(&Packet, Packet.Bytes, 1, File)!=1) break;          // read the next packet
+    if(!Packet.isCorrect()) continue;
+    uint32_t Time = Packet.getTime(FileTime);                    // [sec] get exact time from short time in the packet and the file start time
+    Len+=Format_String(Line+Len, "LGNE ");                       // attach APRS as LGNE record
+    char *APRS=Line+Len;
+    Len+=Packet.Packet.WriteAPRS(Line+Len, Time);                // packet in the APRS format
+    bool Own = Packet.Packet.Header.Address==Parameters.Address && Packet.Packet.Header.AddrType==Parameters.AddrType;
+    if(Own && !Packet.Packet.Header.NonPos && !Packet.Packet.Header.Encrypted)
+      Len+=APRS2IGC(Line+Len, APRS, GPS_GeoidSepar);             // IGC B-record
+    if(Len>=800) { httpd_resp_send_chunk(Req, Line, Len); Len=0; } // when more than 800 bytes then write this part to the socket
+    vTaskDelay(1); }
+  fclose(File);
+  if(Len) { httpd_resp_send_chunk(Req, Line, Len); Len=0; }
+  httpd_resp_send_chunk(Req, 0, 0);
+  return ESP_OK; }
+
 // send give log file in the APRS format
 static esp_err_t SendLog_APRS(httpd_req_t *Req, const char *FileName, uint32_t FileTime)
 { char ContDisp[64];
@@ -748,6 +776,7 @@ static esp_err_t log_get_handler(httpd_req_t *Req)
       uint32_t Time=FlashLog_ReadShortFileTime(Name);
       if(Time)
       { if(strcmp(Format, "APRS")==0) return SendLog_APRS(Req, FullName, Time);
+        if(strcmp(Format, "IGC" )==0) return SendLog_IGC(Req, FullName, Time);
         return SendLog_TLG(Req, FullName, Time); }
     }
   }
@@ -779,7 +808,7 @@ static esp_err_t log_get_handler(httpd_req_t *Req)
   closedir(Dir);
   std::sort(FileList.begin(), FileList.end());
 
-  httpd_resp_sendstr_chunk(Req, "<table>\n<tr><th>File</th><th></th><th>[KB]</th><th>Date</th></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "<table>\n<tr><th>File</th><th></th><th></th><th>[KB]</th><th>Date</th></tr>\n");
   for(size_t Idx=0; Idx<FileList.size(); Idx++)
   { uint32_t Time=FileList[Idx];
     char Name[16];
@@ -794,7 +823,10 @@ static esp_err_t log_get_handler(httpd_req_t *Req)
     Len+=Format_String(Line+Len, Name);
     Len+=Format_String(Line+Len, "</a></td><td><a href=\"/log.html?Format=APRS&File=");
     Len+=Format_String(Line+Len, Name);
-    Len+=Format_String(Line+Len, "\">APRS</a></td><td align=\"center\">");
+    Len+=Format_String(Line+Len, "\">APRS</a></td>");
+    Len+=Format_String(Line+Len, "<td><a href=\"/log.html?Format=IGC&File=");
+    Len+=Format_String(Line+Len, Name);
+    Len+=Format_String(Line+Len, "\">IGC</a></td><td align=\"center\">");
     Len+=Format_UnsDec(Line+Len, (Size+512)>>10);
     Len+=Format_String(Line+Len, "</td><td>");
     Len+=Format_DateTime(Line+Len, Time);

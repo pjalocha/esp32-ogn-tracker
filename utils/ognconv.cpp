@@ -1,15 +1,13 @@
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
-#include <math.h>
 
 #include "format.h"
 #include "ognconv.h"
 
 // ==============================================================================================
 
-uint32_t FeetToMeters(uint32_t Altitude) { return (Altitude*312+512)>>10; }  // [feet] => [m]
-uint32_t MetersToFeet(uint32_t Altitude) { return (Altitude*3360+512)>>10; } // [m] => [feet]
+int32_t FeetToMeters(int32_t Altitude) { return (Altitude*312+512)>>10; }  // [feet] => [m]
+int32_t MetersToFeet(int32_t Altitude) { return (Altitude*3360+512)>>10; } // [m] => [feet]
 
 // ==============================================================================================
 
@@ -293,14 +291,15 @@ int APRS2IGC(char *Out, const char *Inp, int GeoidSepar)             // convert 
   Out[Len++] = 'A';
   memcpy(Out+Len, "          ", 10);
   const char *FL = strstr(Pos+18, " FL");
-  if(FL)                                                             // pressure altitude
-  { float PressAlt=atof(FL+3); PressAlt*=30.4; int32_t Alt=floor(PressAlt+0.5);
+  int32_t AltH=0; int32_t AltL=0;
+  if(FL && FL[6]=='.' && Read_Int(AltH, FL+3)==3 && Read_Int(AltL, FL+7)==2) // pressure altitude
+  { int Alt = AltH*100+AltL; Alt=FeetToMeters(Alt);
     if(Alt<0) { Alt = (-Alt); Out[Len] = '-'; Format_UnsDec(Out+Len+1, (uint32_t)Alt, 4); }
          else { Format_UnsDec(Out+Len, (uint32_t)Alt, 5); }
   }
-  Len+=5;
-  if(Pos[27]=='A' && Pos[28]=='=')                                   // geometrical altitude
-  { int32_t Alt=atol(Pos+29); Alt=(Alt*3+5)/10; Alt+=GeoidSepar;     // convert to meters and add GeoidSepar for HAE
+  Len+=5; int32_t Alt=0;
+  if(Pos[27]=='A' && Pos[28]=='=' && Read_Int(Alt, Pos+29)==6)       // geometrical altitude
+  { Alt=FeetToMeters(Alt); Alt+=GeoidSepar;                          // convert to meters and add GeoidSepar for HAE
     if(Alt<0) { Alt = (-Alt); Out[Len] = '-'; Format_UnsDec(Out+Len+1, (uint32_t)Alt, 4); }
          else { Format_UnsDec(Out+Len, (uint32_t)Alt, 5); }
   }

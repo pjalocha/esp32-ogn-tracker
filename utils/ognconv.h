@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
-uint32_t FeetToMeters(uint32_t Altitude);                             //
-uint32_t MetersToFeet(uint32_t Altitude);                             //
+int32_t FeetToMeters(int32_t Altitude);                               //
+int32_t MetersToFeet(int32_t Altitude);                               //
 
 uint16_t EncodeUR2V8(uint16_t Value);                                 // Encode unsigned 12bit (0..3832) as 10bit
 uint16_t DecodeUR2V8(uint16_t Value);                                 // Decode 10bit 0..0x3FF

@@ -174,7 +174,7 @@ static int IGC_LogLine(const char *Line, int Len)
 static int IGC_LogLine(const char *Line)
 { return IGC_LogLine(Line, strlen(Line)); }
 
-static char Line[192];
+static char Line[512];
 
 static int IGC_HeadParm(const char *Name, const char *Parm1, const char *Parm2=0, const char *Parm3=0)
 { int Len=Format_String(Line, Name);
@@ -211,8 +211,22 @@ static int IGC_Header(const GPS_Position &Pos)                      // write the
     Line[Len++]='\n'; Line[Len]=0;
     IGC_LogLine(Line, Len); }
   IGC_LogLine("HFRFWFirmwareVersion:ESP32-OGN-TRACKER " __DATE__ " " __TIME__ "\n"); // firmware version, compile date/time
+#ifdef WITH_FollowMe
   IGC_LogLine("HFGPSReceiver:L80\n");                              // GPS sensor
+#else
+#ifdef WITH_GPS_UBX
+  IGC_LogLine("HFGPSReceiver:UBX\n");                              // GPS sensor
+#endif
+#ifdef WITH_GPS_MTK
+  IGC_LogLine("HFGPSReceiver:MTK\n");                              // GPS sensor
+#endif
+#endif
+#ifdef WITH_BMP280
   IGC_LogLine("HFPRSPressAltSensor:BMP280\n");                     // pressure sensor
+#endif
+#ifdef WITH_BME280
+  IGC_LogLine("HFPRSPressAltSensor:BME280\n");                     // pressure sensor
+#endif
   return 0; }
 
 int IGC_ID(void)
