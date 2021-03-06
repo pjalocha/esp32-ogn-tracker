@@ -702,6 +702,7 @@ static esp_err_t SendLog_IGC(httpd_req_t *Req, const char *FileName, uint32_t Fi
   FILE *File = fopen(FileName, "rb"); if(File==0) { httpd_resp_send_chunk(Req, 0, 0); return ESP_OK; }
   // here we should write the IGC header
   OGN_LogPacket<OGN_Packet> Packet;
+  Len=0;
   for( ; ; )
   { if(fread(&Packet, Packet.Bytes, 1, File)!=1) break;          // read the next packet
     if(!Packet.isCorrect()) continue;
@@ -709,7 +710,7 @@ static esp_err_t SendLog_IGC(httpd_req_t *Req, const char *FileName, uint32_t Fi
     Len+=Format_String(Line+Len, "LGNE ");                       // attach APRS as LGNE record
     char *APRS=Line+Len;
     Len+=Packet.Packet.WriteAPRS(Line+Len, Time);                // packet in the APRS format
-    bool Own = Packet.Packet.Header.Address==Parameters.Address && Packet.Packet.Header.AddrType==Parameters.AddrType;
+    bool Own = Packet.Packet.Header.Address==Parameters.Address && Packet.Packet.Header.AddrType==Parameters.AddrType; // 
     if(Own && !Packet.Packet.Header.NonPos && !Packet.Packet.Header.Encrypted)
       Len+=APRS2IGC(Line+Len, APRS, GPS_GeoidSepar);             // IGC B-record
     if(Len>=800) { httpd_resp_send_chunk(Req, Line, Len); Len=0; } // when more than 800 bytes then write this part to the socket
@@ -728,6 +729,7 @@ static esp_err_t SendLog_APRS(httpd_req_t *Req, const char *FileName, uint32_t F
   httpd_resp_set_type(Req, "text/plain");
   FILE *File = fopen(FileName, "rb"); if(File==0) { httpd_resp_send_chunk(Req, 0, 0); return ESP_OK; }
   OGN_LogPacket<OGN_Packet> Packet;
+  Len=0;
   for( ; ; )
   { if(fread(&Packet, Packet.Bytes, 1, File)!=1) break;          // read the next packet
     if(!Packet.isCorrect()) continue;
