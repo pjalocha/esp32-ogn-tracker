@@ -288,22 +288,23 @@ int APRS2IGC(char *Out, const char *Inp, int GeoidSepar)             // convert 
   memcpy(Out+Len, Pos+15,2); Len+=2;                                 // copy fractional MM
   Out[Len++] = ExtPos?ExtPos[1]:'0';                                 // extended precision
   Out[Len++] = Pos[17];                                              // copy E/W sign
-  Out[Len++] = 'A';
-  memcpy(Out+Len, "          ", 10);
-  const char *FL = strstr(Pos+18, " FL");
+  Out[Len++] = 'A';                                                  // GPS-valid flag
+  memcpy(Out+Len, "          ", 10);                                 // prefill pressure and GNSS altitude with spaces
+  const char *FL = strstr(Pos+18, " FL");                            // search pressure altitude
   int32_t AltH=0; int32_t AltL=0;
   if(FL && FL[6]=='.' && Read_Int(AltH, FL+3)==3 && Read_Int(AltL, FL+7)==2) // pressure altitude
   { int Alt = AltH*100+AltL; Alt=FeetToMeters(Alt);
     if(Alt<0) { Alt = (-Alt); Out[Len] = '-'; Format_UnsDec(Out+Len+1, (uint32_t)Alt, 4); }
          else { Format_UnsDec(Out+Len, (uint32_t)Alt, 5); }
   }
-  Len+=5; int32_t Alt=0;
+  Len+=5;
+  int32_t Alt=0;                                                     //
   if(Pos[27]=='A' && Pos[28]=='=' && Read_Int(Alt, Pos+29)==6)       // geometrical altitude
   { Alt=FeetToMeters(Alt); Alt+=GeoidSepar;                          // convert to meters and add GeoidSepar for HAE
     if(Alt<0) { Alt = (-Alt); Out[Len] = '-'; Format_UnsDec(Out+Len+1, (uint32_t)Alt, 4); }
          else { Format_UnsDec(Out+Len, (uint32_t)Alt, 5); }
   }
   Len+=5;
-  Out[Len]=0; return Len; }
+  Out[Len++]='\n'; Out[Len]=0; return Len; } // add NL, terminator and return length og the string
 
 // ==============================================================================================

@@ -59,7 +59,7 @@ int main(int argc, char *argv[])
   OutFile=fopen(OutFileName, "wt");
   if(OutFile==0) { printf("Cannot open %s for write\n", OutFileName); return 0; }
   for(size_t Idx=0; Idx<OutLine.size(); Idx++)
-  { fprintf(OutFile, "%s\n", OutLine[Idx]); }
+  { fprintf(OutFile, "%s", OutLine[Idx]); }
   fclose(OutFile);
   printf("%lu lines to %s\n", OutLine.size(), OutFileName);
 
