@@ -715,6 +715,37 @@ static esp_err_t SendLog_IGC(httpd_req_t *Req, const char *FileName, uint32_t Fi
   { Len+=Format_String(Line+Len, "HFPLTPilotincharge:");
     Len+=Format_String(Line+Len, Parameters.Pilot);
     Line[Len++]='\n'; }
+  if(Parameters.Reg[0])
+  { Len+=Format_String(Line+Len, "HFGIDGliderID:");
+    Len+=Format_String(Line+Len, Parameters.Reg);
+    Line[Len++]='\n'; }
+#ifdef WITH_FollowMe
+  Len+=Format_String(Line+Len, "HFRHWHardwareVersion:FollowMe\n");
+#else
+  Len+=Format_String(Line+Len, "HFRHWHardwareVersion:ESP32+LoRa\n");     // hardware version
+#endif
+  Len+=Format_String(Line+Len, "HFRFWFirmwareVersion:ESP32-OGN-TRACKER " __DATE__ " " __TIME__ "\n");
+#ifdef WITH_BMP180
+  Len+=Format_String(Line+Len, "HFPRSPressAltSensor:BMP180\n");        // pressure sensor
+#endif
+#ifdef WITH_BMP280
+  Len+=Format_String(Line+Len, "HFPRSPressAltSensor:BMP280\n");        // pressure sensor
+#endif
+#ifdef WITH_BME280
+  Len+=Format_String(Line+Len, "HFPRSPressAltSensor:BME280/BMP280\n"); // pressure sensor
+#endif
+  Len+=Format_String(Line+Len, "LOGN");
+  Len+=Format_HHMMSS(Line+Len, FileTime);
+  Len+=Format_String(Line+Len, "ID ");
+  Len+=Format_Hex(Line+Len, Parameters.AcftID);
+  Line[Len++]='\n';
+  uint64_t MAC = getUniqueID();
+  Len+=Format_String(Line+Len, "LOGN");
+  Len+=Format_HHMMSS(Line+Len, FileTime);
+  Len+=Format_String(Line+Len, "MAC ");
+  Len+=Format_Hex(Line+Len, (uint16_t)(MAC>>32));                  // ESP32 48-bit ID
+  Len+=Format_Hex(Line+Len, (uint32_t) MAC     );
+  Line[Len++]='\n';
   httpd_resp_send_chunk(Req, Line, Len);
   mbedtls_md5_update_ret(&MD5, (uint8_t *)Line, Len);
   OGN_LogPacket<OGN_Packet> Packet;
