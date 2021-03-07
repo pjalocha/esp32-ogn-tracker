@@ -6,6 +6,8 @@
 #include <vector>
 #include <algorithm>
 
+#include "mbedtls/md5.h"
+
 #include "hal.h"
 
 #include "esp_http_server.h"
@@ -695,12 +697,26 @@ static int LogFileName(char *Name, time_t Time, const char *Ext=0)
 // send give log file in the IGC format
 static esp_err_t SendLog_IGC(httpd_req_t *Req, const char *FileName, uint32_t FileTime)
 { char ContDisp[64];
+  mbedtls_md5_context MD5;
+  mbedtls_md5_starts_ret(&MD5);
   char Line[1000]; int Len=0;
   Len=Format_String(ContDisp, "attachement; filename=\""); Len+=LogFileName(ContDisp+Len, FileTime, ".IGC"); ContDisp[Len++]='\"'; ContDisp[Len]=0;
   httpd_resp_set_hdr(Req, "Content-Disposition", ContDisp);
   httpd_resp_set_type(Req, "text/plain");
   FILE *File = fopen(FileName, "rb"); if(File==0) { httpd_resp_send_chunk(Req, 0, 0); return ESP_OK; }
-  // here we should write the IGC header
+  Len=Format_String(Line, "AGNE001Tracker\nHFFXA020\n");         // IGC file header
+  Len+=Format_String(Line+Len, "HFDTEDate:");
+  GPS_Time Time; Time.setUnixTime(FileTime);
+  Len+=Format_UnsDec(Line+Len, (uint16_t)Time.Day  , 2);
+  Len+=Format_UnsDec(Line+Len, (uint16_t)Time.Month, 2);
+  Len+=Format_UnsDec(Line+Len, (uint16_t)Time.Year , 2);
+  Line[Len++]='\n';
+  if(Parameters.Pilot[0])
+  { Len+=Format_String(Line+Len, "HFPLTPilotincharge:");
+    Len+=Format_String(Line+Len, Parameters.Pilot);
+    Line[Len++]='\n'; }
+  httpd_resp_send_chunk(Req, Line, Len);
+  mbedtls_md5_update_ret(&MD5, (uint8_t *)Line, Len);
   OGN_LogPacket<OGN_Packet> Packet;
   Len=0;
   for( ; ; )
@@ -713,10 +729,23 @@ static esp_err_t SendLog_IGC(httpd_req_t *Req, const char *FileName, uint32_t Fi
     bool Own = Packet.Packet.Header.Address==Parameters.Address && Packet.Packet.Header.AddrType==Parameters.AddrType; // 
     if(Own && !Packet.Packet.Header.NonPos && !Packet.Packet.Header.Encrypted)
       Len+=APRS2IGC(Line+Len, APRS, GPS_GeoidSepar);             // IGC B-record
-    if(Len>=800) { httpd_resp_send_chunk(Req, Line, Len); Len=0; } // when more than 800 bytes then write this part to the socket
-    vTaskDelay(1); }
+    if(Len>=800)                                                 // when more than 800 bytes then write this part to the socket
+    { httpd_resp_send_chunk(Req, Line, Len);
+      mbedtls_md5_update_ret(&MD5, (uint8_t *)Line, Len);
+      Len=0; vTaskDelay(1); }
+  }
   fclose(File);
-  if(Len) { httpd_resp_send_chunk(Req, Line, Len); Len=0; }
+  if(Len)
+  { httpd_resp_send_chunk(Req, Line, Len);
+    mbedtls_md5_update_ret(&MD5, (uint8_t *)Line, Len);
+    Len=0; }
+  uint8_t Digest[16];
+  mbedtls_md5_finish_ret(&MD5, Digest);
+  Len=0; Line[Len++]='G';                                        // G-record, not signed yet, just MD5
+  for(int Idx=0; Idx<16; Idx++)
+    Len+=Format_Hex(Line+Len, Digest[Idx]);
+  Line[Len++]='\n'; Line[Len]=0;
+  httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_send_chunk(Req, 0, 0);
   return ESP_OK; }
 

@@ -616,9 +616,7 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      Msg[Len++] = ' ';  Msg[Len++] = 'g'; Msg[Len++] = 'p'; Msg[Len++] = 's';
      Len+=Format_UnsDec(Msg+Len, HorPrec); Msg[Len++] = 'x'; Len+=Format_UnsDec(Msg+Len, VerPrec);
 
-     Msg[Len++]='\n';
-     Msg[Len]=0;
-     return Len; }
+     Msg[Len++]='\n'; Msg[Len]=0; return Len; }
 
 #endif // __AVR__
 

@@ -111,7 +111,7 @@ static void IGC_TimeStamp(void)
 { struct stat FileStat;
   struct utimbuf FileTime;
   if(stat(IGC_FileName, &FileStat)>=0)                            // get file attributes (maybe not needed really ?
-  { FileTime.actime  = IGC_SaveTime;                              // set access and modification tim$
+  { FileTime.actime  = IGC_SaveTime;                              // set access and modification time
     FileTime.modtime = IGC_SaveTime;
     utime(IGC_FileName, &FileTime); }                             // write to the FAT
 }
