@@ -124,7 +124,8 @@ void app_main(void)
     xTaskCreate(vTaskSTX,  "STX",  4000, 0, tskIDLE_PRIORITY+3, 0);
 #endif
 #ifdef WITH_AP
-    xTaskCreate(vTaskAP,  "AP",  4000, 0, tskIDLE_PRIORITY+3, 0);
+    if(Parameters.APname[0])
+      xTaskCreate(vTaskAP,  "AP",  4000, 0, tskIDLE_PRIORITY+3, 0);
 #endif
 #if defined(WITH_OLED) || defined(WITH_U8G2_OLED) || defined(WITH_ST7789) || defined(WITH_ILI9341)
     xTaskCreate(vTaskDISP,  "DISP",  3000, 0, tskIDLE_PRIORITY+2, 0);
