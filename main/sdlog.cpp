@@ -111,7 +111,7 @@ static void IGC_TimeStamp(void)
 { struct stat FileStat;
   struct utimbuf FileTime;
   if(stat(IGC_FileName, &FileStat)>=0)                            // get file attributes (maybe not needed really ?
-  { FileTime.actime  = IGC_SaveTime;                              // set access and modification tim$
+  { FileTime.actime  = IGC_SaveTime;                              // set access and modification time
     FileTime.modtime = IGC_SaveTime;
     utime(IGC_FileName, &FileTime); }                             // write to the FAT
 }
@@ -204,9 +204,9 @@ static int IGC_Header(const GPS_Position &Pos)                      // write the
   IGC_HeadParm("HFCIDCompetitionID:", Parameters.ID);               // competition ID
   {
 #ifdef WITH_FollowMe
-    int Len=Format_String(Line, "HFRHWHardwareVersion:FollowMe");
+    int Len=Format_String(Line, "HFRHWHardwareVersion:FollowMe\n");
 #else
-    int Len=Format_String(Line, "HFRHWHardwareVersion:ESP32-SX1276"); // hardware version
+    int Len=Format_String(Line, "HFRHWHardwareVersion:ESP32+LoRa\n"); // hardware version
 #endif
     Line[Len++]='\n'; Line[Len]=0;
     IGC_LogLine(Line, Len); }
@@ -221,11 +221,14 @@ static int IGC_Header(const GPS_Position &Pos)                      // write the
   IGC_LogLine("HFGPSReceiver:MTK\n");                              // GPS sensor
 #endif
 #endif
+#ifdef WITH_BMP180
+  IGC_LogLine("HFPRSPressAltSensor:BMP180\n");                     // pressure sensor
+#endif
 #ifdef WITH_BMP280
   IGC_LogLine("HFPRSPressAltSensor:BMP280\n");                     // pressure sensor
 #endif
 #ifdef WITH_BME280
-  IGC_LogLine("HFPRSPressAltSensor:BME280\n");                     // pressure sensor
+  IGC_LogLine("HFPRSPressAltSensor:BME280/BMP280\n");              // pressure sensor
 #endif
   return 0; }
 
