@@ -501,6 +501,8 @@ uint16_t StratuxPort;
     Line[Len++]=HexDigit(AcftType);
     Len+=Format_String(Line+Len, ",FreqPlan=");
     Line[Len++]='0'+FreqPlan;
+    Len+=Format_String(Line+Len, ",TxPower=");
+    Len+=Format_SignDec(Line+Len, (int16_t)TxPower);
     Len+=NMEA_AppendCheckCRNL(Line, Len);
     Line[Len]=0; return Len; }
 
@@ -631,6 +633,7 @@ uint16_t StratuxPort;
       RFchipTypeHW=HW; }
     if(strcmp(Name, "TxPower")==0)
     { int32_t Power=0; if(Read_Int(Power, Value)<=0) return 0;
+      if(Power<(-32)) Power=(-32); else if(Power>31) Power=31;
       TxPower=Power; return 1; }
     if(strcmp(Name, "PPSdelay")==0)
     { uint32_t Delay=0; if(Read_Int(Delay, Value)<=0) return 0;
