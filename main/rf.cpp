@@ -109,6 +109,7 @@ static uint32_t ReceiveUntil(TickType_t End)
 static uint8_t Transmit(uint8_t TxChan, const uint8_t *PacketByte, uint8_t Thresh, uint8_t MaxWait=7)
 {
   if(PacketByte==0) return 0;                                   // if no packet to send: simply return
+  // if(Parameters.TxPower==(-32)) return 0;                       // if transmission turned OFF
 
   if(MaxWait)
   { for( ; MaxWait; MaxWait--)                                  // wait for a given maximum time for a free radio channel
@@ -153,7 +154,7 @@ static void TimeSlot(uint8_t TxChan, uint32_t SlotLen, const uint8_t *PacketByte
   if( (TxTime==0) || (TxTime>=MaxTxTime) ) TxTime = RX_Random%MaxTxTime;   // if TxTime out of limits, setup a random TxTime
   TickType_t Tx    = Start + TxTime;                                       // Tx = the moment to start transmission
   ReceiveUntil(Tx);                                                        // listen until this time comes
-  if( (TX_Credit>0) && (PacketByte) )                                      // when packet to transmit is given and there is still TX credit left:
+  if( (TX_Credit>0) && Parameters.TxPower!=(-32) && (PacketByte) )                                      // when packet to transmit is given and there is still TX credit left:
     if(Transmit(TxChan, PacketByte, Rx_RSSI, MaxWait)) TX_Credit-=5;       // attempt to transmit the packet
   ReceiveUntil(End);                                                       // listen till the end of the time-slot
 }
@@ -479,7 +480,7 @@ extern "C"
     bool WANtx = 0;
     uint16_t SlotEnd = 1240;
     if(WAN_BackOff) WAN_BackOff--;
-    else                                                                       // decide to transmit in this slot
+    else if(Parameters.TxPower!=(-32))                                         // decide to transmit in this slot
     { if(WANdev.State==0 || WANdev.State==2)                                   //
       { WANtx=1; SlotEnd=1200; }
     }
@@ -499,7 +500,7 @@ extern "C"
      OGN1_Packet TxPkt = TxPkt0->Packet;
      TxPkt.Dewhiten();
      XorShift32(RX_Random);
-     if(PAWtxBackOff==0 && !TxPkt.Header.Relay && Packet.Copy(TxPkt) && TxPkt.Position.Time<60)
+     if(PAWtxBackOff==0 && Parameters.TxPower!=(-32) && !TxPkt.Header.Relay && Packet.Copy(TxPkt) && TxPkt.Position.Time<60)
      { TRX.setModeStandby();
        TRX.PAW_Configure(PAW_SYNC);
        TRX.WriteTxPower(Parameters.TxPower+6);
