@@ -124,7 +124,11 @@ void app_main(void)
     xTaskCreate(vTaskSTX,  "STX",  4000, 0, tskIDLE_PRIORITY+3, 0);
 #endif
 #ifdef WITH_AP
-    if(Parameters.APname[0])
+#ifdef WITH_AP_BUTTON
+    if(Button_isPressed() && Parameters.APname[0]) // start WiFi AP when button pressed during startup and APname non-empty
+#else
+    if(Parameters.APname[0]) // start WiFi AP when APname non-empty
+#endif
       xTaskCreate(vTaskAP,  "AP",  4000, 0, tskIDLE_PRIORITY+3, 0);
 #endif
 #if defined(WITH_OLED) || defined(WITH_U8G2_OLED) || defined(WITH_ST7789) || defined(WITH_ILI9341)

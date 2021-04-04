@@ -178,6 +178,7 @@ void LED_RX_Flash(uint8_t Time=100);
 
 void LED_TimerCheck(uint8_t Ticks=1);
 
+bool Button_isPressed(void);
 // extern bool Button_SleepRequest;
 int32_t Button_TimerCheck(uint8_t Ticks=1);
 

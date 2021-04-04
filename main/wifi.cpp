@@ -78,8 +78,8 @@ esp_err_t WIFI_StartAP(const char *SSID, const char *Pass, int MaxConnections)
   // IP4_ADDR(&IPinfo.gw, 192,168,1,1);
   // IP4_ADDR(&IPinfo.netmask, 255,255,255,0);
   // tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_AP, &IPinfo);
+  Err = esp_wifi_set_mode(WIFI_MODE_AP); if(Err!=ESP_OK) return Err;                   // which one should come first: set_mode or set_config ?
   Err = esp_wifi_set_config(ESP_IF_WIFI_AP, &WIFI_Config); if(Err!=ESP_OK) return Err;
-  Err = esp_wifi_set_mode(WIFI_MODE_AP); if(Err!=ESP_OK) return Err;
   Err = esp_wifi_start();
   return Err; }
 
