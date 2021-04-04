@@ -44,92 +44,126 @@ static void SelectList(httpd_req_t *Req, const char *Name, const char **List, in
     httpd_resp_send_chunk(Req, Line, Len); }
   httpd_resp_sendstr_chunk(Req, "</select>\n"); }
 
+static void Begin_Control_Row(httpd_req_t *Req, const char *Label)
+{
+  httpd_resp_sendstr_chunk(Req, "<div class=\"control-row\">\n<label>");
+  httpd_resp_sendstr_chunk(Req, Label);
+  httpd_resp_sendstr_chunk(Req, "</label><div class=\"input\">\n");
+}
+static void End_Control_Row(httpd_req_t *Req)
+{
+  httpd_resp_sendstr_chunk(Req, "\n</div></div>\n");
+}
+
 // HTML form for the Info parameters
 static void ParmForm_Info(httpd_req_t *Req)
 {
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Info\">\n<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Info</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "<h2>Info</h2>");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Info\">\n");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Pilot</td><td><input type=\"text\" name=\"Pilot\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Pilot");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"Pilot\" size=\"10\" value=\"");
   if(Parameters.Pilot[0]) httpd_resp_sendstr_chunk(Req, Parameters.Pilot);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Crew</td><td><input type=\"text\" name=\"Crew\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Crew");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"Crew\" size=\"10\" value=\"");
   if(Parameters.Crew[0]) httpd_resp_sendstr_chunk(Req, Parameters.Crew);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Base airfield</td><td><input type=\"text\" name=\"Base\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Base airfield");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"Base\" size=\"10\" value=\"");
   if(Parameters.Base[0]) httpd_resp_sendstr_chunk(Req, Parameters.Base);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Registration</td><td><input type=\"text\" name=\"Reg\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Registration");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"Reg\" size=\"10\" value=\"");
   if(Parameters.Reg[0]) httpd_resp_sendstr_chunk(Req, Parameters.Reg);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Manufacturer</td><td><input type=\"text\" name=\"Manuf\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Manufacturer");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"Manuf\" size=\"10\" value=\"");
   if(Parameters.Manuf[0]) httpd_resp_sendstr_chunk(Req, Parameters.Manuf);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Model</td><td><input type=\"text\" name=\"Model\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Model");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"Model\" size=\"10\" value=\"");
   if(Parameters.Model[0]) httpd_resp_sendstr_chunk(Req, Parameters.Model);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Type</td><td><input type=\"text\" name=\"Type\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Type");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"Type\" size=\"10\" value=\"");
   if(Parameters.Type[0]) httpd_resp_sendstr_chunk(Req, Parameters.Type);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
+  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Apply\"></div>\n");
+  httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 
 // HTML form for the Aircraft identification: address, address-type, aircraft-type
 static void ParmForm_Acft(httpd_req_t *Req)
 { char Line[16];
 
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Acft\">\n<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Aircraft</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "<h2>Aircraft</h2>");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Acft\">\n");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Address</td><td><input type=\"text\" name=\"Address\" size=\"10\" value=\"0x");
+  Begin_Control_Row(Req, "Address");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"Address\" size=\"10\" value=\"0x");
   Format_Hex(Line, (uint8_t)(Parameters.Address>>16)); Format_Hex(Line+2, (uint16_t)Parameters.Address);
   httpd_resp_send_chunk(Req, Line, 6);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
+  Begin_Control_Row(Req, "Addr-Type");
   const char *AddrTypeTable[4] = { "Random", "ICAO", "FLARM", "OGN" } ;
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Addr-Type</td><td>\n");
   SelectList(Req, "AddrType", AddrTypeTable, 4, Parameters.AddrType);
-  httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
+  End_Control_Row(Req);
 
+  Begin_Control_Row(Req, "Acft-Type");
   const char *AcftTypeTable[16] = { "Unknown", "(moto)Glider", "Tow-plane", "Helicopter", "Parachute", "Drop-plane", "Hang-glider", "Para-glider",
                                     "Powered-aircraft", "Jet-aircraft", "UFO", "Balloon", "Airship", "UAV/drone", "Ground support", "Static object" } ;
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Acft-Type</td><td>\n");
   SelectList(Req, "AcftType", AcftTypeTable, 16, Parameters.AcftType);
-  httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
+  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Apply\"></div>\n");
+  httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 
 static void ParmForm_GPS(httpd_req_t *Req)  // produce HTML form for GPS parameters
 { char Line[16]; int Len;
 
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"GPS\">\n<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
 #ifdef WITH_GPS_UBX
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>GPS: UBX</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "<h2>GPS: UBX</h2>");
 #else
 #ifdef WITH_GPS_MTK
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>GPS: MTK</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "<h2>GPS: MTK</h2>");
 #else
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>GPS</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "<h2>GPS</h2>");
 #endif
 #endif
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"GPS\">\n");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Nav. rate [Hz]</td><td><input type=\"text\" name=\"NavRate\" size=\"10\" value=\"");
+
+  Begin_Control_Row(Req, "Nav. rate [Hz]");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"NavRate\" size=\"10\" value=\"");
   Len=Format_UnsDec(Line, Parameters.NavRate);
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Nav. mode</td><td><input type=\"text\" name=\"NavMode\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Nav. mode");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"NavMode\" size=\"10\" value=\"");
   Len=Format_UnsDec(Line, Parameters.NavMode);
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Geoid-Separ.</td><td>\n");
+  Begin_Control_Row(Req, "Geoid-Separ.");
 
   const char *GeoidSeparTable[2] = { "GPS", "Override" } ;
   SelectList(Req, "manGeoidSepar", GeoidSeparTable, 2, Parameters.manGeoidSepar);
@@ -138,127 +172,166 @@ static void ParmForm_GPS(httpd_req_t *Req)  // produce HTML form for GPS paramet
   Len=Format_SignDec(Line, Parameters.GeoidSepar, 2, 1, 1);
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\">\n");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
-
-  httpd_resp_sendstr_chunk(Req, "<tr><td>GNSS mode</td><td><input type=\"text\" name=\"GNSS\" size=\"10\" value=\"0x");
+  Begin_Control_Row(Req, "GNSS mode");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"GNSS\" size=\"10\" value=\"0x");
   Len=Format_Hex(Line, Parameters.GNSS);
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>PPS delay [ms]</td><td><input type=\"text\" name=\"PPSdelay\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "PPS delay [ms]");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"PPSdelay\" size=\"10\" value=\"");
   Len=Format_UnsDec(Line, Parameters.PPSdelay);
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
+  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Apply\"></div>\n");
+  httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 
 static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for aircraft parameters
 { char Line[16]; int Len;
 
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Other\">\n<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Other</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "<h2>Other</h2>");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Other\">\n");
 
+  Begin_Control_Row(Req, "Freq. plan");
   const char *FreqPlanTable[6] = { "Auto", "Europe/Africa", "USA/Canada", "Australia/Chile", "New Zeeland", "Izrael" };
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Freq. plan</td><td>\n");
   SelectList(Req, "FreqPlan", FreqPlanTable, 6, Parameters.FreqPlan);
-  httpd_resp_sendstr_chunk(Req, "</td></tr>\n");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Tx power [dBm]</td><td><input type=\"text\" name=\"TxPower\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Tx power [dBm]");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"TxPower\" size=\"10\" value=\"");
   Len=Format_SignDec(Line, (int16_t)Parameters.TxPower, 1, 0, 1);
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Freq.corr. [ppm]</td><td><input type=\"text\" name=\"RFchipFreqCorr\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Freq.corr. [ppm]");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"RFchipFreqCorr\" size=\"10\" value=\"");
   Len=Format_SignDec(Line, Parameters.RFchipFreqCorr, 2, 1, 1);
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Console baud</td><td><input type=\"text\" name=\"CONbaud\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Console baud");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"CONbaud\" size=\"10\" value=\"");
   Len=Format_UnsDec(Line, Parameters.CONbaud);
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Verbose</td><td><input type=\"text\" name=\"Verbose\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Verbose");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"Verbose\" size=\"10\" value=\"");
   Len=Format_UnsDec(Line, (uint16_t)Parameters.Verbose);
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Page sel. mask</td><td><input type=\"text\" name=\"PageMask\" size=\"10\" value=\"0x");
+  Begin_Control_Row(Req, "Page sel. mask");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"PageMask\" size=\"10\" value=\"0x");
   Len=Format_Hex(Line, Parameters.PageMask);
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
+  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Apply\"></div>\n");
+  httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 
 #ifdef WITH_STRATUX
 static void ParmForm_Stratux(httpd_req_t *Req) // Connection to Stratux WiFi parameters and options
 { char Line[16]; int Len;
 
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Stratux\">\n<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Stratux</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "<h2>Stratux</h2>");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Stratux\">\n");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>SSID</td><td><input type=\"text\" name=\"StratuxWIFI\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "SSID");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"StratuxWIFI\" size=\"10\" value=\"");
   if(Parameters.StratuxWIFI[0]) httpd_resp_sendstr_chunk(Req, Parameters.StratuxWIFI);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Password</td><td><input type=\"text\" name=\"StratuxPass\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Password");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"StratuxPass\" size=\"10\" value=\"");
   if(Parameters.StratuxPass[0]) httpd_resp_sendstr_chunk(Req, Parameters.StratuxPass);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>TCP host</td><td><input type=\"text\" name=\"StratuxHost\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "TCP host");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"StratuxHost\" size=\"10\" value=\"");
   if(Parameters.StratuxHost[0]) httpd_resp_sendstr_chunk(Req, Parameters.StratuxHost);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>TCP port</td><td><input type=\"text\" name=\"StratuxPort\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "TCP port");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"StratuxPort\" size=\"10\" value=\"");
   Len=Format_UnsDec(Line, Parameters.StratuxPort);
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Tx power [dBm]</td><td><input type=\"text\" name=\"StratuxTxPwr\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Tx power [dBm]");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"StratuxTxPwr\" size=\"10\" value=\"");
   Len=Format_UnsDec(Line, (10*Parameters.StratuxTxPwr+2)>>2, 2, 1);
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Min. RSSI [dBm]</td><td><input type=\"text\" name=\"StratuxMinSig\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Min. RSSI [dBm]");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"StratuxMinSig\" size=\"10\" value=\"");
   Len=Format_SignDec(Line, Parameters.StratuxMinSig, 1, 0, 1);
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
+  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Apply\"></div>\n");
+  httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 #endif
 
 #ifdef WITH_AP
 static void ParmForm_AP(httpd_req_t *Req) // Wi-Fi access point parameters { char Line[16]; int Len;
 { char Line[16]; int Len;
 
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"AP\">\n<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Wi-Fi AP</th><td><input type=\"submit\" value=\"Apply\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "<h2>Wi-Fi AP</h2>");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"AP\">\n");
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>SSID</td><td><input type=\"text\" name=\"APname\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "SSID");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"APname\" size=\"10\" value=\"");
   if(Parameters.APname[0]) httpd_resp_sendstr_chunk(Req, Parameters.APname);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Password</td><td><input type=\"text\" name=\"APpass\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Password");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"APpass\" size=\"10\" value=\"");
   if(Parameters.APpass[0]) httpd_resp_sendstr_chunk(Req, Parameters.APpass);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Data port</td><td><input type=\"text\" name=\"APport\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Data port");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"APport\" size=\"10\" value=\"");
   Len=Format_UnsDec(Line, Parameters.APport);
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Tx power [dBm]</td><td><input type=\"text\" name=\"APtxPwr\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Tx power [dBm]");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"APtxPwr\" size=\"10\" value=\"");
   Len=Format_UnsDec(Line, (10*Parameters.APtxPwr+2)>>2, 2, 1);
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<tr><td>Min. RSSI [dBm]</td><td><input type=\"text\" name=\"APminSig\" size=\"10\" value=\"");
+  Begin_Control_Row(Req, "Min. RSSI [dBm]");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"APminSig\" size=\"10\" value=\"");
   Len=Format_SignDec(Line, Parameters.APminSig, 1, 0, 1);
   httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "</table></form>\n"); }
+  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Apply\"></div>\n");
+  httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 #endif
 
 // ============================================================================================================
@@ -269,8 +342,8 @@ static void Table_GPS(httpd_req_t *Req)
   uint32_t Sec = (Time-1)%60;
   GPS_Position *GPS = GPS_getPosition(Sec); if(GPS==0) return;
 
-  httpd_resp_sendstr_chunk(Req, "<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n\
-<tr><th>GPS</th><td></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "<h2>GPS</h2>");
+  httpd_resp_sendstr_chunk(Req, "<table class=\"table table-striped table-bordered\">\n");
 
   Len =Format_String(Line, "<tr><td>Date</td><td align=\"right\">");
   Len+=Format_UnsDec(Line+Len, GPS->Year+2000 , 4); Line[Len++]='.';
@@ -361,8 +434,9 @@ static void Table_GPS(httpd_req_t *Req)
 #ifdef WITH_LOOKOUT
 static void Table_LookOut(httpd_req_t *Req)
 { char Line[128]; int Len;
-  httpd_resp_sendstr_chunk(Req, "<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>LookOut</th><td align=\"center\"></td><td align=\"center\"></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "<h2>LookOut</h2>");
+  httpd_resp_sendstr_chunk(Req, "<table class=\"table table-striped table-bordered\">\n");
+  httpd_resp_sendstr_chunk(Req, "<thead><tr><th>LookOut</th><th>Time Margin</th><th>Distance</th></tr></thead>\n<tbody>\n");
 
   for( uint8_t Idx=0; Idx<Look.MaxTargets; Idx++)
   { const LookOut_Target *Tgt = Look.Target+Idx; if(!Tgt->Alloc) continue;
@@ -375,15 +449,16 @@ static void Table_LookOut(httpd_req_t *Req)
     Len+=Format_String(Line+Len, "km</td></tr>\n");
     httpd_resp_send_chunk(Req, Line, Len); }
 
-  httpd_resp_sendstr_chunk(Req, "</table>\n"); }
+  httpd_resp_sendstr_chunk(Req, "</tbody>\n</table>\n"); }
 #endif
 
 // -------------------------------------------------------------------------------------------------------------
 
 static void Table_Relay(httpd_req_t *Req)
 { char Line[128]; int Len;
-  httpd_resp_sendstr_chunk(Req, "<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Relay</th><td align=\"center\">Rank</td><td align=\"center\">[sec]</td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "<h2>Relay</h2>");
+  httpd_resp_sendstr_chunk(Req, "<table class=\"table table-striped table-bordered\">\n");
+  httpd_resp_sendstr_chunk(Req, "<thead><tr><th>Relay</th><th>Rank</th><th>[sec]</th></tr></thead>\n<tbody>\n");
 
   for( uint8_t Idx=0; Idx<RelayQueueSize; Idx++)
   { OGN_RxPacket<OGN_Packet> *Packet = RelayQueue.Packet+Idx; if(Packet->Rank==0) continue;
@@ -398,15 +473,16 @@ static void Table_Relay(httpd_req_t *Req)
     Len+=Format_String(Line+Len, "</td></tr>\n");
     httpd_resp_send_chunk(Req, Line, Len); }
 
-  httpd_resp_sendstr_chunk(Req, "</table>\n"); }
+  httpd_resp_sendstr_chunk(Req, "</tbody>\n</table>\n"); }
 
 // -------------------------------------------------------------------------------------------------------------
 
 static void Table_RF(httpd_req_t *Req)
 { char Line[128]; int Len;
 
-  httpd_resp_sendstr_chunk(Req, "<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  Len=Format_String(Line, "<tr><th><b>RF chip</th><td align=\"center\">");
+  httpd_resp_sendstr_chunk(Req, "<h2>RF chip</h2>");
+  httpd_resp_sendstr_chunk(Req, "<table class=\"table table-striped table-bordered\">\n");
+  Len=Format_String(Line, "<tr><td>RF chip</td><td align=\"right\">");
 #ifdef WITH_RFM69
   Len+=Format_String(Line+Len, "RFM69");
 #endif
@@ -466,8 +542,8 @@ static uint8_t BattCapacity(uint16_t mVolt)
 static void Table_Batt(httpd_req_t *Req)
 { char Line[128]; int Len;
 
-  httpd_resp_sendstr_chunk(Req, "<table border=\"1\" cellspacing=\"0\" cellpadding=\"2\">\n");
-  httpd_resp_sendstr_chunk(Req, "<tr><th><b>Battery</th><td></td></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "<h2>Battery</h2>");
+  httpd_resp_sendstr_chunk(Req, "<table class=\"table table-striped table-bordered\">\n");
 
   Len =Format_String(Line, "<td>Voltage</td><td align=\"right\">");
 #ifdef WITH_MAVLINK
@@ -534,20 +610,55 @@ static void Table_Batt(httpd_req_t *Req)
 
 // -------------------------------------------------------------------------------------------------------------
 
-static void Top_Bar(httpd_req_t *Req)
-{ char Line[32]; int Len;
+static void Html_Start(httpd_req_t *Req, const char *Title, const uint8_t ActiveMenuIndex)
+{
+  httpd_resp_sendstr_chunk(Req, "\
+<!DOCTYPE html>\n\
+<html>\n\
+<head>\n\
+<title>");
+  httpd_resp_sendstr_chunk(Req, Title);
+  httpd_resp_sendstr_chunk(Req, "</title>\n\
+<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n\
+<style>\n\
+html {margin: 0px;}\n\
+body {margin: 8px;}\n\
+h1#page-title {margin: 0; font-size: 28px; line-height: 36px;}\n\
+h2 {margin: 0.7em 0 0.3em 0;}\n\
+#top-menu {display: flex;margin-bottom: 8px;background: #cbcbcb;}\n\
+#top-menu > div > a,#top-menu > div > a:link {padding: 10px;display: block;color: #000000;}\n\
+#top-menu > div > a.active, #top-menu > div > a:hover {color: #f3f3f3;background: #2d2d2d;}\n\
+#content {padding-bottom: 30px;}\n\
+.table{border-collapse:collapse;border-spacing:0;empty-cells:show;border:1px solid #cbcbcb}.table td,.table th{border-left:1px solid #cbcbcb;border-bottom-width:0;border-right-width:0;border-top-width:0;font-size:inherit;margin:0;padding:6px;overflow:visible}.table thead{background-color:#e0e0e0;color:#000;text-align:left;vertical-align:bottom}.table td{background-color:transparent}.table-striped tr:nth-child(2n-1) td{background-color:#f2f2f2}.table-bordered td{border-bottom:1px solid #cbcbcb}.table-bordered tbody>tr:last-child>td{border-bottom-width:0}form{margin:0 0 20px 0}form .control-row{display:flex;margin:6px 0}form .control-row label{width:120px;text-align:right;margin-right:8px;display:block;font-weight:700}form .submit-row{padding-left:128px}\n\
+</style>\
+</head>\n\
+<body>\n\
+");
+  httpd_resp_sendstr_chunk(Req, "<h1 id=\"page-title\">OGN-Tracker</h1>\n");
 
-  httpd_resp_sendstr_chunk(Req, "<h2>OGN-Tracker</h2>\n");
-  httpd_resp_sendstr_chunk(Req, "<b>EUID: ");
-  Len=Format_Hex(Line, getUniqueID());
-  httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "</b><br />\n");
+  httpd_resp_sendstr_chunk(Req, "<div id=\"top-menu\">\n");
 
-  httpd_resp_sendstr_chunk(Req, "<table border=\"1\" cellspacing=\"5\" cellpadding=\"5\"><tr>\n\
-<th><a href=\"/\">Status</a></th>\n\
-<th><a href=\"/parm.html\">Configuration</a></th>\n\
-<th><a href=\"/log.html\">Log files</a></th>\n\
-</tr></table><br />\n");
+  httpd_resp_sendstr_chunk(Req, "<div><a href=\"/\"");
+  if(ActiveMenuIndex==1) httpd_resp_sendstr_chunk(Req, " class=\"active\"");
+  httpd_resp_sendstr_chunk(Req, ">Status</a></div>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<div><a href=\"/parm.html\"");
+  if(ActiveMenuIndex==2) httpd_resp_sendstr_chunk(Req, " class=\"active\"");
+  httpd_resp_sendstr_chunk(Req, ">Configuration</a></div>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<div><a href=\"/log.html\"");
+  if(ActiveMenuIndex==3) httpd_resp_sendstr_chunk(Req, " class=\"active\"");
+  httpd_resp_sendstr_chunk(Req, ">Log files</a></div>\n");
+
+  httpd_resp_sendstr_chunk(Req, "</div>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<div id=\"content\">\n");
+}
+
+static void Html_End(httpd_req_t *Req)
+{
+  httpd_resp_sendstr_chunk(Req, "</div>\n</body>\n</html>\n");
+  httpd_resp_send_chunk(Req, 0, 0);
 }
 
 // ============================================================================================================
@@ -576,56 +687,33 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
       Line++; }
     free(URL);
     Parameters.WriteToNVS(); }
-  httpd_resp_sendstr_chunk(Req, "\
-<!DOCTYPE html>\n\
-<html>\n\
-<head>\n\
-<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n\
-</head>\n\
-<body>\n\
-<title>OGN-Tracker configuration</title>\n\
-");
 
-  Top_Bar(Req);
+  Html_Start(Req, "OGN-Tracker configuration", 2);
 
-  httpd_resp_sendstr_chunk(Req, "<table>\n<tr><td>\n");
   ParmForm_Acft(Req);
-  httpd_resp_sendstr_chunk(Req, "</td></tr>\n<tr><td>\n");
   ParmForm_Info(Req);
-  httpd_resp_sendstr_chunk(Req, "</td></tr>\n<tr><td>\n");
   ParmForm_GPS(Req);
-  httpd_resp_sendstr_chunk(Req, "</td></tr>\n<tr><td>\n");
 #ifdef WITH_AP
   ParmForm_AP(Req);
-  httpd_resp_sendstr_chunk(Req, "</td></tr>\n<tr><td>\n");
 #endif
 #ifdef WITH_STRATUX
   ParmForm_Stratux(Req);
-  httpd_resp_sendstr_chunk(Req, "</td></tr>\n<tr><td>\n");
 #endif
   ParmForm_Other(Req);
-  httpd_resp_sendstr_chunk(Req, "</td></tr>\n<tr><td>\n");
+
   httpd_resp_sendstr_chunk(Req, "\
 <form action=\"/parm.html\" method=\"get\">\n\
 <input type=\"submit\" value=\"Reset to defaults\">\n\
 <input type=\"hidden\" name=\"Defaults\" value=\"1\">\n\
 </form>\n");
-  // httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\">\n");
-  // httpd_resp_sendstr_chunk(Req, "<input type=\"submit\" value=\"Reset to defaults\">\n");
-  // httpd_resp_sendstr_chunk(Req, "<input type=\"hidden\" name=\"Defaults\" value=\"1\">\n");
-  // httpd_resp_sendstr_chunk(Req, "</form>\n");
+
   httpd_resp_sendstr_chunk(Req, "\
 <form action=\"/parm.html\" method=\"get\">\n\
 <input type=\"submit\" value=\"Restart\">\n\
 <input type=\"hidden\" name=\"Restart\" value=\"1\">\n\
 </form>\n");
-  // httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\">\n");
-  // httpd_resp_sendstr_chunk(Req, "<input type=\"submit\" value=\"Restart\">\n");
-  // httpd_resp_sendstr_chunk(Req, "<input type=\"hidden\" name=\"Restart\" value=\"1\">\n");
-  // httpd_resp_sendstr_chunk(Req, "</form>\n");
-  httpd_resp_sendstr_chunk(Req, "</td></tr>\n</table>\n");
-  httpd_resp_sendstr_chunk(Req, "</body>\n</html>\n");
-  httpd_resp_send_chunk(Req, 0, 0);
+
+  Html_End(Req);
 
   if(Restart)
   {
@@ -639,28 +727,23 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
 
 static esp_err_t top_get_handler(httpd_req_t *Req)
 {
-  httpd_resp_sendstr_chunk(Req, "\
-<!DOCTYPE html>\n\
-<html><body>\n\
-<title>OGN-Tracker status</title>\n\
-");
+  Html_Start(Req, "OGN-Tracker status", 1);
 
-  Top_Bar(Req);
+  char Line[32]; int Len;
+  httpd_resp_sendstr_chunk(Req, "<b>EUID: ");
+  Len=Format_Hex(Line, getUniqueID());
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "</b><br />\n");
 
   Table_GPS(Req);
-  httpd_resp_sendstr_chunk(Req, "<br />\n");
   Table_RF(Req);
-  httpd_resp_sendstr_chunk(Req, "<br />\n");
   Table_Batt(Req);
 #ifdef WITH_LOOKOUT
-  httpd_resp_sendstr_chunk(Req, "<br />\n");
   Table_LookOut(Req);
 #endif
-  httpd_resp_sendstr_chunk(Req, "<br />\n");
   Table_Relay(Req);
 
-  httpd_resp_sendstr_chunk(Req, "</body></html>\n");
-  httpd_resp_sendstr_chunk(Req, 0);
+  Html_End(Req);
   return ESP_OK; }
 
 static int Format_DateTime(char *Out, time_t Time)
@@ -842,17 +925,7 @@ static esp_err_t log_get_handler(httpd_req_t *Req)
         return SendLog_TLG(Req, FullName, Time); }
     }
   }
-  httpd_resp_sendstr_chunk(Req, "\
-<!DOCTYPE html>\n\
-<html>\n\
-<head>\n\
-<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n\
-</head>\n\
-<body>\n\
-<title>OGN-Tracker log files</title>\n\
-");
-
-  Top_Bar(Req);
+  Html_Start(Req, "OGN-Tracker log files", 3);
 
   std::vector<uint32_t> FileList;                               // list of log files
   DIR *Dir=opendir(Path);                                       // open the log file directory
@@ -870,7 +943,7 @@ static esp_err_t log_get_handler(httpd_req_t *Req)
   closedir(Dir);
   std::sort(FileList.begin(), FileList.end());
 
-  httpd_resp_sendstr_chunk(Req, "<table>\n<tr><th>File</th><th></th><th></th><th>[KB]</th><th>Date</th></tr>\n");
+  httpd_resp_sendstr_chunk(Req, "<table class=\"table table-bordered table-striped\">\n<thead><tr><th>File</th><th></th><th></th><th>[KB]</th><th>Date</th></tr></thead>\n<tbody>\n");
   for(size_t Idx=0; Idx<FileList.size(); Idx++)
   { uint32_t Time=FileList[Idx];
     char Name[16];
@@ -895,10 +968,9 @@ static esp_err_t log_get_handler(httpd_req_t *Req)
     Len+=Format_String(Line+Len, "</td></tr>\n");
     httpd_resp_send_chunk(Req, Line, Len);
     vTaskDelay(1); }
-  httpd_resp_sendstr_chunk(Req, "</table>\n");
+  httpd_resp_sendstr_chunk(Req, "</tbody></table>\n");
 
-  httpd_resp_sendstr_chunk(Req, "</body>\n</html>\n");
-  httpd_resp_send_chunk(Req, 0, 0);
+  Html_End(Req);
   return ESP_OK; }
 
 static esp_err_t logo_get_handler(httpd_req_t *Req)
