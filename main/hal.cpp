@@ -170,45 +170,45 @@ PSRM32 = SDIO ?
 /*
 https://randomnerdtutorials.com/esp32-pinout-reference-gpios/
 
-GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    FollowMe   Restrictions
+GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    FollowMe   OGN_AKR             Restrictions
 
- 0    Button      Button                .           LCD/DC     LCD/DC                  Can lock the boot, better not pull it down
- 1    CONS/TxD    CONS/TxD   CONS/TxD   CONS/TxD    CONS/TxD   CONS/TxD                Console/Program
- 2                           SD/MISO    .           LCD/MOSI   LCD/MOSI     LED/DBG    Bootstrap: LOW to enter UART download mode
- 3    CONS/RxD    CONS/RxD   CONS/RxD   CONS/RxD    CONS/RxD   CONS/RxD                Console/Program
- 4    OLED/SDA    OLED/SDA   ADC/CS                 LCD/BCKL   LCD/BCKL     PERF/RST
- 5    RF/SCK      RF/SCK     RF/SCK     GPS/ANT     RF/SCK     RF/SCK       RF/CS                          PWM at boot
- 6                                      SD/CLK                              SD/CLK     SD/CLK              SPI flash
- 7                                      SD/DATA0                                       SD/DATA0            SPI flash
- 8                                      SD/DATA1                                       SD/DATA1            SPI flash
- 9                                      SD/DATA2                                       SD/DATA2            SPI flash
-10                                      SD/DATA3                                       SD/DATA3            SPI flash
-11                                      SD/CMD                              SD/CMD     SD/CMD              SPI flash
-12    GPS/RxD     GPS/RxD    SD/CS      GPS/RxD                GPS/TxD      SD/MISO    HSPI/MISO JTAG/TDI  Bootstrap: select output voltage to power the flash chip
-13    GPS/Ena     GPS/Ena    SD/SCK     LCD/SCL     LCD/CLK    LCD/CLK      SD/MOSI    HSPI/MOSI JTAG/TCK
-14    RF/RST      RF/RST     Beeper     ?           LED/PCB    .            SD/CLK     HSPI/CLK  JTAG/TMS  PWM at boot
-15    OLED/SCL    OLED/SCL   SD/MOSI    GPS/TxD                .            HSPI/CS0   JTAG/TDO            PWM at boot
-16    OLED/RST    OLED/RST   RF/IRQ                 GPS/Tx     RAM/CS       GPS/TX     U2_RXD
-17    Beeper      Beeper     RF/RST                 GPS/Rx     Beeper       GPS/RX     U2_TXD
-18    RF/CS       RF/CS      RF/MISO    RF/CS       RF/SCK     RF/CS                   VSPI/CLK
-19    RF/MISO     RF/MISO    RF/MOSI    RF/MISO     RF/MISO    RF/MISO      RF/MISO    VSPI/MISO
-20                                                                                     not listed
-21                LED?       RF/CS      I2C/SCL     I2C/SDA    I2C/SDA      I2C/SDA    VSPI/QUADHP
-22                .          PWR/ON     I2C/SDA     I2C/CLK    I2C/SCL                 VSPI/QUADWP
-23                .          PWR/LDO    RF/RST      RF/MOSI    RF/RST       RF/MOSI    VSPI/MOSI
-24                                                                                     not listed
-25    LED         Speaker    .          Speaker     Speaker    Speaker      TT/RX
-26    RF/IRQ      RF/IRQ     SCL        RF/IRQ      RF/IRQ     RF/IRQ       PWR/Good
-27    RF/MOSI     RF/MOSI    SDA                    RF/MOSI    RF/MOSI      TT/TX
-28                                                                                     not listed
-29                                                                                     not listed
-30                                                                                     not listed
-31                                                                                     not listed
-32    .           .          GPS/TxD    ?                      .            TT/RST     XTAL
-33    .           .          OLED/RST   ?                      .            GPS/EN     XTAL
-34    GPS/PPS     GPS/PPS    GPS/RxD    KNOB/Sense             GPS/TxD      GPS/PPS
-35    GPS/TxD     GPS/TxD    GPS/PPS    BAT/Sense              AXP/IRQ      RF/IRQ
-36    .           .          BAT/Sense  BAT/Ext.               .            Vbat/Sense
+ 0    Button      Button                .           LCD/DC     LCD/DC                  .                   Can lock the boot, better not pull it down
+ 1    CONS/TxD    CONS/TxD   CONS/TxD   CONS/TxD    CONS/TxD   CONS/TxD                CONS/TxD            Console/Program
+ 2                           SD/MISO    .           LCD/MOSI   LCD/MOSI     LED/DBG    LED/DBG             Bootstrap: LOW to enter UART download mode
+ 3    CONS/RxD    CONS/RxD   CONS/RxD   CONS/RxD    CONS/RxD   CONS/RxD                CONS/RxD            Console/Program
+ 4    OLED/SDA    OLED/SDA   ADC/CS                 LCD/BCKL   LCD/BCKL     PERF/RST   RF_RST
+ 5    RF/SCK      RF/SCK     RF/SCK     GPS/ANT     RF/SCK     RF/SCK       RF/CS      RF/CS               PWM at boot
+ 6                                      SD/CLK                              SD/CLK                         SD/CLK              SPI flash
+ 7                                      SD/DATA0                                                           SD/DATA0            SPI flash
+ 8                                      SD/DATA1                                                           SD/DATA1            SPI flash
+ 9                                      SD/DATA2                                                           SD/DATA2            SPI flash
+10                                      SD/DATA3                                                           SD/DATA3            SPI flash
+11                                      SD/CMD                              SD/CMD                         SD/CMD              SPI flash
+12    GPS/RxD     GPS/RxD    SD/CS      GPS/RxD                GPS/TxD      SD/MISO    SD/MISO             HSPI/MISO JTAG/TDI  Bootstrap: select output voltage to power the flash chip
+13    GPS/Ena     GPS/Ena    SD/SCK     LCD/SCL     LCD/CLK    LCD/CLK      SD/MOSI    SD/MOSI             HSPI/MOSI JTAG/TCK
+14    RF/RST      RF/RST     Beeper     ?           LED/PCB    .            SD/CLK     SD/SCK              HSPI/CLK  JTAG/TMS  PWM at boot
+15    OLED/SCL    OLED/SCL   SD/MOSI    GPS/TxD                .            HSPI/CS0   SD/CS               JTAG/TDO            PWM at boot
+16    OLED/RST    OLED/RST   RF/IRQ                 GPS/Tx     RAM/CS       GPS/TX     GPS/TX              U2_RXD
+17    Beeper      Beeper     RF/RST                 GPS/Rx     Beeper       GPS/RX     GPS/RX              U2_TXD
+18    RF/CS       RF/CS      RF/MISO    RF/CS       RF/SCK     RF/CS                   RF/SCK              VSPI/CLK
+19    RF/MISO     RF/MISO    RF/MOSI    RF/MISO     RF/MISO    RF/MISO      RF/MISO    RF/MISO             VSPI/MISO
+20                                                                                                         not listed
+21                LED?       RF/CS      I2C/SCL     I2C/SDA    I2C/SDA      I2C/SDA    I2C/SDA             VSPI/QUADHP
+22                .          PWR/ON     I2C/SDA     I2C/CLK    I2C/SCL                 I2C/SCL             VSPI/QUADWP
+23                .          PWR/LDO    RF/RST      RF/MOSI    RF/RST       RF/MOSI    RF/MOSI             VSPI/MOSI
+24                                                                                                         not listed
+25    LED         Speaker    .          Speaker     Speaker    Speaker      TT/RX      Speaker
+26    RF/IRQ      RF/IRQ     SCL        RF/IRQ      RF/IRQ     RF/IRQ       PWR/Good   EncoderA
+27    RF/MOSI     RF/MOSI    SDA                    RF/MOSI    RF/MOSI      TT/TX      EncoderB
+28                                                                                                         not listed
+29                                                                                                         not listed
+30                                                                                                         not listed
+31                                                                                                         not listed
+32    .           .          GPS/TxD    ?                      .            TT/RST     GPS/PPS             XTAL
+33    .           .          OLED/RST   ?                      .            GPS/EN     RF/IRQ              XTAL
+34    GPS/PPS     GPS/PPS    GPS/RxD    KNOB/Sense             GPS/TxD      GPS/PPS    Button
+35    GPS/TxD     GPS/TxD    GPS/PPS    BAT/Sense              AXP/IRQ      RF/IRQ     Vbat/Sense
+36    .           .          BAT/Sense  BAT/Ext.               .            Vbat/Sense LED/TX
 37    .           .                                            GPS/PPS
 38    .           .          Button                                         Button
 39    .           .                     Button      Button     Button
@@ -235,6 +235,11 @@ GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    Foll
 #ifdef WITH_BQ
 #define PIN_POWER_GOOD GPIO_NUM_26
 #endif
+#endif
+
+#ifdef WITH_OGN_AKR
+#define PIN_LED_PCB  GPIO_NUM_2   // debug LED
+#define PIN_LED_TX   GPIO_NUM_36  // debug LED
 #endif
 
 // #define PIN_LED_TX   GPIO_NUM_??
@@ -290,6 +295,15 @@ GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    Foll
 #define PIN_RFM_MISO GPIO_NUM_19  // SPI MISO
 #define PIN_RFM_MOSI GPIO_NUM_23  // SPI MOSI
 #endif // FollowMe
+
+#ifdef WITH_OGN_AKR
+#define PIN_RFM_IRQ  GPIO_NUM_33  // 39 // packet done on receive or transmit
+#define PIN_RFM_SS   GPIO_NUM_5   // SPI chip-select
+#define PIN_RFM_SCK  GPIO_NUM_18  // SPI clock
+#define PIN_RFM_MISO GPIO_NUM_19  // SPI MISO
+#define PIN_RFM_MOSI GPIO_NUM_23  // SPI MOSI
+#define PIN_RFM_RST  GPIO_NUM_4   // RFM RESET
+#endif
 
 #define RFM_SPI_HOST  VSPI_HOST   // or H or VSPI_HOST ?
 #define RFM_SPI_DMA   1           // DMA channel
@@ -378,6 +392,12 @@ GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    Foll
 #define PIN_PERIPH_RST GPIO_NUM_4   // Reset: high-active
 #endif
 
+#ifdef WITH_OGN_AKR              // L86-M33 GPS with PPS
+#define PIN_GPS_TXD  GPIO_NUM_17
+#define PIN_GPS_RXD  GPIO_NUM_16
+#define PIN_GPS_PPS  GPIO_NUM_32  // high active
+#endif
+
 #define CONS_UART UART_NUM_0      // UART0 for the console (the system does this for us)
 #define GPS_UART  UART_NUM_1      // UART1 for GPS data read and dialog
 
@@ -396,10 +416,10 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 #define PIN_I2C_SDA GPIO_NUM_27   // SDA pin
 #endif // JACEK
 
-#ifdef WITH_M5_JACEK
+#if defined(WITH_M5_JACEK) || defined(WITH_OGN_AKR)
 #define PIN_I2C_SCL GPIO_NUM_22   // SCL pin
 #define PIN_I2C_SDA GPIO_NUM_21   // SDA pin
-#endif // M5_JACEK
+#endif // M5_JACEK || WITH_OGN_AKR
 
 #if defined(WITH_HELTEC) || defined(WITH_HELTEC_V2) || defined(WITH_TTGO)
 #define PIN_I2C_SCL GPIO_NUM_15   // SCL pin
@@ -459,6 +479,10 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 #define PIN_BEEPER    GPIO_NUM_17
 #endif // HELTEC || TTGO
 
+#ifdef WITH_OGN_AKR
+#define PIN_BEEPER    GPIO_NUM_25
+#endif
+
 #ifdef WITH_M5_JACEK
 
 #define PIN_GPS_ANT   GPIO_NUM_5  // internal(H) or external(L) GPS antenna
@@ -478,13 +502,13 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 #undef PIN_I2C_SDA
 #endif
 
-#ifdef WITH_FollowMe
+#if defined(WITH_FollowMe) || defined(WITH_OGN_AKR)
 #define PIN_SD_MISO   GPIO_NUM_12 // SD card in simple SPI mode, using HSPI IOMUX pins
 #define PIN_SD_MOSI   GPIO_NUM_13
 #define PIN_SD_SCK    GPIO_NUM_14
 #define PIN_SD_CS     GPIO_NUM_15
 #define SD_SPI_DMA              2
-#endif // FollowMe
+#endif // FollowMe || WITH_OGN_AKR
 
 #ifdef WITH_M5_JACEK              // the three buttons below the LCD
 
@@ -504,6 +528,10 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 
 #ifdef WITH_JACEK
 #define PIN_BUTTON    GPIO_NUM_38
+#endif
+
+#ifdef WITH_OGN_AKR
+#define PIN_BUTTON    GPIO_NUM_34
 #endif
 
 #if defined(WITH_TTGO) || defined(WITH_HELTEC) || defined(WITH_HELTEC_V2)
@@ -923,7 +951,7 @@ void RFM_RESET_SetOutput (void)         { gpio_set_direction(PIN_RFM_RST, GPIO_M
 void RFM_RESET_SetLevel  (uint8_t High) { gpio_set_level(PIN_RFM_RST, High&1); }
 
 #if defined(WITH_RFM95) || defined(WITH_SX1272) || defined(WITH_SX1262) // for RFM95 reset is low-active
-void RFM_RESET(uint8_t On) { if(On&1) { RFM_RESET_SetOutput(); RFM_RESET_SetLevel(0); } else RFM_RESET_SetInput(); }
+void RFM_RESET(uint8_t On) { if(On&1) { RFM_RESET_SetOutput(); RFM_RESET_SetLevel(0); } else { RFM_RESET_SetOutput(); RFM_RESET_SetLevel(1); } }
 #endif
 
 #ifdef WITH_RFM69       // for RFM69 reset is high-active
