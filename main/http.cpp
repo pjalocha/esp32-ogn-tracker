@@ -787,35 +787,42 @@ static esp_err_t SendLog_IGC(httpd_req_t *Req, const char *FileName, uint32_t Fi
   httpd_resp_set_hdr(Req, "Content-Disposition", ContDisp);
   httpd_resp_set_type(Req, "text/plain");
   FILE *File = fopen(FileName, "rb"); if(File==0) { httpd_resp_send_chunk(Req, 0, 0); return ESP_OK; }
-  Len=Format_String(Line, "AGNE001Tracker\nHFFXA020\n");         // IGC file header
-  Len+=Format_String(Line+Len, "HFDTEDate:");
+  Len=Format_String(Line, "AXXX ESP32-OGN-TRACKER\nHFFXA020\n");         // IGC file header
+  Len+=Format_String(Line+Len, "HFDTE");
   GPS_Time Time; Time.setUnixTime(FileTime);
   Len+=Format_UnsDec(Line+Len, (uint16_t)Time.Day  , 2);
   Len+=Format_UnsDec(Line+Len, (uint16_t)Time.Month, 2);
   Len+=Format_UnsDec(Line+Len, (uint16_t)Time.Year , 2);
   Line[Len++]='\n';
   if(Parameters.Pilot[0])
-  { Len+=Format_String(Line+Len, "HFPLTPilotincharge:");
+  { Len+=Format_String(Line+Len, "HFPLTPILOTINCHARGE:");
     Len+=Format_String(Line+Len, Parameters.Pilot);
     Line[Len++]='\n'; }
+  if(Parameters.Manuf[0])
+  { Len+=Format_String(Line+Len, "HFGTYGLIDERTYPE:");
+    Len+=Format_String(Line+Len, Parameters.Manuf);
+    if(Parameters.Model[0])
+    { Len+=Format_String(Line+Len, " ");
+      Len+=Format_String(Line+Len, Parameters.Model); }
+    Line[Len++]='\n'; }
   if(Parameters.Reg[0])
-  { Len+=Format_String(Line+Len, "HFGIDGliderID:");
+  { Len+=Format_String(Line+Len, "HFGIDGLIDERID:");
     Len+=Format_String(Line+Len, Parameters.Reg);
     Line[Len++]='\n'; }
 #ifdef WITH_FollowMe
-  Len+=Format_String(Line+Len, "HFRHWHardwareVersion:FollowMe\n");
+  Len+=Format_String(Line+Len, "HFRHWHARDWAREVERSION:FollowMe\n");
 #else
-  Len+=Format_String(Line+Len, "HFRHWHardwareVersion:ESP32+LoRa\n");     // hardware version
+  Len+=Format_String(Line+Len, "HFRHWHARDWAREVERSION:ESP32+LoRa\n");     // hardware version
 #endif
-  Len+=Format_String(Line+Len, "HFRFWFirmwareVersion:ESP32-OGN-TRACKER " __DATE__ " " __TIME__ "\n");
+  Len+=Format_String(Line+Len, "HFRFWFIRMWAREVERSION:ESP32-OGN-TRACKER " __DATE__ " " __TIME__ "\n");
 #ifdef WITH_BMP180
-  Len+=Format_String(Line+Len, "HFPRSPressAltSensor:BMP180\n");        // pressure sensor
+  Len+=Format_String(Line+Len, "HFPRSPRESSALTSENSOR:BMP180\n");        // pressure sensor
 #endif
 #ifdef WITH_BMP280
-  Len+=Format_String(Line+Len, "HFPRSPressAltSensor:BMP280\n");        // pressure sensor
+  Len+=Format_String(Line+Len, "HFPRSPRESSALTSENSOR:BMP280\n");        // pressure sensor
 #endif
 #ifdef WITH_BME280
-  Len+=Format_String(Line+Len, "HFPRSPressAltSensor:BME280/BMP280\n"); // pressure sensor
+  Len+=Format_String(Line+Len, "HFPRSPRESSALTSENSOR:BME280/BMP280\n"); // pressure sensor
 #endif
   Len+=Format_String(Line+Len, "LOGN");
   Len+=Format_HHMMSS(Line+Len, FileTime);
