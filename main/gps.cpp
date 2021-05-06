@@ -308,14 +308,18 @@ static void GPS_BurstStart(int CharDelay=0)  // when GPS starts sending the data
         }
 #endif
 #ifdef WITH_GPS_MTK
+        Format_String(GPS_UART_Write, "\r\n\r\n");                     // apparently this is needed, otherwise the next command is missed
         if(Parameters.NavRate)
-        { uint8_t Len = Format_String(GPS_Cmd, "$PMTK220,");                   // navigation rate
+        { // uint8_t Len = Format_String(GPS_Cmd, "$PMTK220,");                   // report rate
+          uint8_t Len = Format_String(GPS_Cmd, "$PMTK300,");                   // fix rate
           uint16_t OneSec = 1000;
           Len += Format_UnsDec(GPS_Cmd+Len, OneSec/Parameters.NavRate);
+          Len += Format_String(GPS_Cmd+Len, ",0,0,0,0");
           Len += NMEA_AppendCheck(GPS_Cmd, Len);
           GPS_Cmd[Len++]='\r';
           GPS_Cmd[Len++]='\n';
           GPS_Cmd[Len]=0;
+          // Format_String(CONS_UART_Write, GPS_Cmd, Len, 0); // for debug
           Format_String(GPS_UART_Write, GPS_Cmd, Len, 0);
           GPS_Status.ModeConfig=1; }
         if(Parameters.NavMode)
@@ -325,6 +329,7 @@ static void GPS_BurstStart(int CharDelay=0)  // when GPS starts sending the data
           GPS_Cmd[Len++]='\r';
           GPS_Cmd[Len++]='\n';
           GPS_Cmd[Len]=0;
+          // Format_String(CONS_UART_Write, GPS_Cmd, Len, 0);  // for debug
           Format_String(GPS_UART_Write, GPS_Cmd, Len, 0);
           GPS_Status.ModeConfig=1; }
         if(Parameters.GNSS)
@@ -342,6 +347,7 @@ static void GPS_BurstStart(int CharDelay=0)  // when GPS starts sending the data
           GPS_Cmd[Len++]='\r';
           GPS_Cmd[Len++]='\n';
           GPS_Cmd[Len]=0;
+          // Format_String(CONS_UART_Write, GPS_Cmd, Len, 0); // for debug
           Format_String(GPS_UART_Write, GPS_Cmd, Len, 0); }
 #endif
       }
