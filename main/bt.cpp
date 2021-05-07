@@ -2,9 +2,9 @@
 // ~/esp-idf/components/bt/bluedroid/api/include/esp_spp_api.h
 // esp_err_t esp_spp_write(uint32_t handle, int len, uint8_t *p_data);
 
-// #ifdef WITH_BT_SPP
-
 #include "hal.h"
+
+#ifdef WITH_BT_SPP
 
 #include "esp_bt.h"
 #include "esp_bt_main.h"
@@ -19,7 +19,7 @@ static const esp_spp_mode_t esp_spp_mode = ESP_SPP_MODE_CB;
 static const esp_spp_sec_t  sec_mask     = ESP_SPP_SEC_AUTHENTICATE;
 static const esp_spp_role_t role_slave   = ESP_SPP_ROLE_SLAVE;
 
-static FIFO<char, 1024> BT_SPP_TxFIFO;        // buffer for console output to be sent over BT
+static FIFO<char,   1024> BT_SPP_TxFIFO;      // buffer for console output to be sent over BT
 static FIFO<uint8_t, 256> BT_SPP_RxFIFO;      // buffer for BT data to be send to the console
 static uint32_t        BT_SPP_Conn = 0;       // BT incoming connection handle
 static uint32_t        BT_SPP_TxCong = 0;     // congestion control
@@ -215,6 +215,6 @@ int BT_SPP_Init(void)
 
   return Err; }
 
-// #endif // WITH_BT_SPP
+#endif // WITH_BT_SPP
 
 // ========================================================================================================

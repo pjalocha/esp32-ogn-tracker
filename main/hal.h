@@ -11,10 +11,6 @@
 
 #include "fifo.h"
 
-#ifdef WITH_BT_SPP
-#include "bt.h"
-#endif
-
 // ============================================================================================================
 
 #define WITH_ESP32
@@ -30,6 +26,10 @@
 #define I2C_SPEED 1000000                  // [Hz] bit rate on the I2C (nominally up to 400000)
 
 #include "config.h"                        // user options
+
+#ifdef WITH_BT_SPP
+#include "bt.h"
+#endif
 
 // ============================================================================================================
 
