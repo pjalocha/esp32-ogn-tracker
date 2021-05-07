@@ -124,7 +124,7 @@ class FlashParameters
    // char Copilot[16]
    // char Category[16]
 
-   uint32_t PageMask;
+   uint32_t PageMask;                          // enable/disable individual pages on the LCD or OLED screen
 
 #ifdef WITH_BT_SPP
    char BTname[16];

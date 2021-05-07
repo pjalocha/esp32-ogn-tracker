@@ -28,6 +28,10 @@
 #include "stratux.h"
 #endif
 
+#ifdef WITH_BT_SPP
+#include "bt.h"
+#endif
+
 #ifdef WITH_AP
 #include "ap.h"
 #endif

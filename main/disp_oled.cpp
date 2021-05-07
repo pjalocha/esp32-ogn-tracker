@@ -23,6 +23,10 @@
 #include "wifi.h"
 #endif
 
+#ifdef WITH_BT_SPP
+#include "bt.h"
+#endif
+
 #include "gps.h"
 // #include "ubx.h"
 // #include "timesync.h"

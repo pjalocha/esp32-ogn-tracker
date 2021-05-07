@@ -11,6 +11,10 @@
 
 #include "fifo.h"
 
+#ifdef WITH_BT_SPP
+#include "bt.h"
+#endif
+
 // ============================================================================================================
 
 #define WITH_ESP32
@@ -185,11 +189,6 @@ int32_t Button_TimerCheck(uint8_t Ticks=1);
 void IO_Configuration(void);             // Configure I/O
 
 int  NVS_Init(void);                     // initialize non-volatile-storage in the Flash
-
-#ifdef WITH_BT_SPP
-int  BT_SPP_Init(void);
-bool BT_SPP_isConnected(void);
-#endif
 
 #ifdef WITH_SPIFFS
 int  SPIFFS_Register(const char *Path="/spiffs", const char *Label="intlog", size_t MaxOpenFiles=5);
