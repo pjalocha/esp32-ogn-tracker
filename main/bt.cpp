@@ -4,16 +4,16 @@
 
 #include "hal.h"
 
-#ifdef WITH_BT_SPP
+#include "format.h"
+#include "fifo.h"
+
+#ifdef WITH_BT_SPP                            // classic BT
 
 #include "esp_bt.h"
 #include "esp_bt_main.h"
 #include "esp_gap_bt_api.h"
 #include "esp_bt_device.h"
 #include "esp_spp_api.h"
-
-#include "format.h"
-#include "fifo.h"
 
 static const esp_spp_mode_t esp_spp_mode = ESP_SPP_MODE_CB;
 static const esp_spp_sec_t  sec_mask     = ESP_SPP_SEC_AUTHENTICATE;
@@ -53,7 +53,7 @@ static size_t BT_SPP_TxPush(size_t MaxLen=128)                    // transmit pa
   return Len; }                                                   // return number of transmitted bytes
 
 static void esp_spp_cb(esp_spp_cb_event_t Event, esp_spp_cb_param_t *Param)
-{ switch (Event)
+{ switch(Event)
   { case ESP_SPP_INIT_EVT:                                        // [0]
       esp_bt_dev_set_device_name(Parameters.BTname);
       // esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE); // for older ESP-IDF
@@ -124,7 +124,7 @@ static void esp_spp_cb(esp_spp_cb_event_t Event, esp_spp_cb_param_t *Param)
 
 static void esp_bt_gap_cb(esp_bt_gap_cb_event_t Event, esp_bt_gap_cb_param_t *Param)
 {
-  switch (Event)     // event numbers are in esp-idf/components/bt/bluedroid/api/include/api/esp_gap_bt_api.h
+  switch(Event)     // event numbers are in esp-idf/components/bt/bluedroid/api/include/api/esp_gap_bt_api.h
   {
     case ESP_BT_GAP_AUTH_CMPL_EVT:
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -187,9 +187,11 @@ int BT_SPP_Init(void)
   if(Parameters.BTname[0]==0) return Err;
 
   esp_bt_controller_config_t BTconf = BT_CONTROLLER_INIT_CONFIG_DEFAULT();                  // the default mode is defined by the menuconfig settings
-  Err = esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
+  BTconf.mode = ESP_BT_MODE_CLASSIC_BT;
+  // Err = esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
   Err = esp_bt_controller_init(&BTconf); if(Err!=ESP_OK) return Err;
   Err = esp_bt_controller_enable((esp_bt_mode_t)BTconf.mode); if(Err!=ESP_OK) return Err;   // mode must be same as in BTconf
+  // Err = esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT); if(Err!=ESP_OK) return Err;
   Err = esp_bluedroid_init(); if(Err!=ESP_OK) return Err;                                   // init the BT stack
   Err = esp_bluedroid_enable(); if(Err!=ESP_OK) return Err;                                 // enable the BT stack
   Err = esp_bt_gap_register_callback(esp_bt_gap_cb); if(Err!=ESP_OK) return Err;
@@ -216,5 +218,183 @@ int BT_SPP_Init(void)
   return Err; }
 
 #endif // WITH_BT_SPP
+
+#ifdef WITH_BLE_SPP                            // BLE BT
+
+#include "esp_bt.h"
+#include "esp_bt_defs.h"
+#include "esp_bt_main.h"
+#include "esp_gap_bt_api.h"
+#include "esp_bt_device.h"
+#include "esp_gap_ble_api.h"
+#include "esp_gatts_api.h"
+#include "esp_gatt_defs.h"
+
+#define ESP_SPP_APP_ID 0x56
+#define SPP_SVC_INST_ID   0
+
+static esp_ble_adv_params_t spp_adv_params =
+{ .adv_int_min        = 0x20,
+  .adv_int_max        = 0x40,
+  .adv_type           = ADV_TYPE_IND,
+  .own_addr_type      = BLE_ADDR_TYPE_PUBLIC,
+  .channel_map        = ADV_CHNL_ALL,
+  .adv_filter_policy  = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
+};
+
+static const uint8_t spp_adv_data[23] =
+{ 0x02, 0x01, 0x06,
+  0x03, 0x03, 0xF0, 0xAB,
+  0x0F, 0x09, 0x45, 0x53, 0x50, 0x5f, 0x53, 0x50, 0x50, 0x5f, 0x53, 0x45, 0x52, 0x56, 0x45, 0x52 };
+
+
+
+static FIFO<char,   1024> BT_SPP_TxFIFO;      // buffer for console output to be sent over BT
+static FIFO<uint8_t, 256> BT_SPP_RxFIFO;      // buffer for BT data to be send to the console
+static uint32_t        BT_SPP_Conn = 0;       // BT incoming connection handle
+static uint32_t        BT_SPP_TxCong = 0;     // congestion control
+
+bool BT_SPP_isConnected(void) { return BT_SPP_Conn; }             // is a client connected to BT_SPP ?
+
+static void setPilotID(esp_bd_addr_t MAC, size_t Len=6)           // set PilotID in the parameters from the BT SPP client MAC (thus Pilot's smartphone)
+{ char *ID = Parameters.PilotID;
+  ID[0]='B'; ID[1]='T'; ID[2]='_'; ID+=3;
+  for(int Idx=0; Idx<Len; Idx++)
+  { Format_Hex(ID, MAC[Idx]); ID+=2; }
+  ID[0]=0; }
+
+static void clrPilotID(void)                                      // clear the Pilot_ID when BT SPP gets disconnected
+{ Parameters.PilotID[0]=0; }
+
+static size_t BT_SPP_TxPush(size_t MaxLen=128)                    // transmit part of the TxFIFO to the BT link
+{ // BT_SPP_LastTxPush = xTaskGetTickCount();                        // [ms] remember last time the TxPush was done
+  char *Data; size_t Len=BT_SPP_TxFIFO.getReadBlock(Data);        // see how much data is there in the queue for transmission
+  if(Len==0) return 0;                                            // if block is empty then give up
+  if(Len>MaxLen) Len=MaxLen;                                      // limit the block size
+  // esp_err_t Ret=esp_spp_write(BT_SPP_Conn, Len, (uint8_t *)Data); // write the block to the BT
+  // if(Ret!=ESP_OK) return 0;                                       // if an error then give up
+  BT_SPP_TxFIFO.flushReadBlock(Len);                              // remove the transmitted block from the FIFO
+  return Len; }                                                   // return number of transmitted bytes
+
+static void esp_ble_gatts_cb(esp_gatts_cb_event_t Event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *Param)
+{ // esp_ble_gatts_cb_param_t *p_data = (esp_ble_gatts_cb_param_t *)Param;
+  switch(Event)
+  { case ESP_GATTS_REG_EVT:   // #0
+      esp_ble_gap_set_device_name(Parameters.BTname);
+      esp_ble_gap_config_adv_data_raw((uint8_t *)spp_adv_data, sizeof(spp_adv_data));
+      // esp_ble_gatts_create_attr_tab(spp_gatt_db, gatts_if, SPP_IDX_NB, SPP_SVC_INST_ID);
+      break;
+    case ESP_GATTS_UNREG_EVT: // #6
+      break;
+    case ESP_GATTS_MTU_EVT:   // #4
+      // spp_mtu_size = p_data->mtu.mtu;
+      break;
+    default:
+      break;
+  }
+
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "BLE_GATTS: Event ");
+  Format_UnsDec(CONS_UART_Write, (uint32_t)Event);
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+}
+
+static void esp_ble_gap_cb(esp_gap_ble_cb_event_t Event, esp_ble_gap_cb_param_t *Param)
+{
+  switch(Event)
+  { case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT:
+      esp_ble_gap_start_advertising(&spp_adv_params);
+      break;
+    default:
+      break;
+  }
+
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "BLE_GAP: Event ");
+  Format_UnsDec(CONS_UART_Write, (uint32_t)Event);
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+}
+
+#ifdef OBSOLETE
+static void esp_bt_gap_cb(esp_bt_gap_cb_event_t Event, esp_bt_gap_cb_param_t *Param)
+{
+  switch(Event)     // event numbers are in esp-idf/components/bt/bluedroid/api/include/api/esp_gap_bt_api.h
+  {
+    case ESP_BT_GAP_AUTH_CMPL_EVT:
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      if (Param->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS)
+      { Format_String(CONS_UART_Write, "BT_GAP: ");
+        Format_String(CONS_UART_Write, (const char *)Param->auth_cmpl.device_name);
+        Format_String(CONS_UART_Write, " authenticated\n"); }
+      else
+      { Format_String(CONS_UART_Write, "BT_GAP: Authentication failure (");
+        Format_SignDec(CONS_UART_Write, Param->auth_cmpl.stat);
+        Format_String(CONS_UART_Write, ")\n"); }
+      // ESP_LOGI(SPP_TAG, "authentication success: %s", param->auth_cmpl.device_name);
+      // esp_log_buffer_hex(SPP_TAG, param->auth_cmpl.bda, ESP_BD_ADDR_LEN);
+      // ESP_LOGE(SPP_TAG, "authentication failed, status:%d", param->auth_cmpl.stat);
+      xSemaphoreGive(CONS_Mutex);
+      break;
+    case ESP_BT_GAP_PIN_REQ_EVT:
+     /*
+        ESP_LOGI(SPP_TAG, "ESP_BT_GAP_PIN_REQ_EVT min_16_digit:%d", param->pin_req.min_16_digit);
+        if (param->pin_req.min_16_digit) {
+            ESP_LOGI(SPP_TAG, "Input pin code: 0000 0000 0000 0000");
+            esp_bt_pin_code_t pin_code = {0};
+            esp_bt_gap_pin_reply(param->pin_req.bda, true, 16, pin_code);
+        } else {
+            ESP_LOGI(SPP_TAG, "Input pin code: 1234");
+            esp_bt_pin_code_t pin_code;
+            pin_code[0] = '1';
+            pin_code[1] = '2';
+            pin_code[2] = '3';
+            pin_code[3] = '4';
+            esp_bt_gap_pin_reply(param->pin_req.bda, true, 4, pin_code);
+      */
+      break;
+    default:
+      break;
+    }
+
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "BT_GAP: Event ");
+  Format_UnsDec(CONS_UART_Write, (uint32_t)Event);
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+}
+#endif
+
+int BT_SPP_Read (uint8_t &Byte)   // read a character from the BT serial port (buffer)
+{ // if(!BT_SPP_Conn) return 0;
+  return BT_SPP_RxFIFO.Read(Byte); }
+
+void BT_SPP_Write (char Byte)     // send a character to the BT serial port
+{ if(!BT_SPP_Conn) return;                                                                // if BT connection is active
+  BT_SPP_TxFIFO.Write(Byte);                                                              // write the byte into the TxFIFO
+
+  if( (BT_SPP_TxCong==0) && ( (Byte=='\n') || (BT_SPP_TxFIFO.Full()>=64) ) )              // if no congestion and EOL or 64B waiting $
+  { BT_SPP_TxPush(); }                                                                    // read a block from TxFIFO ad push it into$
+}
+
+int BT_SPP_Init(void)
+{ esp_err_t Err=ESP_OK;
+  if(Parameters.BTname[0]==0) return Err;
+
+  esp_bt_controller_config_t BTconf = BT_CONTROLLER_INIT_CONFIG_DEFAULT();                  // the default mode is defined by the men$
+  BTconf.mode = ESP_BT_MODE_BLE;
+  // Err = esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+  Err = esp_bt_controller_init(&BTconf); if(Err!=ESP_OK) return Err;
+  Err = esp_bt_controller_enable((esp_bt_mode_t)BTconf.mode); if(Err!=ESP_OK) return Err;   // mode must be same as in BTconf
+  Err = esp_bluedroid_init(); if(Err!=ESP_OK) return Err;                                   // init the BT stack
+  Err = esp_bluedroid_enable(); if(Err!=ESP_OK) return Err;                                 // enable the BT stack
+  Err = esp_ble_gap_register_callback(esp_ble_gap_cb); if(Err!=ESP_OK) return Err;
+  Err = esp_ble_gatts_register_callback(esp_ble_gatts_cb); if(Err!=ESP_OK) return Err;
+  Err = esp_ble_gatts_app_register(ESP_SPP_APP_ID); if(Err!=ESP_OK) return Err;
+
+  return Err; }
+
+#endif // WITH_BLE_SPP
 
 // ========================================================================================================

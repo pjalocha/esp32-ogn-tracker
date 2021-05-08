@@ -16,7 +16,7 @@
 #include "esp_system.h"
 #include "esp_freertos_hooks.h"
 
-#ifdef WITH_BT_SPP
+#if defined(WITH_BT_SPP) || defined(WITH_BLE_SPP)
 #include "bt.h"
 #endif
 
@@ -672,7 +672,7 @@ bool CONS_InpReady(void)
 void CONS_UART_Write (char     Byte)
 { uart_write_bytes (CONS_UART, &Byte, 1);
   // putchar(Byte);
-#ifdef WITH_BT_SPP
+#if defined(WITH_BT_SPP) || defined(WITH_BLE_SPP)
   BT_SPP_Write(Byte);
 #endif
 #ifdef WITH_AP
@@ -686,7 +686,7 @@ void CONS_UART_Write (char     Byte)
 int  CONS_UART_Read  (uint8_t &Byte)
 { int Ret=uart_read_bytes  (CONS_UART, &Byte, 1, 0); if(Ret==1) return 1;
   // int Ret=getchar(); if(Ret>=0) { Byte=Ret; return 1; }
-#ifdef WITH_BT_SPP
+#if defined(WITH_BT_SPP) || defined(WITH_BLE_SPP)
   Ret=BT_SPP_Read(Byte); if(Ret>0) { return 1; }
 #endif
 #ifdef WITH_STRATUX

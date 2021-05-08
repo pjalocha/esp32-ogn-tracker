@@ -28,7 +28,7 @@
 #include "stratux.h"
 #endif
 
-#ifdef WITH_BT_SPP
+#if defined(WITH_BT_SPP) || defined(WITH_BLE_SPP)
 #include "bt.h"
 #endif
 
@@ -83,7 +83,7 @@ void app_main(void)
 
     CONS_UART_SetBaudrate(Parameters.CONbaud);
 
-#ifdef WITH_BT_SPP
+#if defined(WITH_BT_SPP) || defined(WITH_BLE_SPP)
     { int32_t Err=BT_SPP_Init();                // start BT SPP
 // #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
