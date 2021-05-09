@@ -198,7 +198,7 @@ int BT_SPP_Init(void)
   Err = esp_spp_register_callback(esp_spp_cb); if(Err!=ESP_OK) return Err;
   Err = esp_spp_init(esp_spp_mode); if(Err!=ESP_OK) return Err;
 
-  // Set default parameters for Secure Simple Pairing */
+  // Set default parameters for Secure Simple Pairing
   esp_bt_sp_param_t param_type = ESP_BT_SP_IOCAP_MODE;
   esp_bt_io_cap_t iocap = ESP_BT_IO_CAP_NONE; // _IO;
   esp_bt_gap_set_security_param(param_type, &iocap, sizeof(uint8_t));
@@ -231,7 +231,21 @@ int BT_SPP_Init(void)
 #include "esp_gatt_defs.h"
 
 #define ESP_SPP_APP_ID 0x56
-#define SPP_SVC_INST_ID   0
+#define SPP_SVC_INST_ID   0  // the instance id of the service
+
+#define SPP_DATA_MAX_LEN           (512)
+#define SPP_CMD_MAX_LEN            (20)
+#define SPP_STATUS_MAX_LEN         (20)
+#define SPP_DATA_BUFF_MAX_LEN      (1024)
+
+// SPP Service
+static const uint16_t spp_service_uuid = 0xABF0;
+
+// Characteristic UUID
+#define ESP_GATT_UUID_SPP_DATA_RECEIVE      0xABF1
+#define ESP_GATT_UUID_SPP_DATA_NOTIFY       0xABF2
+#define ESP_GATT_UUID_SPP_COMMAND_RECEIVE   0xABF3
+#define ESP_GATT_UUID_SPP_COMMAND_NOTIFY    0xABF4
 
 static esp_ble_adv_params_t spp_adv_params =
 { .adv_int_min        = 0x20,
@@ -242,12 +256,114 @@ static esp_ble_adv_params_t spp_adv_params =
   .adv_filter_policy  = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
 
-static const uint8_t spp_adv_data[23] =
-{ 0x02, 0x01, 0x06,
-  0x03, 0x03, 0xF0, 0xAB,
-  0x0F, 0x09, 0x45, 0x53, 0x50, 0x5f, 0x53, 0x50, 0x50, 0x5f, 0x53, 0x45, 0x52, 0x56, 0x45, 0x52 };
+enum
+{ SPP_IDX_SVC,
 
+  SPP_IDX_SPP_DATA_RECV_CHAR,
+  SPP_IDX_SPP_DATA_RECV_VAL,
 
+  SPP_IDX_SPP_DATA_NOTIFY_CHAR,
+  SPP_IDX_SPP_DATA_NTY_VAL,
+  SPP_IDX_SPP_DATA_NTF_CFG,
+
+  SPP_IDX_SPP_COMMAND_CHAR,
+  SPP_IDX_SPP_COMMAND_VAL,
+
+  SPP_IDX_SPP_STATUS_CHAR,
+  SPP_IDX_SPP_STATUS_VAL,
+  SPP_IDX_SPP_STATUS_CFG,
+
+  SPP_IDX_NB // the number of attribute to be added to the service database
+};
+
+static uint16_t spp_handle_table[SPP_IDX_NB];
+
+#define CHAR_DECLARATION_SIZE   (sizeof(uint8_t))
+
+static const uint16_t primary_service_uuid = ESP_GATT_UUID_PRI_SERVICE;
+static const uint16_t character_declaration_uuid = ESP_GATT_UUID_CHAR_DECLARE;
+static const uint16_t character_client_config_uuid = ESP_GATT_UUID_CHAR_CLIENT_CONFIG;
+
+static const uint8_t char_prop_read_notify = ESP_GATT_CHAR_PROP_BIT_READ|ESP_GATT_CHAR_PROP_BIT_NOTIFY;
+static const uint8_t char_prop_read_write = ESP_GATT_CHAR_PROP_BIT_WRITE_NR|ESP_GATT_CHAR_PROP_BIT_READ;
+
+// SPP Service - data receive characteristic, read&write without response
+static const uint16_t spp_data_receive_uuid = ESP_GATT_UUID_SPP_DATA_RECEIVE;
+static const uint8_t  spp_data_receive_val[20] = {0x00};
+
+// SPP Service - data notify characteristic, notify&read
+static const uint16_t spp_data_notify_uuid = ESP_GATT_UUID_SPP_DATA_NOTIFY;
+static const uint8_t  spp_data_notify_val[20] = {0x00};
+static const uint8_t  spp_data_notify_ccc[2] = {0x00, 0x00};
+
+// SPP Service - command characteristic, read&write without response
+static const uint16_t spp_command_uuid = ESP_GATT_UUID_SPP_COMMAND_RECEIVE;
+static const uint8_t  spp_command_val[10] = {0x00};
+
+// SPP Service - status characteristic, notify&read
+static const uint16_t spp_status_uuid = ESP_GATT_UUID_SPP_COMMAND_NOTIFY;
+static const uint8_t  spp_status_val[10] = {0x00};
+static const uint8_t  spp_status_ccc[2] = {0x00, 0x00};
+
+// Full HRS Database Description - Used to add attributes into the database
+static const esp_gatts_attr_db_t spp_gatt_db[SPP_IDX_NB] =
+{
+  // SPP -  Service Declaration
+  [SPP_IDX_SVC]                       =
+  {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&primary_service_uuid, ESP_GATT_PERM_READ,
+  sizeof(spp_service_uuid), sizeof(spp_service_uuid), (uint8_t *)&spp_service_uuid}},
+
+  // SPP -  data receive characteristic Declaration
+  [SPP_IDX_SPP_DATA_RECV_CHAR]            =
+  {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ,
+  CHAR_DECLARATION_SIZE,CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write}},
+
+  // SPP -  data receive characteristic Value
+  [SPP_IDX_SPP_DATA_RECV_VAL]                 =
+  {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&spp_data_receive_uuid, ESP_GATT_PERM_READ|ESP_GATT_PERM_WRITE,
+  SPP_DATA_MAX_LEN,sizeof(spp_data_receive_val), (uint8_t *)spp_data_receive_val}},
+
+  // SPP -  data notify characteristic Declaration
+  [SPP_IDX_SPP_DATA_NOTIFY_CHAR]  =
+  {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ,
+  CHAR_DECLARATION_SIZE,CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_notify}},
+
+  // SPP -  data notify characteristic Value
+  [SPP_IDX_SPP_DATA_NTY_VAL]   =
+  {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&spp_data_notify_uuid, ESP_GATT_PERM_READ,
+  SPP_DATA_MAX_LEN, sizeof(spp_data_notify_val), (uint8_t *)spp_data_notify_val}},
+
+  // SPP -  data notify characteristic - Client Characteristic Configuration Descriptor
+  [SPP_IDX_SPP_DATA_NTF_CFG]         =
+  {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ|ESP_GATT_PERM_WRITE,
+  sizeof(uint16_t),sizeof(spp_data_notify_ccc), (uint8_t *)spp_data_notify_ccc}},
+
+  // SPP -  command characteristic Declaration
+  [SPP_IDX_SPP_COMMAND_CHAR]            =
+  {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ,
+  CHAR_DECLARATION_SIZE,CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write}},
+
+  // SPP -  command characteristic Value
+  [SPP_IDX_SPP_COMMAND_VAL]                 =
+  {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&spp_command_uuid, ESP_GATT_PERM_READ|ESP_GATT_PERM_WRITE,
+  SPP_CMD_MAX_LEN,sizeof(spp_command_val), (uint8_t *)spp_command_val}},
+
+  // SPP -  status characteristic Declaration
+  [SPP_IDX_SPP_STATUS_CHAR]            =
+  {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ,
+  CHAR_DECLARATION_SIZE,CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_notify}},
+
+  // SPP -  status characteristic Value
+  [SPP_IDX_SPP_STATUS_VAL]                 =
+  {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&spp_status_uuid, ESP_GATT_PERM_READ,
+  SPP_STATUS_MAX_LEN,sizeof(spp_status_val), (uint8_t *)spp_status_val}},
+
+  // SPP -  status characteristic - Client Characteristic Configuration Descriptor
+  [SPP_IDX_SPP_STATUS_CFG]         =
+  {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ|ESP_GATT_PERM_WRITE,
+  sizeof(uint16_t),sizeof(spp_status_ccc), (uint8_t *)spp_status_ccc}},
+
+} ;
 
 static FIFO<char,   1024> BT_SPP_TxFIFO;      // buffer for console output to be sent over BT
 static FIFO<uint8_t, 256> BT_SPP_RxFIFO;      // buffer for BT data to be send to the console
@@ -276,18 +392,43 @@ static size_t BT_SPP_TxPush(size_t MaxLen=128)                    // transmit pa
   BT_SPP_TxFIFO.flushReadBlock(Len);                              // remove the transmitted block from the FIFO
   return Len; }                                                   // return number of transmitted bytes
 
+static uint8_t spp_adv_data_len = 23;
+static uint8_t spp_adv_data[25] =
+{ 0x02, 0x01, 0x06,
+  0x03, 0x03, 0xF0, 0xAB,
+  0x0F, 0x09, 0x45, 0x53, 0x50, 0x5f, 0x53, 0x50, 0x50, 0x5f, 0x53, 0x45, 0x52, 0x56, 0x45, 0x52, 0x00, 0x00 } ; // ESP_SPP_SERVER
+
+// static esp_ble_adv_data_t spp_adv_data =
+// { .include_name = true
+// };
+
 static void esp_ble_gatts_cb(esp_gatts_cb_event_t Event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *Param)
 { // esp_ble_gatts_cb_param_t *p_data = (esp_ble_gatts_cb_param_t *)Param;
-  switch(Event)
+  switch(Event) // event numbers: esp-idf/components/bt/host/bluedroid/api/include/api/esp_gatts_api.h
   { case ESP_GATTS_REG_EVT:   // #0
-      esp_ble_gap_set_device_name(Parameters.BTname);
-      esp_ble_gap_config_adv_data_raw((uint8_t *)spp_adv_data, sizeof(spp_adv_data));
-      // esp_ble_gatts_create_attr_tab(spp_gatt_db, gatts_if, SPP_IDX_NB, SPP_SVC_INST_ID);
+    { // esp_ble_gap_set_device_name(Parameters.BTname);
+      // esp_ble_gap_config_adv_data(&spp_adv_data);
+      int NameLen = strlen(Parameters.BTname); if(NameLen>16) NameLen=16;
+      memcpy(spp_adv_data+9, Parameters.BTname, NameLen); spp_adv_data[7]=NameLen+1; spp_adv_data_len=9+NameLen;
+      esp_ble_gap_config_adv_data_raw(spp_adv_data, spp_adv_data_len);
+      esp_ble_gatts_create_attr_tab(spp_gatt_db, gatts_if, SPP_IDX_NB, SPP_SVC_INST_ID);
+      break; }
+    case ESP_GATTS_CREAT_ATTR_TAB_EVT:  // #22
+      if(Param->add_attr_tab.status != ESP_GATT_OK) break;
+      if(Param->add_attr_tab.num_handle != SPP_IDX_NB) break;
+      memcpy(spp_handle_table, Param->add_attr_tab.handles, sizeof(spp_handle_table));
+      esp_ble_gatts_start_service(spp_handle_table[SPP_IDX_SVC]);
+      break;
+    case ESP_GATTS_START_EVT: // #12
       break;
     case ESP_GATTS_UNREG_EVT: // #6
       break;
     case ESP_GATTS_MTU_EVT:   // #4
       // spp_mtu_size = p_data->mtu.mtu;
+      break;
+    case ESP_GATTS_CONNECT_EVT: // #14
+      break;
+    case ESP_GATTS_DISCONNECT_EVT: // #15
       break;
     default:
       break;
@@ -302,9 +443,15 @@ static void esp_ble_gatts_cb(esp_gatts_cb_event_t Event, esp_gatt_if_t gatts_if,
 
 static void esp_ble_gap_cb(esp_gap_ble_cb_event_t Event, esp_ble_gap_cb_param_t *Param)
 {
-  switch(Event)
+  switch(Event) // event numbers: esp-idf/components/bt/host/bluedroid/api/include/api/esp_gap_ble_api.h
   { case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT:
       esp_ble_gap_start_advertising(&spp_adv_params);
+      break;
+    case ESP_GAP_BLE_SEC_REQ_EVT: // #10
+      break;
+    case ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT: // #20
+      break;
+    case ESP_GAP_BLE_AUTH_CMPL_EVT: // #8
       break;
     default:
       break;
@@ -316,55 +463,6 @@ static void esp_ble_gap_cb(esp_gap_ble_cb_event_t Event, esp_ble_gap_cb_param_t 
   Format_String(CONS_UART_Write, "\n");
   xSemaphoreGive(CONS_Mutex);
 }
-
-#ifdef OBSOLETE
-static void esp_bt_gap_cb(esp_bt_gap_cb_event_t Event, esp_bt_gap_cb_param_t *Param)
-{
-  switch(Event)     // event numbers are in esp-idf/components/bt/bluedroid/api/include/api/esp_gap_bt_api.h
-  {
-    case ESP_BT_GAP_AUTH_CMPL_EVT:
-      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-      if (Param->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS)
-      { Format_String(CONS_UART_Write, "BT_GAP: ");
-        Format_String(CONS_UART_Write, (const char *)Param->auth_cmpl.device_name);
-        Format_String(CONS_UART_Write, " authenticated\n"); }
-      else
-      { Format_String(CONS_UART_Write, "BT_GAP: Authentication failure (");
-        Format_SignDec(CONS_UART_Write, Param->auth_cmpl.stat);
-        Format_String(CONS_UART_Write, ")\n"); }
-      // ESP_LOGI(SPP_TAG, "authentication success: %s", param->auth_cmpl.device_name);
-      // esp_log_buffer_hex(SPP_TAG, param->auth_cmpl.bda, ESP_BD_ADDR_LEN);
-      // ESP_LOGE(SPP_TAG, "authentication failed, status:%d", param->auth_cmpl.stat);
-      xSemaphoreGive(CONS_Mutex);
-      break;
-    case ESP_BT_GAP_PIN_REQ_EVT:
-     /*
-        ESP_LOGI(SPP_TAG, "ESP_BT_GAP_PIN_REQ_EVT min_16_digit:%d", param->pin_req.min_16_digit);
-        if (param->pin_req.min_16_digit) {
-            ESP_LOGI(SPP_TAG, "Input pin code: 0000 0000 0000 0000");
-            esp_bt_pin_code_t pin_code = {0};
-            esp_bt_gap_pin_reply(param->pin_req.bda, true, 16, pin_code);
-        } else {
-            ESP_LOGI(SPP_TAG, "Input pin code: 1234");
-            esp_bt_pin_code_t pin_code;
-            pin_code[0] = '1';
-            pin_code[1] = '2';
-            pin_code[2] = '3';
-            pin_code[3] = '4';
-            esp_bt_gap_pin_reply(param->pin_req.bda, true, 4, pin_code);
-      */
-      break;
-    default:
-      break;
-    }
-
-  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-  Format_String(CONS_UART_Write, "BT_GAP: Event ");
-  Format_UnsDec(CONS_UART_Write, (uint32_t)Event);
-  Format_String(CONS_UART_Write, "\n");
-  xSemaphoreGive(CONS_Mutex);
-}
-#endif
 
 int BT_SPP_Read (uint8_t &Byte)   // read a character from the BT serial port (buffer)
 { // if(!BT_SPP_Conn) return 0;
@@ -392,6 +490,16 @@ int BT_SPP_Init(void)
   Err = esp_ble_gap_register_callback(esp_ble_gap_cb); if(Err!=ESP_OK) return Err;
   Err = esp_ble_gatts_register_callback(esp_ble_gatts_cb); if(Err!=ESP_OK) return Err;
   Err = esp_ble_gatts_app_register(ESP_SPP_APP_ID); if(Err!=ESP_OK) return Err;
+
+  // Set default parameters for Secure Simple Pairing
+  esp_bt_sp_param_t param_type = ESP_BT_SP_IOCAP_MODE;
+  esp_bt_io_cap_t iocap = ESP_BT_IO_CAP_NONE; // _IO;
+  esp_bt_gap_set_security_param(param_type, &iocap, sizeof(uint8_t));
+
+  // Set default parameters for Legacy Pairing: fixed PIN
+  esp_bt_pin_type_t pin_type = ESP_BT_PIN_TYPE_FIXED;
+  esp_bt_pin_code_t pin_code = { '0', '1', '2', '3' };
+  esp_bt_gap_set_pin(pin_type, 4, pin_code);
 
   return Err; }
 
