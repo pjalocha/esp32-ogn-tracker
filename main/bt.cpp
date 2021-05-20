@@ -367,10 +367,16 @@ static const esp_gatts_attr_db_t spp_gatt_db[SPP_IDX_NB] =
 
 static FIFO<char,   1024> BT_SPP_TxFIFO;      // buffer for console output to be sent over BT
 static FIFO<uint8_t, 256> BT_SPP_RxFIFO;      // buffer for BT data to be send to the console
-static uint32_t        BT_SPP_Conn = 0;       // BT incoming connection handle
-static uint32_t        BT_SPP_TxCong = 0;     // congestion control
+// static uint32_t        BT_SPP_Conn = 0;       // BT incoming connection handle
+// static uint32_t        BT_SPP_TxCong = 0;     // congestion control
 
-bool BT_SPP_isConnected(void) { return BT_SPP_Conn; }             // is a client connected to BT_SPP ?
+static uint16_t      spp_mtu_size = 23;
+static uint16_t      spp_conn_id  = 0xffff;
+static esp_gatt_if_t spp_gatts_if = 0xff;
+static bool          is_connected = false;
+static esp_bd_addr_t spp_remote_bda = { 0x0, };
+
+bool BT_SPP_isConnected(void) { return is_connected; }             // is a client connected to BT_SPP ?
 
 static void setPilotID(esp_bd_addr_t MAC, size_t Len=6)           // set PilotID in the parameters from the BT SPP client MAC (thus Pilot's smartphone)
 { char *ID = Parameters.PilotID;
@@ -424,11 +430,17 @@ static void esp_ble_gatts_cb(esp_gatts_cb_event_t Event, esp_gatt_if_t gatts_if,
     case ESP_GATTS_UNREG_EVT: // #6
       break;
     case ESP_GATTS_MTU_EVT:   // #4
-      // spp_mtu_size = p_data->mtu.mtu;
+      spp_mtu_size = Param->mtu.mtu;
       break;
     case ESP_GATTS_CONNECT_EVT: // #14
+      spp_conn_id = Param->connect.conn_id;
+      spp_gatts_if = gatts_if;
+      is_connected = true;
+      memcpy(&spp_remote_bda, &Param->connect.remote_bda, sizeof(esp_bd_addr_t));
       break;
     case ESP_GATTS_DISCONNECT_EVT: // #15
+      is_connected = false;
+      esp_ble_gap_start_advertising(&spp_adv_params);
       break;
     default:
       break;
@@ -448,10 +460,15 @@ static void esp_ble_gap_cb(esp_gap_ble_cb_event_t Event, esp_ble_gap_cb_param_t 
       esp_ble_gap_start_advertising(&spp_adv_params);
       break;
     case ESP_GAP_BLE_SEC_REQ_EVT: // #10
+      esp_ble_gap_security_rsp(Param->ble_security.ble_req.bd_addr, true);
       break;
     case ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT: // #20
       break;
-    case ESP_GAP_BLE_AUTH_CMPL_EVT: // #8
+    case ESP_GAP_BLE_NC_REQ_EVT: // #16 = Numeric Comparison REQuest
+      break;
+    case ESP_GAP_BLE_AUTH_CMPL_EVT: // #8 = AUTHentication CoMPLete
+      break;
+    case ESP_GAP_BLE_ADV_START_COMPLETE_EVT: // #6 = starting advertise complete
       break;
     default:
       break;
@@ -469,11 +486,11 @@ int BT_SPP_Read (uint8_t &Byte)   // read a character from the BT serial port (b
   return BT_SPP_RxFIFO.Read(Byte); }
 
 void BT_SPP_Write (char Byte)     // send a character to the BT serial port
-{ if(!BT_SPP_Conn) return;                                                                // if BT connection is active
+{ if(!is_connected) return;                                                               // if BT connection is active
   BT_SPP_TxFIFO.Write(Byte);                                                              // write the byte into the TxFIFO
 
-  if( (BT_SPP_TxCong==0) && ( (Byte=='\n') || (BT_SPP_TxFIFO.Full()>=64) ) )              // if no congestion and EOL or 64B waiting $
-  { BT_SPP_TxPush(); }                                                                    // read a block from TxFIFO ad push it into$
+  // if( (BT_SPP_TxCong==0) && ( (Byte=='\n') || (BT_SPP_TxFIFO.Full()>=64) ) )              // if no congestion and EOL or 64B waiting $
+  // { BT_SPP_TxPush(); }                                                                    // read a block from TxFIFO ad push it into$
 }
 
 int BT_SPP_Init(void)
@@ -491,15 +508,8 @@ int BT_SPP_Init(void)
   Err = esp_ble_gatts_register_callback(esp_ble_gatts_cb); if(Err!=ESP_OK) return Err;
   Err = esp_ble_gatts_app_register(ESP_SPP_APP_ID); if(Err!=ESP_OK) return Err;
 
-  // Set default parameters for Secure Simple Pairing
-  esp_bt_sp_param_t param_type = ESP_BT_SP_IOCAP_MODE;
-  esp_bt_io_cap_t iocap = ESP_BT_IO_CAP_NONE; // _IO;
-  esp_bt_gap_set_security_param(param_type, &iocap, sizeof(uint8_t));
-
-  // Set default parameters for Legacy Pairing: fixed PIN
-  esp_bt_pin_type_t pin_type = ESP_BT_PIN_TYPE_FIXED;
-  esp_bt_pin_code_t pin_code = { '0', '1', '2', '3' };
-  esp_bt_gap_set_pin(pin_type, 4, pin_code);
+  esp_ble_io_cap_t IOcap = ESP_IO_CAP_NONE; // no input and no output capabilities
+  esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &IOcap, sizeof(IOcap));
 
   return Err; }
 
