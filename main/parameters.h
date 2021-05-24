@@ -672,7 +672,8 @@ uint16_t StratuxPort;
       Verbose=Mode; return 1; }
 #ifdef WITH_LORAWAN
     if(strcmp(Name, "AppKey")==0)
-    { for(uint8_t Idx=0; Idx<16; Idx++)
+    { if(Value[0]=='0' && Value[1]=='x') Value+=2;
+      for(uint8_t Idx=0; Idx<16; Idx++)
       { uint8_t Byte;
         uint8_t Len=Read_Hex(Byte, Value);
         if(Len!=2) break;
