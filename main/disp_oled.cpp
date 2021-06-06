@@ -23,6 +23,10 @@
 #include "wifi.h"
 #endif
 
+#ifdef WITH_AP
+#include "wifi.h"
+#endif
+
 #ifdef WITH_BT_SPP
 #include "bt.h"
 #endif
@@ -593,6 +597,11 @@ void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS)   // status bar on top 
   { u8g2_SetFont(OLED, u8g2_font_open_iconic_all_1x_t);
     u8g2_DrawGlyph(OLED, 43, 11, 0x119); } // 0x50
 #endif
+#ifdef WITH_AP
+  if(WIFI_isAP())
+  { u8g2_SetFont(OLED, u8g2_font_open_iconic_all_1x_t);
+    u8g2_DrawGlyph(OLED, 43, 11, 0xF8); } // 0x50
+#endif
   // u8g2_SetFont(OLED, u8g2_font_5x7_tr);
   // u8g2_SetFont(OLED, u8g2_font_5x8_tr);
   static uint8_t Sec=0;
@@ -744,10 +753,10 @@ void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
   Line[Len]=0;
   u8g2_SetFont(OLED, u8g2_font_fub20_tr);
   uint8_t Altitude_width = u8g2_GetStrWidth(OLED, Line);
-  u8g2_DrawStr(OLED, 54-Altitude_width, 40, Line);
+  u8g2_DrawStr(OLED, 62-Altitude_width, 40, Line);
 
   u8g2_SetFont(OLED, u8g2_font_9x15_tr);
-  u8g2_DrawStr(OLED, 58, 40, "m");
+  u8g2_DrawStr(OLED, 66, 40, "m");
 
   u8g2_SetFont(OLED, u8g2_font_fub17_tr);
   if(GPS && GPS->isValid())
@@ -757,10 +766,10 @@ void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
     Len=Format_String(Line, "---");
   Line[Len]=0;
   uint8_t Track_width = u8g2_GetStrWidth(OLED, Line);
-  u8g2_DrawStr(OLED, 116-Track_width, 40, Line);
+  u8g2_DrawStr(OLED, 118-Track_width, 40, Line);
 
   u8g2_SetFont(OLED, u8g2_font_6x12_tr);
-  u8g2_DrawStr(OLED, 120, 28, "o");
+  u8g2_DrawStr(OLED, 122, 28, "o");
 
   if(GPS && (GPS->hasBaro || GPS->isValid()))    // if GPS has lock or just the pressure data
   { int16_t vario_value = GPS->ClimbRate;        // [0.1m/s] climb rate

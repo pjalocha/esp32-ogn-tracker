@@ -42,6 +42,7 @@ void vTaskDISP(void* pvParameters)
   OLED_DrawLogo(&U8G2_OLED);                          // draw logo
   u8g2_SendBuffer(&U8G2_OLED);
   vTaskDelay(2000);                                   // allow 2sec for the user to see the logo
+  DISP_Page = Parameters.InitialPage;
 #endif
 #if defined(WITH_ST7789) || defined(WITH_ILI9341)
   // LCD_Start();

@@ -125,6 +125,7 @@ class FlashParameters
    // char Category[16]
 
    uint32_t PageMask;                          // enable/disable individual pages on the LCD or OLED screen
+   uint8_t InitialPage;                        // the first page to show after boot
 
 #if defined(WITH_BT_SPP) || defined(WITH_BLE_SPP)
    char BTname[16];
@@ -261,6 +262,7 @@ uint16_t StratuxPort;
     FreqPlan       =    DEFAULT_FreqPlan; // [0..5]
     PPSdelay       =    DEFAULT_PPSdelay; // [ms]
     PageMask       =    0xFF;
+    InitialPage    =       0;
     for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
       InfoParmValue(Idx)[0] = 0;
 #ifdef WITH_LORAWAN
@@ -667,6 +669,9 @@ uint16_t StratuxPort;
     if(strcmp(Name, "PageMask")==0)
     { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
       PageMask=Mode; return 1; }
+    if(strcmp(Name, "InitialPage")==0)
+    { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
+      InitialPage=Mode; return 1; }
     if(strcmp(Name, "Verbose")==0)
     { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
       Verbose=Mode; return 1; }
@@ -850,6 +855,7 @@ uint16_t StratuxPort;
     Write_Hex    (Line, "Verbose"  ,      (uint32_t)Verbose,   2); strcat(Line, " #  [ 0..3]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Hex    (Line, "GNSS"  ,         (uint32_t)GNSS,      2); strcat(Line, " #  [ mask]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Hex    (Line, "PageMask" ,      (uint32_t)PageMask,  4); strcat(Line, " #  [ mask]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_UnsDec (Line, "InitialPage" ,   (uint32_t)InitialPage ); strcat(Line, " #  [     ]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_UnsDec (Line, "PPSdelay"  ,     (uint32_t)PPSdelay    ); strcat(Line, " #  [   ms]\n"); if(fputs(Line, File)==EOF) return EOF;
 #ifdef WITH_BT_PWR
     Write_UnsDec (Line, "Bluetooth" ,          BT_ON            ); strcat(Line, " #  [  1|0]\n"); if(fputs(Line, File)==EOF) return EOF;
@@ -916,6 +922,7 @@ uint16_t StratuxPort;
     Write_Hex    (Line, "Verbose"  ,      (uint32_t)Verbose,   2); strcat(Line, " #  [ 0..3]\n"); Format_String(Output, Line);
     Write_Hex    (Line, "GNSS"     ,      (uint32_t)GNSS    ,  2); strcat(Line, " #  [ mask]\n"); Format_String(Output, Line);
     Write_Hex    (Line, "PageMask" ,      (uint32_t)PageMask,  4); strcat(Line, " #  [ mask]\n"); Format_String(Output, Line);
+    Write_UnsDec (Line, "InitialPage" ,   (uint32_t)InitialPage ); strcat(Line, " #  [     ]\n"); Format_String(Output, Line);
     Write_UnsDec (Line, "PPSdelay" ,      (uint32_t)PPSdelay    ); strcat(Line, " #  [   ms]\n"); Format_String(Output, Line);
 #ifdef WITH_BT_PWR
     Write_UnsDec (Line, "Bluetooth" ,          BT_ON            ); strcat(Line, " #  [  1|0]\n"); Format_String(Output, Line);

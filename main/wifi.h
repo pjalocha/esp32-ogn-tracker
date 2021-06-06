@@ -19,6 +19,7 @@ typedef union
 extern WIFI_State_t WIFI_State;
 
 bool WIFI_isConnected(void);
+bool WIFI_isAP(void);
 esp_err_t WIFI_Init(void);
 esp_err_t WIFI_setPowerSave(bool ON);
 esp_err_t WIFI_Start(void);
