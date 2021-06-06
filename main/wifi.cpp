@@ -8,6 +8,7 @@ tcpip_adapter_ip_info_t WIFI_IP = { 0, 0, 0 };  // WIFI local IP address, mask a
 WIFI_State_t WIFI_State;
 
 bool WIFI_isConnected(void) { return WIFI_IP.ip.addr!=0; }  // return "connected" status when IP from DHCP is there
+bool WIFI_isAP(void) { return WIFI_Config.ap.ssid_len!=0; }  // return if AP mode enabled
 
 static esp_err_t WIFI_event_handler(void *ctx, system_event_t *event)
 {
