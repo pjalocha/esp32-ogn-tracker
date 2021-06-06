@@ -124,8 +124,13 @@ class FlashParameters
    // char Copilot[16]
    // char Category[16]
 
-   uint32_t PageMask;                          // enable/disable individual pages on the LCD or OLED screen
-   uint8_t InitialPage;                        // the first page to show after boot
+   union
+   { uint32_t Page;
+     struct
+     { uint32_t PageMask:27;                          // enable/disable individual pages on the LCD or OLED screen
+       uint8_t InitialPage:5;                         // the first page to show after boot
+     } ;
+   } ;
 
 #if defined(WITH_BT_SPP) || defined(WITH_BLE_SPP)
    char BTname[16];
