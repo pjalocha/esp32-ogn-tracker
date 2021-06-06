@@ -616,6 +616,35 @@ static void Table_Batt(httpd_req_t *Req)
   httpd_resp_sendstr_chunk(Req, "</table>\n"); }
 
 // -------------------------------------------------------------------------------------------------------------
+#ifdef WITH_SPIFFS
+static void Table_SPIFFS(httpd_req_t *Req)
+{ char Line[128]; int Len;
+
+  httpd_resp_sendstr_chunk(Req, "<h2>SPIFFS</h2>");
+  httpd_resp_sendstr_chunk(Req, "<table class=\"table table-striped table-bordered\">\n");
+
+  size_t Total, Used;
+  if(SPIFFS_Info(Total, Used)==0)                            // get the SPIFFS usage summary
+  { 
+    Len =Format_String(Line, "<tr><td>Free</td><td align=\"right\">");
+    Len+=Format_UnsDec(Line+Len, (Total-Used)/1024);
+    Len+=Format_String(Line+Len, " kB</td></tr>\n");
+    httpd_resp_send_chunk(Req, Line, Len);
+
+    Len =Format_String(Line, "<tr><td>Used</td><td align=\"right\">");
+    Len+=Format_UnsDec(Line+Len, Used/1024);
+    Len+=Format_String(Line+Len, " kB</td></tr>\n");
+    httpd_resp_send_chunk(Req, Line, Len);
+
+    Len =Format_String(Line, "<tr><td>Total</td><td align=\"right\">");
+    Len+=Format_UnsDec(Line+Len, Total/1024);
+    Len+=Format_String(Line+Len, " kB</td></tr>\n");
+    httpd_resp_send_chunk(Req, Line, Len);
+  }
+  httpd_resp_sendstr_chunk(Req, "</table>\n"); }
+#endif
+
+// -------------------------------------------------------------------------------------------------------------
 
 static void Html_Start(httpd_req_t *Req, const char *Title, const uint8_t ActiveMenuIndex)
 {
@@ -745,6 +774,9 @@ static esp_err_t top_get_handler(httpd_req_t *Req)
   Table_GPS(Req);
   Table_RF(Req);
   Table_Batt(Req);
+#ifdef WITH_SPIFFS
+  Table_SPIFFS(Req);
+#endif
 #ifdef WITH_LOOKOUT
   Table_LookOut(Req);
 #endif
