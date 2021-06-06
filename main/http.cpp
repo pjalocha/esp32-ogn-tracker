@@ -237,6 +237,13 @@ static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for aircraft 
   httpd_resp_sendstr_chunk(Req, "\">");
   End_Control_Row(Req);
 
+  Begin_Control_Row(Req, "Initial Page");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"InitialPage\" size=\"10\" value=\"");
+  Len=Format_UnsDec(Line, (uint8_t)Parameters.InitialPage);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
+
   httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Apply\"></div>\n");
   httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 
