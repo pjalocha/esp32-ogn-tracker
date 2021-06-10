@@ -59,7 +59,7 @@ static void End_Control_Row(httpd_req_t *Req)
 static void ParmForm_Info(httpd_req_t *Req)
 {
   httpd_resp_sendstr_chunk(Req, "<h2>Info</h2>");
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Info\">\n");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"POST\" id=\"Info\">\n");
 
   Begin_Control_Row(Req, "Pilot");
   httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"Pilot\" size=\"10\" value=\"");
@@ -111,7 +111,7 @@ static void ParmForm_Acft(httpd_req_t *Req)
 { char Line[16];
 
   httpd_resp_sendstr_chunk(Req, "<h2>Aircraft</h2>");
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Acft\">\n");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"POST\" id=\"Acft\">\n");
 
   Begin_Control_Row(Req, "Address");
   httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"Address\" size=\"10\" value=\"0x");
@@ -146,7 +146,7 @@ static void ParmForm_GPS(httpd_req_t *Req)  // produce HTML form for GPS paramet
   httpd_resp_sendstr_chunk(Req, "<h2>GPS</h2>");
 #endif
 #endif
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"GPS\">\n");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"POST\" id=\"GPS\">\n");
 
 
   Begin_Control_Row(Req, "Nav. rate [Hz]");
@@ -195,7 +195,7 @@ static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for aircraft 
 { char Line[16]; int Len;
 
   httpd_resp_sendstr_chunk(Req, "<h2>Other</h2>");
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Other\">\n");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"POST\" id=\"Other\">\n");
 
   Begin_Control_Row(Req, "Freq. plan");
   const char *FreqPlanTable[6] = { "Auto", "Europe/Africa", "USA/Canada", "Australia/Chile", "New Zeeland", "Izrael" };
@@ -252,7 +252,7 @@ static void ParmForm_Stratux(httpd_req_t *Req) // Connection to Stratux WiFi par
 { char Line[16]; int Len;
 
   httpd_resp_sendstr_chunk(Req, "<h2>Stratux</h2>");
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"Stratux\">\n");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"POST\" id=\"Stratux\">\n");
 
   Begin_Control_Row(Req, "SSID");
   httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"StratuxWIFI\" size=\"10\" value=\"");
@@ -302,7 +302,7 @@ static void ParmForm_AP(httpd_req_t *Req) // Wi-Fi access point parameters { cha
 { char Line[16]; int Len;
 
   httpd_resp_sendstr_chunk(Req, "<h2>Wi-Fi AP</h2>");
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"get\" id=\"AP\">\n");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"POST\" id=\"AP\">\n");
 
   Begin_Control_Row(Req, "SSID");
   httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"APname\" size=\"10\" value=\"");
@@ -340,6 +340,17 @@ static void ParmForm_AP(httpd_req_t *Req) // Wi-Fi access point parameters { cha
   httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Apply\"></div>\n");
   httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 #endif
+
+
+
+static void ParmForm_Restart(httpd_req_t *Req)
+{
+  httpd_resp_sendstr_chunk(Req, "\
+<form action=\"/parm.html\" method=\"POST\" onsubmit=\"return confirm('Are you sure to restart?')\">\n\
+<input type=\"submit\" value=\"Restart\">\n\
+<input type=\"hidden\" name=\"Restart\" value=\"1\">\n\
+</form>\n");
+}
 
 // ============================================================================================================
 
@@ -656,6 +667,7 @@ static void Html_Start(httpd_req_t *Req, const char *Title, const uint8_t Active
   httpd_resp_sendstr_chunk(Req, Title);
   httpd_resp_sendstr_chunk(Req, "</title>\n\
 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n\
+<meta http-equiv=\"content-type\" content=\"text/html; charset=utf-8\" />\n\
 <style>\n\
 html {margin: 0px;}\n\
 body {margin: 8px;}\n\
@@ -699,31 +711,69 @@ static void Html_End(httpd_req_t *Req)
 
 // ============================================================================================================
 
-static esp_err_t parm_get_handler(httpd_req_t *Req)
-{ // char Line[32]; int Len;
+static esp_err_t parm_post_handler(httpd_req_t *Req)
+{
   bool Restart=0;
-  uint16_t URLlen=httpd_req_get_url_query_len(Req);
-  if(URLlen)
-  { char *URL = (char *)malloc(URLlen+1);
-    httpd_req_get_url_query_str(Req, URL, URLlen+1);
-#ifdef DEBUG_PRINT
-    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-    Format_String(CONS_UART_Write, "parm_get_handler() => [");
-    Format_SignDec(CONS_UART_Write, URLlen);
-    Format_String(CONS_UART_Write, "] ");
-    Format_String(CONS_UART_Write, URL);
-    Format_String(CONS_UART_Write, "\n");
-    xSemaphoreGive(CONS_Mutex);
-#endif
-    char *Line=URL;
-    Restart = strstr(Line,"Restart=1");
-    for( ; ; )
-    { Parameters.ReadLine(Line);
-      Line = strchr(Line, '&'); if(Line==0) break;
-      Line++; }
-    free(URL);
-    Parameters.WriteToNVS(); }
+  /* Destination buffer for content of HTTP POST request.
+   * httpd_req_recv() accepts char* only, but content could
+   * as well be any binary data (needs type casting).
+   * In case of string data, null termination will be absent, and
+   * content length would give length of string */
+  char content[1024];
+  char *URL = (char *)malloc(Req->content_len+1);
 
+  /* Truncate if content length larger than the buffer */
+  size_t recv_size = std::min(Req->content_len, sizeof(content));
+
+  int ret = httpd_req_recv(Req, URL, recv_size);
+  if (ret <= 0) {  /* 0 return value indicates connection closed */
+    /* Check if timeout occurred */
+    if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+      /* In case of timeout one can choose to retry calling
+       * httpd_req_recv(), but to keep it simple, here we
+       * respond with an HTTP 408 (Request Timeout) error */
+      httpd_resp_send_408(Req);
+    }
+    /* In case of error, returning ESP_FAIL will
+     * ensure that the underlying socket is closed */
+    return ESP_FAIL;
+  }
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "parm_post_handler() => [");
+  Format_UnsDec(CONS_UART_Write, Req->content_len, 1);
+  Format_String(CONS_UART_Write, "] ");
+  Format_String(CONS_UART_Write, URL);
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
+  char *Line=URL;
+  Restart = strstr(Line,"Restart=1");
+  for( ; ; )
+  { Parameters.ReadLine(Line);
+    Line = strchr(Line, '&'); if(Line==0) break;
+    Line++; }
+  free(URL);
+  Parameters.WriteToNVS();
+
+  if(Restart)
+  {
+#ifdef WITH_SPIFFS
+    FlashLog_SaveReq=1;
+#endif
+    vTaskDelay(1000);
+    esp_restart(); }
+
+  // redirect to get handler
+  httpd_resp_set_type(Req, "text/html");
+  httpd_resp_set_status(Req, "302 Found");
+  httpd_resp_set_hdr(Req, "Location", "/parm.html");
+  httpd_resp_send(Req, NULL, 0);
+  return ESP_OK;
+}
+
+static esp_err_t parm_get_handler(httpd_req_t *Req)
+{
   Html_Start(Req, "OGN-Tracker configuration", 2);
 
   ParmForm_Acft(Req);
@@ -737,27 +787,9 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
 #endif
   ParmForm_Other(Req);
 
-  httpd_resp_sendstr_chunk(Req, "\
-<form action=\"/parm.html\" method=\"get\">\n\
-<input type=\"submit\" value=\"Reset to defaults\">\n\
-<input type=\"hidden\" name=\"Defaults\" value=\"1\">\n\
-</form>\n");
-
-  httpd_resp_sendstr_chunk(Req, "\
-<form action=\"/parm.html\" method=\"get\">\n\
-<input type=\"submit\" value=\"Restart\">\n\
-<input type=\"hidden\" name=\"Restart\" value=\"1\">\n\
-</form>\n");
+  ParmForm_Restart(Req);
 
   Html_End(Req);
-
-  if(Restart)
-  {
-#ifdef WITH_SPIFFS
-    FlashLog_SaveReq=1;
-#endif
-    vTaskDelay(1000);
-    esp_restart(); }
 
   return ESP_OK; }
 
@@ -1045,6 +1077,12 @@ static const httpd_uri_t HTTPparm =
   .handler   = parm_get_handler,
   .user_ctx  = 0 };
 
+static const httpd_uri_t HTTPparmPost =
+{ .uri       = "/parm.html",
+  .method    = HTTP_POST,
+  .handler   = parm_post_handler,
+  .user_ctx  = 0 };
+
 static const httpd_uri_t HTTPlog =
 { .uri       = "/log.html",
   .method    = HTTP_GET,
@@ -1061,6 +1099,7 @@ esp_err_t HTTP_Start(int MaxSockets, int Port)
   esp_err_t Err=httpd_start(&HTTPserver, &Config); if(Err!=ESP_OK) return Err;
   httpd_register_uri_handler(HTTPserver, &HTTPtop);  // top URL
   httpd_register_uri_handler(HTTPserver, &HTTPparm); // parameters URL
+  httpd_register_uri_handler(HTTPserver, &HTTPparmPost); // parameters URL
   httpd_register_uri_handler(HTTPserver, &HTTPlog);  // log files URL
   httpd_register_uri_handler(HTTPserver, &HTTPlogo); // OGN logo
   return Err; }
