@@ -237,6 +237,7 @@ template <class OGNx_Packet=OGN1_Packet>
      if(Packet.Header.Relay)      return;                               // no rank for relayed packets (only single relay)
      if(RxRSSI>128)                                                     // [-0.5dB] weaker signal => higher rank
        Rank += (RxRSSI-128)>>2;                                         // 1point/2dB less signal
+     if(Packet.Header.Encrypted)  return;                               // for exncrypted packets we only take signal strength
      RxAltitude -= 10*Packet.DecodeAltitude();                          // [0.1m] lower altitude => higher rank
      if(RxAltitude>0)
        Rank += RxAltitude>>9;                                           // 2points/100m of altitude below
@@ -643,7 +644,10 @@ template<class OGNx_Packet, uint8_t Size=8>
        Out[Len++]=' '; Len+=Format_Hex(Out+Len, Rank);                          // print the slot Rank
        if(Rank)                                                                 // if Rank is none-zero
        { Out[Len++]='/'; Len+=Format_Hex(Out+Len, Packet[Idx].Packet.getAddressAndType() );   // print address-type and address
-         Out[Len++]=':'; Len+=Format_UnsDec(Out+Len, Packet[Idx].Packet.Position.Time, 2 ); } // [sec] print time
+         Out[Len++]=':';
+         if(Packet[Idx].Header.Encrypted) Len+=Format_String(Out+Len, "ee");
+         else Len+=Format_UnsDec(Out+Len, Packet[Idx].Packet.Position.Time, 2); // [sec] print time
+       }
      }
      Out[Len++]=' '; Len+=Format_Hex(Out+Len, Sum);                             // sum of all Ranks
      Out[Len++]='/'; Len+=Format_Hex(Out+Len, LowIdx);                          // index of the lowest Rank or a free slot
@@ -798,9 +802,9 @@ class GPS_Time
      return Same; }                                           // return 1 when time did not change (both RMC and GGA were for same time)
 
    int8_t ReadDate(const char *Param)                         // read the field DDMMYY
-   { Day=Read_Dec2(Param);     if(Day<0)   return -1;         // read calendar year (two digits - thus need to be extended to four)
+   { Day=Read_Dec2(Param);     if(Day<0)   return -1;         // read calendar day
      Month=Read_Dec2(Param+2); if(Month<0) return -1;         // read calendar month
-     Year=Read_Dec2(Param+4);  if(Year<0)  return -1;         // read calendar day
+     Year=Read_Dec2(Param+4);  if(Year<0)  return -1;         // read calendar year (two digits - thus need to be extended to four)
      return 0; }                                              // return 0 when field valid and was read correctly
 
   private:

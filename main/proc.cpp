@@ -135,7 +135,8 @@ static bool GetRelayPacket(OGN_TxPacket<OGN_Packet> *Packet)      // prepare a p
   memcpy(Packet->Packet.Byte(), RelayQueue[Idx]->Byte(), OGN_Packet::Bytes); // copy the packet
   Packet->Packet.Header.Relay=1;                      // increment the relay count (in fact we only do single relay)
   // Packet->Packet.calcAddrParity();
-  Packet->Packet.Whiten(); Packet->calcFEC();         // whiten and calc. the FEC code => packet ready for transmission
+  if(!Packet->Packet.Header.Encrypted) Packet->Packet.Whiten(); // whiten but only for non-encrypted packets
+  Packet->calcFEC();                                  // Calc. the FEC code => packet ready for transmission
   // PrintRelayQueue(Idx);  // for debug
   RelayQueue.decrRank(Idx);                           // reduce the rank of the packet selected for relay
   return 1; }
@@ -330,10 +331,14 @@ static uint8_t WritePFLAU(char *NMEA, uint8_t GPS=1)    // produce the (mostly d
 
 static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacketIdx, uint32_t RxTime)  // process every (correctly) received packet
 { int32_t LatDist=0, LonDist=0; uint8_t Warn=0;
-  if( RxPacket->Packet.Header.NonPos || RxPacket->Packet.Header.Encrypted ) return ;   // status packet or encrypted: ignore
+  if( RxPacket->Packet.Header.NonPos /* || RxPacket->Packet.Header.Encrypted */ ) return ;   // status packet or encrypted: ignore
   uint8_t MyOwnPacket = ( RxPacket->Packet.Header.Address  == Parameters.Address  )
                      && ( RxPacket->Packet.Header.AddrType == Parameters.AddrType );
   if(MyOwnPacket) return;                                                             // don't process my own (relayed) packets
+  if(RxPacket->Packet.Header.Encrypted && RxPacket->RxErr<10)                         // here we attempt to relay encrypted packets
+  { RxPacket->calcRelayRank(GPS_Altitude/10);
+    OGN_RxPacket<OGN_Packet> *PrevRxPacket = RelayQueue.addNew(RxPacketIdx);
+    return; }
   bool DistOK = RxPacket->Packet.calcDistanceVector(LatDist, LonDist, GPS_Latitude, GPS_Longitude, GPS_LatCosine)>=0;
   if(DistOK)
   { RxPacket->calcRelayRank(GPS_Altitude/10);                                         // calculate the relay-rank (priority for relay)
