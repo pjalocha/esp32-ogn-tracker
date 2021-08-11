@@ -623,6 +623,7 @@ static void GPS_NMEA(void)                                                 // wh
   else if(NMEA.isGxGGA())
   { int8_t SameTime = GPS_DateTime.ReadTime((const char *)NMEA.ParmPtr(0)); // 1=same time, 0=diff. time, -1=error
     if(SameTime==0 && GPS_Burst.GxGGA) { GPS_BurstComplete(); GPS_BurstEnd(); GPS_BurstStart(NMEA.Len); }
+    GPS_DateTime.ReadDate((const char *)NMEA.ParmPtr(6));
     GPS_Burst.GxGGA=1; }
   else if(NMEA.isGxGSA())
   { GPS_Burst.GxGSA=1; }
