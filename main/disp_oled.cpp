@@ -265,8 +265,13 @@ void OLED_DrawGPS(u8g2_t *OLED, GPS_Position *GPS)  // GPS time, position, altit
   Len=0;
   Len+=Format_String(Line+Len, "Alt: ");
   if(GPS && GPS->isValid())
-  { Len+=Format_SignDec(Line+Len,  GPS->Altitude, 4, 1);
-    Line[Len++]='m'; }
+  { if(GPS->Sec&2)                                                // display altitude in meters
+    { Len+=Format_SignDec(Line+Len,  GPS->Altitude, 4, 1);
+      Line[Len++]='m'; }
+    else                                                          // and alternate in feet
+    { Len+=Format_SignDec(Line+Len,  (GPS->Altitude*336+512)>>10, 5);
+      Line[Len++]='f'; Line[Len++]='t'; }
+  }
   else Len+=Format_String(Line+Len, "-----.-");
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 60, Line);
