@@ -265,14 +265,18 @@ void OLED_DrawGPS(u8g2_t *OLED, GPS_Position *GPS)  // GPS time, position, altit
   Len=0;
   Len+=Format_String(Line+Len, "Alt: ");
   if(GPS && GPS->isValid())
-  { if(GPS->Sec&2)                                                // display altitude in meters
-    { Len+=Format_SignDec(Line+Len,  GPS->Altitude, 4, 1);
+  { int32_t Alt = GPS->Altitude;
+    if(Alt>=0) Line[Len++]=' ';
+    if(GPS->Sec&4)                                                // display altitude in meters
+    { Len+=Format_SignDec(Line+Len,  Alt, 1, 1, 1);               // [0.1m/s]
       Line[Len++]='m'; }
     else                                                          // and alternate in feet
-    { Len+=Format_SignDec(Line+Len,  (GPS->Altitude*336+512)>>10, 5);
+    { Alt = (Alt*336+512)>>10;                                    // [0.1m/s] => [feet]
+      Len+=Format_SignDec(Line+Len,  Alt, 1, 0, 1);               // [feet]
       Line[Len++]='f'; Line[Len++]='t'; }
+    // for( ; Len<14; ) Line[Len++]=' ';                             // tail of spaces to cover older printouts
   }
-  else Len+=Format_String(Line+Len, "-----.-");
+  else Len+=Format_String(Line+Len, "-----.-  ");
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 60, Line);
 }
@@ -749,19 +753,24 @@ void OLED_DrawID(u8g2_t *OLED, GPS_Position *GPS)
 void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
 { uint8_t Len;
 
+  bool inFeet = GPS->Sec&4;                      // decide if display altitude in meters or in feet
   // Standard Pressure Altitude
   if(GPS && (GPS->hasBaro || GPS->isValid()))    // if GPS has lock or just the pressure data
-  { if(GPS->hasBaro) Len=Format_SignDec(Line, (GPS->StdAltitude+5)/10, 1, 0, 1);
-                else Len=Format_SignDec(Line, (GPS->Altitude+5)/10, 1, 0, 1); }
+  { int32_t Alt = GPS->Altitude;                 // [0.1m/s] take GPS (geometrical) altitude
+    if(GPS->hasBaro) Alt = GPS->StdAltitude;     // but if pressure sensor is there then replace with pressure altitude
+    if(inFeet) Alt = (Alt*336+512)>>10;          // [0.1m] => [feet]  // convert to feet
+          else Alt = (Alt+5)/10;                 // [0.1m] => [m]     // or to meters
+    Len=Format_SignDec(Line, Alt, 1, 0, 1); }    // print altitude into the string
   else
-    Len=Format_String(Line, "----");
+    Len=Format_String(Line, "----");             // if altitude not available then print place holders
   Line[Len]=0;
-  u8g2_SetFont(OLED, u8g2_font_fub20_tr);
-  uint8_t Altitude_width = u8g2_GetStrWidth(OLED, Line);
-  u8g2_DrawStr(OLED, 62-Altitude_width, 40, Line);
+  u8g2_SetFont(OLED, u8g2_font_fub20_tr);        // relatively big font
+  uint8_t Altitude_width = u8g2_GetStrWidth(OLED, Line); // how wide the string would be on the OLED
+  u8g2_DrawStr(OLED, 60-Altitude_width, 40, Line); // print the string
 
-  u8g2_SetFont(OLED, u8g2_font_9x15_tr);
-  u8g2_DrawStr(OLED, 66, 40, "m");
+  u8g2_SetFont(OLED, u8g2_font_9x15_tr);         // smaller font
+  if(inFeet) u8g2_DrawStr(OLED, 62, 40, "ft");   // print units
+        else u8g2_DrawStr(OLED, 64, 40, "m");
 
   u8g2_SetFont(OLED, u8g2_font_fub17_tr);
   if(GPS && GPS->isValid())
@@ -773,8 +782,8 @@ void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
   uint8_t Track_width = u8g2_GetStrWidth(OLED, Line);
   u8g2_DrawStr(OLED, 118-Track_width, 40, Line);
 
-  u8g2_SetFont(OLED, u8g2_font_6x12_tr);
-  u8g2_DrawStr(OLED, 122, 28, "o");
+  u8g2_SetFont(OLED, u8g2_font_6x12_tr);         // small font
+  u8g2_DrawStr(OLED, 122, 28, "o");              // degree sign
 
   if(GPS && (GPS->hasBaro || GPS->isValid()))    // if GPS has lock or just the pressure data
   { int16_t vario_value = GPS->ClimbRate;        // [0.1m/s] climb rate
