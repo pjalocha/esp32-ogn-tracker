@@ -229,7 +229,7 @@ template <class OGNx_Packet=OGN1_Packet>
            +Count1s(FEC[0]^RefPacket.FEC[0])
            +Count1s((FEC[1]^RefPacket.FEC[1])&0xFFFF); }
 
-   void calcRelayRank(int32_t RxAltitude)                               // [0.1m] altitude of reception
+   void calcRelayRank(int32_t RxAltitude)                               // [m] altitude of reception
    { if(Packet.Header.Emergency) { Rank=0xFF; return; }                 // emergency packets always highest rank
      Rank=0;
      if(Packet.Header.NonPos)     return;                               // only relay position packets
@@ -238,9 +238,9 @@ template <class OGNx_Packet=OGN1_Packet>
      if(RxRSSI>128)                                                     // [-0.5dB] weaker signal => higher rank
        Rank += (RxRSSI-128)>>2;                                         // 1point/2dB less signal
      if(Packet.Header.Encrypted)  return;                               // for exncrypted packets we only take signal strength
-     RxAltitude -= 10*Packet.DecodeAltitude();                          // [0.1m] lower altitude => higher rank
+     RxAltitude -= Packet.DecodeAltitude();                             // [m] lower altitude => higher rank
      if(RxAltitude>0)
-       Rank += RxAltitude>>9;                                           // 2points/100m of altitude below
+       Rank += RxAltitude>>6;                                           // 1points/64m of altitude below
      int16_t ClimbRate = Packet.DecodeClimbRate();                      // [0.1m/s] higher sink rate => higher rank
      if(ClimbRate<0)
        Rank += (-ClimbRate)>>3;                                         // 1point/0.8m/s of sink
