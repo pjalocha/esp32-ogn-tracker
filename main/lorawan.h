@@ -59,6 +59,9 @@ class LoRaWANnode
      if(AppKey) memcpy(this->AppKey, AppKey, 16);
      Reset(); }
 
+   void Disconnect(void)
+   { State=0; }
+
    uint8_t incrChan(uint8_t Step=1) { Chan+=Step; if(Chan>=Chans) Chan-=Chans; return Chan; }
 
    int Save(FILE *File) { return fwrite(this, sizeof(LoRaWANnode), 1, File); }
