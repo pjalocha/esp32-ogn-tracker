@@ -410,19 +410,20 @@ extern "C"
     if(WANdev.State==1 || WANdev.State==3)                      // if State indicates we are waiting for the response
     { if(WAN_RespLeft<=5) WANdev.State--;                       // if time below 5 ticks we have not enough time
       else if(WAN_RespLeft<200) { WANrx=1; }                    // if more than 200ms then we can't wait this long now
-      // xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-      // Format_UnsDec(CONS_UART_Write, xTaskGetTickCount(), 4, 3);
-      // Format_String(CONS_UART_Write, "s LoRaWAN Rx: ");
-      // Format_SignDec(CONS_UART_Write, WAN_RespLeft);
-      // Format_String(CONS_UART_Write, "ms\n");
-      // xSemaphoreGive(CONS_Mutex);
+      if(WANrx==0 && WAN_RespLeft<=5)
+      { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+        Format_UnsDec(CONS_UART_Write, xTaskGetTickCount(), 4, 3);
+        Format_String(CONS_UART_Write, "s LoRaWAN missed Rx: ");
+        Format_SignDec(CONS_UART_Write, WAN_RespLeft);
+        Format_String(CONS_UART_Write, "ms\n");
+        xSemaphoreGive(CONS_Mutex); }
     }
 
     if(WANrx)                                              // if reception expected from WAN
     { int RxLen=0;
-      TRX.setModeStandby();                              // TRX to standby
+      TRX.setModeStandby();                                // TRX to standby
       TRX.setLoRa();                                       // switch to LoRa mode (through sleep)
-      TRX.setModeLoRaStandby();                          // TRX in standby
+      TRX.setModeLoRaStandby();                            // TRX in LoRa (not FSK) standby
       SetFreqPlanWAN();                                    // WAN frequency plan
       TRX.WAN_Configure();                                 // LoRa for WAN config.
       TRX.setChannel(WANdev.Chan);                         // set the channel
@@ -432,7 +433,7 @@ extern "C"
       for( ; Wait>0; Wait--)
       { vTaskDelay(1);
         if(TRX.readIRQ()) break; }                         // IRQ signals packet reception
-      if(Wait)
+      if(Wait)                                             // if no timeout thus a packet has been received.
       { TRX.LoRa_ReceivePacket(WAN_RxPacket);
         xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
         Format_UnsDec(CONS_UART_Write, xTaskGetTickCount(), 4, 3);
@@ -442,42 +443,42 @@ extern "C"
         Format_UnsDec(CONS_UART_Write, (unsigned)Wait);
         Format_String(CONS_UART_Write, "ms\n");
         xSemaphoreGive(CONS_Mutex);
-        if(WANdev.State==1) WANdev.procJoinAccept(WAN_RxPacket);   // if join-request state then expect a join-accept packet
+             if(WANdev.State==1) WANdev.procJoinAccept(WAN_RxPacket);    // if join-request state then expect a join-accept packet
         else if(WANdev.State==3) RxLen=WANdev.procRxData(WAN_RxPacket);  // if data send then respect ACK and/or downlink data packet
       }
-      else WANdev.State--;
-      TRX.setFSK();                                                              // back to FSK
-      SetFreqPlanOGN();                                                          // OGN frequency plan
-      TRX.OGN_Configure(0, OGN_SYNC);                                            // OGN config
+      else WANdev.State--;                                  // if no packet received then retreat the State
+      TRX.setFSK();                                         // back to FSK
+      SetFreqPlanOGN();                                     // OGN frequency plan
+      TRX.OGN_Configure(0, OGN_SYNC);                       // OGN config
       SetRxChannel();
-      TRX.setModeRX();                                                         // switch to receive mode
+      TRX.setModeRX();                                      // switch to receive mode
       TRX.ClearIrqFlags();
-      WANdev.WriteToNVS();                                                       // store new WAN state in flash
-      if(RxLen>0)                                                                // if Downlink data received
+      WANdev.WriteToNVS();                                  // store new WAN state in flash
+      if(RxLen>0)                                           // if Downlink data received
       { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
         Format_String(CONS_UART_Write, "LoRaWAN Msg: ");
         // Format_UnsDec(CONS_UART_Write, (uint16_t)RxLen);
         // Format_String(CONS_UART_Write, "B");
         for(int Idx=0; Idx<RxLen; Idx++)
-        { Format_Hex(CONS_UART_Write, WANdev.Packet[Idx]); }
+        { Format_Hex(CONS_UART_Write, WANdev.Packet[Idx]); } //
         Format_String(CONS_UART_Write, "\n");
         xSemaphoreGive(CONS_Mutex); }
     }
-    else
+    else                                                     // if no WAN reception expected or possible
 #else // WITH_LORAWAN
     // if(TimeSync_msTime()<260);
-    { uint32_t RxRssiSum=0; uint16_t RxRssiCount=0;                              // measure the average RSSI for lower frequency
+    { uint32_t RxRssiSum=0; uint16_t RxRssiCount=0;          // measure the average RSSI for lower frequency
       do
-      { ReceivePacket();                                                         // keep checking for received packets
+      { ReceivePacket();                                     // keep checking for received packets
 #ifdef WITH_RFM69
         TRX.TriggerRSSI();
 #endif
         vTaskDelay(1);
-        uint8_t RxRSSI=TRX.ReadRSSI();                                           // measure the channel noise level
+        uint8_t RxRSSI=TRX.ReadRSSI();                       // measure the channel noise level
         RX_Random = (RX_Random<<1) | (RxRSSI&1);
         RxRssiSum+=RxRSSI; RxRssiCount++;
-      } while(TimeSync_msTime()<270);                                            // until 300ms from the PPS
-      RX_RSSI.Process(RxRssiSum/RxRssiCount);                                    // [-0.5dBm] average noise on channel
+      } while(TimeSync_msTime()<270);                        // until 300ms from the PPS
+      RX_RSSI.Process(RxRssiSum/RxRssiCount);                // [-0.5dBm] average noise on channel
 #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_String(CONS_UART_Write, "RSSI: ");
@@ -619,7 +620,7 @@ extern "C"
     if(WAN_BackOff) WAN_BackOff--;
     else if(Parameters.TxPower!=(-32))                                         // decide to transmit in this slot
     { if(WANdev.State==0 || WANdev.State==2)                                   //
-      { WANtx=1; SlotEnd=1200; }
+      { WANtx=1; SlotEnd=1220; }
     }
     TimeSlot(TxChan, SlotEnd-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
 #else
@@ -697,7 +698,7 @@ extern "C"
           { TxPktLen=WANdev.getDataPacket(&TxPacket, PktData+4, 16, 1, ((RX_Random>>16)&0xF)==0x8 ); }
           else
           { TxPktLen=WANdev.getDataPacket(&TxPacket, PktData, 20, 1, ((RX_Random>>16)&0xF)==0x8 ); }
-          TRX.LoRa_SendPacket(TxPacket, TxPktLen); RespDelay=1000;
+          TRX.LoRa_SendPacket(TxPacket, TxPktLen); RespDelay = WANdev.RxDelay&0x0F; if(RespDelay<1) RespDelay=1; RespDelay*=1000;
           WAN_BackOff=50+(RX_Random%21); XorShift32(RX_Random); }
       }
       if(RespDelay)
@@ -706,7 +707,7 @@ extern "C"
         { vTaskDelay(1); if(!TRX.isModeLoRaTX()) break; }
           // uint8_t Mode=TRX.ReadMode();
           // if(Mode!=RF_OPMODE_LORA_TX) break; }
-        WAN_RespTick=xTaskGetTickCount()+RespDelay;          // when to expect the response: 5sec after the end of Join-Request packet
+        WAN_RespTick=xTaskGetTickCount()+RespDelay;          // when to expect the response after the end of transmitted packet
         xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
         Format_UnsDec(CONS_UART_Write, xTaskGetTickCount(), 4, 3);
         Format_String(CONS_UART_Write, "s LoRaWAN Tx: ");

@@ -243,12 +243,12 @@ SX1262 setup calls
 #ifdef WITH_SX1262
 #include "sx1262.h"
 
-#define RF_IRQ_PacketSent     0x0001 // packet transmission was completed
-#define RF_IRQ_PayloadReady   0x0002 // 
-#define RF_IRQ_PreambleDetect 0x0004 //
-#define RF_IRQ_SyncAddrMatch  0x0008 //
-#define RF_IRQ_CrcErr         0x0040 //
-#define RF_IRQ_Timeout        0x0200 //
+// #define RF_IRQ_PacketSent     0x0001 // packet transmission was completed
+// #define RF_IRQ_PayloadReady   0x0002 //
+// #define RF_IRQ_PreambleDetect 0x0004 //
+// #define RF_IRQ_SyncAddrMatch  0x0008 //
+// #define RF_IRQ_CrcErr         0x0040 //
+// #define RF_IRQ_Timeout        0x0200 //
 
 #endif
 
@@ -738,7 +738,6 @@ class RFM_TRX
 
    void LoRa_Configure(RFM_LoRa_Config CFG, uint8_t MaxSize=64)
    { setChannel(0);
-     setDioMode(IRQ_TXDONE | IRQ_RXDONE);
      uint8_t Param[8];
      Param[0] = CFG.SF;                            // Spreading Factor
      Param[1] = CFG.BW-3;                          // work only for 62.5/125/256/512kHz
@@ -752,13 +751,13 @@ class RFM_TRX
      Param[4] = CFG.CRC;                           // check or not CRC
      Param[5] = CFG.InvIQ;                         // common flag for Tx/Rx
      Cmd_Write(CMD_SETPACKETPARAMS, Param, 6);     // 0x8C, PacketParam
+     setDioMode( /* IRQ_TXDONE | */ IRQ_RXDONE);
      Param[0] = (CFG.SYNC&0xF0) | 0x04;
      Param[1] = (CFG.SYNC<<4)   | 0x04;
      Regs_Write(REG_LORASYNCWORD, Param, 2); }
 
    void OGN_Configure(int16_t Channel, const uint8_t *SyncData)
    { setChannel(Channel);
-     setDioMode(IRQ_TXDONE | IRQ_RXDONE);
      uint8_t Param[12];
      Pack3bytes(Param, 10240);                     // data bitrate = 32*Xtal/100e3 for OGN 100kbps
      Param[3] = 0x09;                              // 0x00:no filter, 0x08:BT=0.3, 0x09:BT=0.5, 0x0A:BT=0.7, 0x0B:BT=1.0
@@ -775,11 +774,11 @@ class RFM_TRX
      Param[7] = 0x01;                              // no CRC
      Param[8] = 0x00;                              // no whitening
      Cmd_Write(CMD_SETPACKETPARAMS, Param, 9);     // 0x8C, PacketParam
+     setDioMode(/* IRQ_TXDONE | */ IRQ_RXDONE);
      Regs_Write(REG_SYNCWORD0, SyncData, 8); }     // Write the SYNC word
 
    void PAW_Configure(const uint8_t *Sync)
    { setFrequency(869525000);
-     setDioMode(IRQ_TXDONE | IRQ_RXDONE);
      uint8_t Param[12];
      Pack3bytes(Param, 26667);                     // data bitrate = 32*Xtal/38.4e3 for PAW 38.4kbps
      Param[3] = 0x09;                              // 0x00:no filter, 0x08:BT=0.3, 0x09:BT=0.5, 0x0A:BT=0.7, 0x0B:BT=1.0
@@ -796,6 +795,7 @@ class RFM_TRX
      Param[7] = 0x01;                              // no CRC
      Param[8] = 0x00;                              // no whitening
      Cmd_Write(CMD_SETPACKETPARAMS, Param, 9);     // 0x8C, PacketParam
+     setDioMode( /* IRQ_TXDONE | */ IRQ_RXDONE);
      Regs_Write(REG_SYNCWORD0, Sync, 8); }         // Write the SYNC word
 
    void ClearIrqFlags(uint16_t Mask=IRQ_ALL) { uint8_t Data[2]; Data[0]=Mask>>8; Data[1]=Mask; Cmd_Write(CMD_CLEARIRQSTATUS, Data, 2); }
