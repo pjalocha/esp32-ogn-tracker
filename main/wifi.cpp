@@ -80,7 +80,11 @@ esp_err_t WIFI_StartAP(const char *SSID, const char *Pass, int MaxConnections)
   // IP4_ADDR(&IPinfo.netmask, 255,255,255,0);
   // tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_AP, &IPinfo);
   Err = esp_wifi_set_mode(WIFI_MODE_AP); if(Err!=ESP_OK) return Err;                   // which one should come first: set_mode or set_config ?
-  Err = esp_wifi_set_config(ESP_IF_WIFI_AP, &WIFI_Config); if(Err!=ESP_OK) return Err;
+#if ESP_IDF_VERSION_MINOR<3
+  Err = esp_wifi_set_config(ESP_IF_WIFI_AP, &WIFI_Config); if(Err!=ESP_OK) return Err; // v4.1
+#else
+  Err = esp_wifi_set_config(WIFI_IF_AP, &WIFI_Config); if(Err!=ESP_OK) return Err; // v4.3
+#endif
   Err = esp_wifi_start();
   return Err; }
 
@@ -117,7 +121,11 @@ esp_err_t WIFI_Connect(wifi_ap_record_t *AP, const char *Pass, int8_t MinSig) //
   WIFI_Config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
   WIFI_Config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
   WIFI_Config.sta.threshold.rssi = MinSig;
-  Err = esp_wifi_set_config(ESP_IF_WIFI_STA, &WIFI_Config); if(Err!=ESP_OK) return Err;
+#if ESP_IDF_VERSION_MINOR<3
+  Err = esp_wifi_set_config(ESP_IF_WIFI_STA, &WIFI_Config); if(Err!=ESP_OK) return Err; // v4.1
+#else
+  Err = esp_wifi_set_config(WIFI_IF_STA, &WIFI_Config); if(Err!=ESP_OK) return Err; // v4.3
+#endif
   Err = esp_wifi_connect(); if(Err!=ESP_OK) return Err;
   return Err; }
 
@@ -129,7 +137,11 @@ esp_err_t WIFI_Connect(const char *SSID, const char *Pass, int8_t MinSig)
   WIFI_Config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
   WIFI_Config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
   WIFI_Config.sta.threshold.rssi = MinSig;
-  Err = esp_wifi_set_config(ESP_IF_WIFI_STA, &WIFI_Config); if(Err!=ESP_OK) return Err;
+#if ESP_IDF_VERSION_MINOR<3
+  Err = esp_wifi_set_config(ESP_IF_WIFI_STA, &WIFI_Config); if(Err!=ESP_OK) return Err; // v4.1
+#else
+  Err = esp_wifi_set_config(WIFI_IF_STA, &WIFI_Config); if(Err!=ESP_OK) return Err; // v4.3
+#endif
   Err = esp_wifi_connect(); if(Err!=ESP_OK) return Err;
   return Err; }
 

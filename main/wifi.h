@@ -2,7 +2,13 @@
 #define __WIFI_H__
 
 #include "tcpip_adapter.h"
-#include "esp_wifi.h"
+
+#if ESP_IDF_VERSION_MINOR<3
+#include "esp_wifi.h" // v4.1
+#else
+#include <esp_wifi.h> // v4.3
+#endif
+
 #include "esp_event_loop.h"
 
 extern tcpip_adapter_ip_info_t WIFI_IP; // WIFI local IP address, mask and gateway

@@ -16,7 +16,8 @@ class RFM_LoRa_Config
   union
   { uint32_t Word;
     struct
-    { uint8_t Spare   :3;
+    { uint8_t Spare   :2;
+      uint8_t InvIQ   :1; // 0..1, invert IQ (common for Rx/Tx for the SX1262 chip)
       uint8_t LowRate :1; // 0..1, optimize for low-rate (strips two lowest bits of every symbol)
       uint8_t TxInv   :1; // 0..1, invert on TX
       uint8_t RxInv   :1; // 0..1, invert on RX <- probably inverted logic
@@ -47,8 +48,8 @@ class RFM_LoRa_Config
 
 } ;
 
-const RFM_LoRa_Config RFM_FNTcfg { 0xF1587190 } ; // LoRa seting for FANET
-const RFM_LoRa_Config RFM_WANcfg { 0x34877190 } ; // LoRa WAN setting for TX
+const RFM_LoRa_Config RFM_FNTcfg { 0xF1587194 } ; // LoRa seting for FANET
+const RFM_LoRa_Config RFM_WANcfg { 0x34877194 } ; // LoRa WAN setting for TX
 
 class RFM_LoRa_RxPacket
 { public:
@@ -66,8 +67,8 @@ class RFM_LoRa_RxPacket
    static const int MaxBytes = 40;
    uint8_t Byte[MaxBytes+2];
 
-   uint32_t  sTime;         // [ s] reception time
-   uint16_t msTime;         // [ms]
+   uint32_t  sTime;         // [ s] reception time: seconds
+   uint16_t msTime;         // [ms] reception time: miliseconds
    int16_t FreqOfs;         // [ 10Hz]
     int8_t SNR;             // [0.25dB]
     int8_t RSSI;            // [dBm]
@@ -85,13 +86,13 @@ class RFM_LoRa_RxPacket
 
 } ;
 
-class RFM_FSK_RxPktData                 // OGN packet received by the RF chip
+class RFM_FSK_RxPktData             // OGN packet received by the RF chip
 { public:
    static const uint8_t Bytes=26;   // [bytes] number of bytes in the packet
    uint32_t Time;                   // [sec] Time slot
    uint16_t msTime;                 // [ms] reception time since the PPS[Time]
-   uint8_t Channel;                 // [] channel where the packet has been recieved
-   uint8_t RSSI;                    // [-0.5dBm]
+   uint8_t Channel;                 // [   ] channel where the packet has been recieved
+   uint8_t RSSI;                    // [-0.5dBm] receiver signal strength
    uint8_t Data[Bytes];             // Manchester decoded data bits/bytes
    uint8_t Err [Bytes];             // Manchester decoding errors
 
@@ -154,6 +155,50 @@ class RFM_FSK_RxPktData                 // OGN packet received by the RF chip
 
 // -----------------------------------------------------------------------------------------------------------------------
 
+/*
+SX1262 setup calls
+.Cmd_Writet(0x80, 0x00);
+.Cmd_Writet(0x96, 0x01);                          // set regulator mode: 0=only LDO, 1=DC-DC+LDO
+.Cmd_Writet(0x9D, 0x01);                          // DIO2 as RF switch
+.Cmd_Writet(0x97, 0x0100012C);                    // DIO3 as TCXO control: voltage, timeout
+.Cmd_Writet(0x80, 0x00);                          // set Standby 00=RC 01=Xtal
+.Cmd_Writet(0x8A, 0x00);                          // 0=FSK 1=LoRa
+
+.Cmd_Writet(0x86, 0x36433333);                    // set frequency [32.0MHz/2^25]
+.Cmd_Writet(0x8B, 0x00 28 00 09 0A 00 CC CD);     // set modulation parameters: bitrate, BT, bandwidth, deviation
+.Cmd_Writet(0x8C, 0x00 04 00 40 00 00 34 01 00);  // set packet parameters: preamble len. preamble det. len. sync. len. payload len.
+.Regs_Write(0x06C0, 0xAA6655A59699965A);          // SYNC
+.Cmd_Writet(0x80, 0x00);                          // set standby
+.Cmd_Writet(0x82, 0x000000);                      // set RX mode
+.Cmd_Writet(0x80, 0x00);                          // set standby
+.Cmd_Writet(0x86, 0x36466667);                    // set frequency 868.4MHz
+.Cmd_Writet(0x8B, 0x002800090A00CCCD);            // set modulation parameters
+.Cmd_Writet(0x8C, 0x000400400000340100);          // set packet parameters
+.Cmd_Writet(0x95, 0x04 07 00 01);                 // PA config
+.Cmd_Writet(0x8E, 0x0E04);                        // TX parm: power and ramp time
+.Cmd_Writet(0x8F, 0x8000);                        // set TX/RX buffer address: TX=0x80, RX=0x00
+.Cmd_Writet(0x83, 0x000000);                      // set TX mode: timeout [15.625us]
+.Cmd_Writet(0x80, 0x00);                          // set standby
+... transmission ...
+.Cmd_Writet(0x82, 0x000000);                      // set RX mode: timeout [15.625us] 000000 = single mode, FFFFFF = continous mode
+.Cmd_Writet(0x80, 0x00);                          // set standby
+.Cmd_Writet(0x82, 0x000000);                      // set RX mode
+.Cmd_Writet(0x80, 0x00);                          // set standby
+.Cmd_Writet(0x86, 0x36433333);                    // set frequency
+.Cmd_Writet(0x8B, 0x002800090A00CCCD);
+.Cmd_Writet(0x8C, 0x000400400000340100);
+.Cmd_Writet(0x95, 0x04070001);
+.Cmd_Writet(0x8E, 0x0E04);
+.Cmd_Writet(0x8F, 0x8000);
+.Cmd_Writet(0x83, 0x000000);
+.Cmd_Writet(0x80, 0x00);
+... transmission ...
+.Cmd_Writet(0x82, 0x000000);
+
+*/
+
+// -----------------------------------------------------------------------------------------------------------------------
+
 // OGN frequencies for Europe: 868.2 and 868.4 MHz
 // static const uint32_t OGN_BaseFreq  = 868200000; // [Hz] base frequency
 // static const uint32_t OGN_ChanSpace =   0200000; // [Hz] channel spacing
@@ -198,12 +243,12 @@ class RFM_FSK_RxPktData                 // OGN packet received by the RF chip
 #ifdef WITH_SX1262
 #include "sx1262.h"
 
-#define RF_IRQ_PacketSent     0x0001 // packet transmission was completed
-#define RF_IRQ_PayloadReady   0x0002 // 
-#define RF_IRQ_PreambleDetect 0x0004 //
-#define RF_IRQ_SyncAddrMatch  0x0008 //
-#define RF_IRQ_CrcErr         0x0040 //
-#define RF_IRQ_Timeout        0x0200 //
+// #define RF_IRQ_PacketSent     0x0001 // packet transmission was completed
+// #define RF_IRQ_PayloadReady   0x0002 //
+// #define RF_IRQ_PreambleDetect 0x0004 //
+// #define RF_IRQ_SyncAddrMatch  0x0008 //
+// #define RF_IRQ_CrcErr         0x0040 //
+// #define RF_IRQ_Timeout        0x0200 //
 
 #endif
 
@@ -251,36 +296,99 @@ class RFM_TRX
      return  Block_Buffer+1; }
 
 #ifdef WITH_SX1262
+   uint16_t WaitWhileBusy(uint16_t Loops=100)             // 50 seems to be still too short on RPI
+   { for( ; Loops; Loops--)
+     { if(!readBusy()) break; }
+     return Loops; }
+
+   uint16_t WaitWhileBusy_ms(uint16_t ms=10)
+   { WaitWhileBusy(50);
+     for( ; ms; ms--)
+     { if(!readBusy()) break;
+       Delay_ms(1); }
+     return ms; }
+
    uint8_t *Cmd_Write(uint8_t Cmd, const uint8_t *Data, uint8_t Len)  // command code, Data[Len]
-   { return Block_Write(Data, Len, Cmd); }
+   { WaitWhileBusy_ms(); // if(WaitWhileBusy()==0) return 0;
+#ifdef DEBUG_PRINT
+     if(readBusy())
+     { Format_String(CONS_UART_Write, "Cmd_Write(0x");
+       Format_Hex(CONS_UART_Write, Cmd);
+       Format_String(CONS_UART_Write, ") => RF busy !\n"); }
+     CONS_UART_Write(readBusy()?'!':'.');                  // Busy-line state
+     Format_String(CONS_UART_Write, "Cmd_Write(0x");
+     Format_Hex(CONS_UART_Write, Cmd);
+     Format_String(CONS_UART_Write, ", 0x");
+     for(uint8_t Idx=0; Idx<Len; Idx++)
+       Format_Hex(CONS_UART_Write, Data[Idx]);
+     Format_String(CONS_UART_Write, ");\n");
+#endif
+     return Block_Write(Data, Len, Cmd); }
+   // { uint8_t *Ret = Block_Write(Data, Len, Cmd); printf("Cmd_Write: %02X %02X\n", Ret[0], Ret[1]); return Ret; }
 
    uint8_t *Cmd_Read(uint8_t Cmd, uint8_t Len)
-   { Block_Buffer[0] = Cmd; memset(Block_Buffer+1, 0, Len+1);
+   { WaitWhileBusy_ms(); // if(WaitWhileBusy()==0) return 0;
+     Block_Buffer[0] = Cmd; memset(Block_Buffer+1, 0, Len+1);
      (*TransferBlock) (Block_Buffer, Len+2);
+#ifdef DEBUG_PRINT
+     CONS_UART_Write(readBusy()?'!':'.');                  // Busy-line state
+     Format_String(CONS_UART_Write, "Cmd_Read(0x");
+     Format_Hex(CONS_UART_Write, Cmd);
+     Format_String(CONS_UART_Write, ") => 0x");
+     for(uint8_t Idx=0; Idx<Len+2; Idx++)
+       Format_Hex(CONS_UART_Write, Block_Buffer[Idx]);
+     Format_String(CONS_UART_Write, ";\n");
+#endif
      return  Block_Buffer+2;  }
 
    uint8_t *Regs_Write(uint16_t Addr, const uint8_t *Data, uint8_t Len)  // register-write code, 2-byte Address, Data[Len]
-   { Block_Buffer[0] = CMD_WRITEREGISTER; Block_Buffer[1] = Addr>>8; Block_Buffer[2] = Addr; memcpy(Block_Buffer+3, Data, Len);
+   { WaitWhileBusy_ms(); // if(WaitWhileBusy()==0) return 0;
+#ifdef DEBUG_PRINT
+     CONS_UART_Write(readBusy()?'!':'.');                  // Busy-line state
+     Format_String(CONS_UART_Write, "Regs_Write(0x");
+     Format_Hex(CONS_UART_Write, Addr);
+     Format_String(CONS_UART_Write, ", 0x");
+     for(uint8_t Idx=0; Idx<Len; Idx++)
+       Format_Hex(CONS_UART_Write, Data[Idx]);
+     Format_String(CONS_UART_Write, ");\n");
+#endif
+     Block_Buffer[0] = CMD_WRITEREGISTER; Block_Buffer[1] = Addr>>8; Block_Buffer[2] = Addr; memcpy(Block_Buffer+3, Data, Len);
      (*TransferBlock) (Block_Buffer, Len+3);
      return  Block_Buffer+3; }
 
-   uint8_t *Regs_Read(uint16_t Addr, const uint8_t *Data, uint8_t Len)  // register-read code, 2-byte Address, zero, Data[Len]
-   { Block_Buffer[0] = CMD_READREGISTER; Block_Buffer[1] = Addr>>8; Block_Buffer[2] = Addr;  memset(Block_Buffer+3, 0, Len+1);
+   uint8_t *Regs_Read(uint16_t Addr, uint8_t Len)  // register-read code, 2-byte Address, zero, Data[Len]
+   { WaitWhileBusy_ms(); // if(WaitWhileBusy()==0) return 0;
+     Block_Buffer[0] = CMD_READREGISTER; Block_Buffer[1] = Addr>>8; Block_Buffer[2] = Addr;  memset(Block_Buffer+3, 0, Len+1);
      (*TransferBlock) (Block_Buffer, Len+4);
      return  Block_Buffer+4; }
 
    uint8_t *Buff_Write(uint8_t Ofs, const uint8_t *Data, uint8_t Len)   // buffer-write code, 1-byte offset, Data[Len]
-   { Block_Buffer[0] = CMD_WRITEBUFFER; Block_Buffer[1] = Ofs; memcpy(Block_Buffer+2, Data, Len);
+   { WaitWhileBusy_ms(); // if(WaitWhileBusy()==0) return 0;
+#ifdef DEBUG_PRINT
+     if(readBusy())
+     { Format_String(CONS_UART_Write, "Buff_Write(0x");
+       Format_Hex(CONS_UART_Write, Ofs);
+       Format_String(CONS_UART_Write, ") => RF busy !\n"); }
+     CONS_UART_Write(readBusy()?'!':'.');                  // Busy-line state
+     Format_String(CONS_UART_Write, "Buff_Write(0x");
+     Format_Hex(CONS_UART_Write, Ofs);
+     Format_String(CONS_UART_Write, ", 0x");
+     for(uint8_t Idx=0; Idx<Len; Idx++)
+       Format_Hex(CONS_UART_Write, Data[Idx]);
+     Format_String(CONS_UART_Write, ");\n");
+#endif
+     Block_Buffer[0] = CMD_WRITEBUFFER; Block_Buffer[1] = Ofs; memcpy(Block_Buffer+2, Data, Len);
      (*TransferBlock) (Block_Buffer, Len+2);
      return  Block_Buffer+2; }
 
    uint8_t *Buff_Read(uint8_t Ofs, uint8_t Len)                         // buffer-read code, 1-byte offset, zero, Data[Len]
-   { Block_Buffer[0] = CMD_READBUFFER; Block_Buffer[1] = Ofs; memset(Block_Buffer+2, 0, Len+1);
+   { WaitWhileBusy_ms(); // if(WaitWhileBusy()==0) return 0;
+     Block_Buffer[0] = CMD_READBUFFER; Block_Buffer[1] = Ofs; memset(Block_Buffer+2, 0, Len+1);
      (*TransferBlock) (Block_Buffer, Len+3);
      return  Block_Buffer+3; }
 #endif
 
-#else                                                                   // SPI transfers as single bytes, explicit control of the SPI-select
+#else // USE_BLOCK_SPI                                                  // SPI transfers as single bytes, explicit control of the SPI-select
    void (*Select)(void);                                                // activate SPI select
    void (*Deselect)(void);                                              // desactivate SPI select
    uint8_t (*TransferByte)(uint8_t);                                    // exchange one byte through SPI
@@ -289,14 +397,14 @@ class RFM_TRX
    void (*Delay_ms)(int ms);
    bool (*DIO0_isOn)(void);                                              // read DIO0 = packet is ready
 #ifdef WITH_SX1262
-   bool (*Busy_isOn)(void);                                              //
+   bool (*Busy_isOn)(void);                                              // sx1262 has an additional BUSY line
 #endif
    // bool (*DIO4_isOn)(void);
    void (*RESET)(uint8_t On);                                            // activate or desactivate the RF chip reset
 
    bool readIRQ(void) { return (*DIO0_isOn)(); }
 #ifdef WITH_SX1262
-   bool readBusy(void) { return (*Busy_isOn)(); }
+   bool readBusy(void) { return (*Busy_isOn)(); }                        // read the BUSY line of the sx1262
 #endif
                                       // the following are in units of the synthesizer with 8 extra bits of precision
    uint32_t BaseFrequency;            // [32MHz/2^19/2^8] base frequency = channel #0
@@ -404,7 +512,7 @@ class RFM_TRX
 #endif
 
 #ifdef WITH_SX1262
-   void WriteFreq(uint32_t Freq)               // [32MHz/2^27] Set center frequency
+   void WriteFreq(uint32_t Freq)               // [32MHz/2^27] set transmission frequency
    { uint8_t Buff[4];
      Freq = (Freq+2)>>2;                       // [32MHz/2^25]
      Buff[0] = Freq>>24;
@@ -416,24 +524,27 @@ class RFM_TRX
    void WriteFIFO(const uint8_t *Data, uint8_t Len)
    { const uint8_t BaseOfs[2] = { 0x80, 0x00 };  // TX, RX offsets in the 256-byte buffer
      Cmd_Write(CMD_SETBUFFERBASEADDRESS, BaseOfs, 2);
-     Buff_Write(BaseOfs[0], Data, Len); }
+     Buff_Write(0x80, Data, Len); }
 
    uint8_t *ReadFIFO(uint8_t Len)
    { uint8_t *BuffStat = Cmd_Read(CMD_GETRXBUFFERSTATUS, 2);        // length, offset
      return Buff_Read(BuffStat[1], BuffStat[0]); }
 #endif
 
-   void WritePacketOGN(const uint8_t *Data, uint8_t Len=26)         // write the packet data (26 bytes)
+   void FNT_WritePacket(const uint8_t *Data, uint8_t Len)
+   { WriteFIFO(Data, Len); }
+
+   void OGN_WritePacket(const uint8_t *Data, uint8_t Len=26)         // write the packet data (26 bytes)
    { uint8_t Packet[2*Len];
      uint8_t PktIdx=0;
      for(uint8_t Idx=0; Idx<Len; Idx++)
      { uint8_t Byte=Data[Idx];
-       Packet[PktIdx++]=ManchesterEncode[Byte>>4];                               // software manchester encode every byte
+       Packet[PktIdx++]=ManchesterEncode[Byte>>4];                   // software manchester encode every byte
        Packet[PktIdx++]=ManchesterEncode[Byte&0x0F];
      }
      WriteFIFO(Packet, 2*Len); }
 
-   void WritePacketPAW(const uint8_t *Data, uint8_t Len=24)
+   void PAW_WritePacket(const uint8_t *Data, uint8_t Len=24)
    { uint8_t Packet[Len+1];
      for(uint8_t Idx=0; Idx<Len; Idx++)
      { Packet[Idx] = Data[Idx]; }
@@ -441,7 +552,7 @@ class RFM_TRX
      Packet[Len] = PAW_Packet::CRC8(Packet, Len);
      WriteFIFO(Packet, Len+1); }
 
-   void ReadPacketOGN(uint8_t *Data, uint8_t *Err, uint8_t Len=26)          // read packet data from FIFO
+   void OGN_ReadPacket(uint8_t *Data, uint8_t *Err, uint8_t Len=26)         // read packet data from FIFO
    { uint8_t *Packet = ReadFIFO(2*Len);                                     // read 2x26 bytes from the RF chip RxFIFO
      uint8_t PktIdx=0;
      for(uint8_t Idx=0; Idx<Len; Idx++)                                     // loop over packet bytes
@@ -514,7 +625,7 @@ class RFM_TRX
        TransferByte(Data[Idx]);
      Deselect(); }
 
-   void WritePacketOGN(const uint8_t *Data, uint8_t Len=26) const   // write the packet data (26 bytes)
+   void OGN_WritePacket(const uint8_t *Data, uint8_t Len=26) const   // write the packet data (26 bytes)
    { const uint8_t Addr=REG_FIFO;                                // write to FIFO
      Select();
      TransferByte(Addr | 0x80);
@@ -525,7 +636,7 @@ class RFM_TRX
      }
      Deselect(); }
 
-   void WritePacketPAW(const uint8_t *Data, uint8_t Len=24)
+   void PAW_WritePacket(const uint8_t *Data, uint8_t Len=24)
    { uint8_t Packet[Len+1];
      for(uint8_t Idx=0; Idx<Len; Idx++)
      { Packet[Idx] = Data[Idx]; }
@@ -562,7 +673,7 @@ class RFM_TRX
      if(WriteSize>8) WriteSize=8;                                            // up to 8 bytes of SYNC can be programmed
      WriteBytes(SyncData+(8-WriteSize), WriteSize, REG_SYNCVALUE1);          // write the SYNC, skip some initial bytes
      WriteByte(  0x80 | ((WriteSize-1)<<3) | SyncTol, REG_SYNCCONFIG);       // write SYNC length [bytes] and tolerance to errors [bits]
-     WriteWord( 9-WriteSize, REG_PREAMBLEMSB); }                             // write preamble length [bytes] (page 71)
+     WriteWord( /* 9-WriteSize, */ 1, REG_PREAMBLEMSB); }                    // write preamble length [bytes] (page 71)
 //              ^ 8 or 9 ?
 #endif
 
@@ -571,22 +682,142 @@ class RFM_TRX
    { if(SyncTol>7) SyncTol=7;
      if(WriteSize>8) WriteSize=8;
      WriteBytes(SyncData+(8-WriteSize), WriteSize, REG_SYNCVALUE1);        // write the SYNC, skip some initial bytes
-     WriteByte(  0x90 | (WriteSize-1), REG_SYNCCONFIG);                    // write SYNC length [bytes] (or 0xB0 for reversed preamble) => p.92
-     WriteWord( 9-WriteSize, REG_PREAMBLEMSB); }                           // write preamble length [bytes] (page 71)
+     WriteByte(  0x90 | (WriteSize-1), REG_SYNCCONFIG);                    // write SYNC length [bytes] AAPS_sss
+     WriteWord( /* 9-WriteSize, */ 1, REG_PREAMBLEMSB); }                  // write preamble length [bytes] (page 71)
 //              ^ 8 or 9 ?
 #endif
 
 #ifdef WITH_SX1262
-   void WriteTxPower(int8_t TxPower) { }
-   void WriteTxPowerMin(void) { WriteTxPower(0); }
-   void FSK_WriteSYNC(uint8_t WriteSize, uint8_t SyncTol, const uint8_t *SyncData) { }
-   void OGN_Configure(int16_t Channel, const uint8_t *Sync) { }
-   void ClearIrqFlags(uint16_t Mask=0xFFFF) { uint8_t Data[2]; Data[0]=Mask>>8; Data[1]=Mask; Cmd_Write(CMD_CLEARIRQSTATUS, Data, 2); }
-   uint16_t ReadIrqFlags(void) { uint8_t *Stat=Cmd_Read(CMD_GETIRQSTATUS, 2); return 0x0000; }
-   void setModeSleep(void) { uint8_t Config[3] = { 0,0,0 }; Cmd_Write(CMD_SETSLEEP, Config, 3); }
-   void setModeStandby(void) { uint8_t Config[1] = { 1 }; Cmd_Write(CMD_SETSTANDBY, Config, 1); }
-   void setModeTX(uint32_t Timeout=0) { uint8_t T[3]; T[0]=Timeout>>16; T[1]=Timeout>>8; T[2]=Timeout; Cmd_Write(CMD_SETTX, T, 3); }
-   void setModeRX(uint32_t Timeout=0) { uint8_t T[3]; T[0]=Timeout>>16; T[1]=Timeout>>8; T[2]=Timeout; Cmd_Write(CMD_SETRX, T, 3); }
+   void setTCXOctrlDIO3(uint8_t Volt=1, uint32_t Delay=320)                        // [0..7 => 1.6-3.3V] [1/64ms] p.82
+   { uint8_t Data[4] = { Volt, (uint8_t)(Delay>>16), (uint8_t)(Delay>>8), (uint8_t)Delay }; Cmd_Write(CMD_SETDIO3ASTCXOCTRL, Data, 4); }
+   void setRFswitchDIO2(uint8_t Mode=0) { Cmd_Write(CMD_SETDIO2ASRFSWITCHCTRL, &Mode, 1); } // enable DIO2 as RF switch
+   void setRegulator(uint8_t Mode=0) { Cmd_Write(CMD_SETREGULATORMODE, &Mode, 1); } // 0=LDO, 1=DCDC+LDO
+
+   void setModulation(uint8_t Mode=0) { Cmd_Write(CMD_SETPACKETTYPE, &Mode, 1); }   // 0=FSK, 1=LoRa
+   void setLoRa(void) { setModulation(0x01); }                                      // switch to LoRa
+   void setFSK(void)  { setModulation(0x00); }                                      // switch to FSK
+   uint8_t getModulation(void) { return Cmd_Read(CMD_GETPACKETTYPE, 1)[0]; }
+
+   uint8_t getStatus(void) { return Cmd_Read(CMD_GETSTATUS, 0)[-1]; }               // RMMM SSSR MMM: 2=STBY_RC, 3=STBY_XOSC, 4:FS, 5:RX, 6:TX p.95
+
+   void WriteTxPower(int8_t TxPower)
+   { if(TxPower>22) TxPower=22;                                                     // for high power PA
+     else if(TxPower<(-9)) TxPower=(-9);
+     uint8_t PAparm[4] = { 0x04, 0x07, 0x00, 0x01 } ;                               // for high power PA: paDutyCycle, hpMax, deviceSel, paLut
+     Cmd_Write(CMD_SETPACONFIG, PAparm, 4);                                         // Power Amplifier Configuration
+     uint8_t TxParm[2] = { (uint8_t)TxPower, 0x04 } ;                               // RampTime = 200us
+     Cmd_Write(CMD_SETTXPARAMS, TxParm, 2); }                                       // 0x8E, Power, RampTime
+   void WriteTxPowerMin(void) { WriteTxPower(-8); }
+
+   void Calibrate(void)                                                             // Calibrate receiver image rejection
+   { uint8_t CalParm[2] = { 0xD7, 0xDB }; // for 868MHz                             // { 0xE1, 0xE9 } for 915MHz
+     Cmd_Write(CMD_SETTXPARAMS, CalParm, 2); }
+
+   void FSK_WriteSYNC(uint8_t WriteSize, uint8_t SyncTol, const uint8_t *SyncData)
+   { if(SyncTol>7) SyncTol=7;
+     if(WriteSize>8) WriteSize=8;
+     uint8_t Param[12];
+     Param[0] = 0;                                 //
+     Param[1] = 4;                                 // [bits] preamble length
+     Param[2] = 0x04;                              // preamble detect: 0x00:OFF, 0x04:8bits, 0x05:16bits, 0x06=24bits, 0x07=32bits
+     Param[3] = WriteSize*8;                       // [bits] SYNC word length, write word at 0x06C0
+     Param[4] = 0x00;                              // address filtering: OFF
+     Param[5] = 0x00;                              // fixed packet size
+     Param[6] = 2*26;                              // 26 bytes, software Manchester
+     Param[7] = 0x01;                              // no CRC
+     Param[8] = 0x00;                              // no whitening
+     Cmd_Write(CMD_SETPACKETPARAMS, Param, 9);     // 0x8C, PacketParam
+     Regs_Write(REG_SYNCWORD0, SyncData+(8-WriteSize), WriteSize); } // Write the SYNC word
+
+   static void Pack3bytes(uint8_t *Byte, uint32_t Value) { Byte[0]=Value>>16; Byte[1]=Value>>8; Byte[2]=Value; }
+
+   void FNT_Configure(uint8_t CR=1)                   // configure for FANET/LoRa
+   { WriteTxPower(0);
+     RFM_LoRa_Config CFG = RFM_FNTcfg; CFG.CR=CR;
+     LoRa_Configure(CFG, FANET_Packet::MaxBytes); }
+
+   void LoRa_Configure(RFM_LoRa_Config CFG, uint8_t MaxSize=64)
+   { setChannel(0);
+     uint8_t Param[8];
+     Param[0] = CFG.SF;                            // Spreading Factor
+     Param[1] = CFG.BW-3;                          // work only for 62.5/125/256/512kHz
+     Param[2] = CFG.CR;                            // Coding Rate
+     Param[3] = CFG.LowRate;                       // Low-Rate optimize
+     Cmd_Write(CMD_SETMODULATIONPARAMS, Param, 4); // 0x8B, ModParam
+     Param[0] = 0x00;
+     Param[1] = CFG.Preamble;                      // preamble size
+     Param[2] = CFG.IHDR;                          // implicit header
+     Param[3] = MaxSize;                           // [bytes]
+     Param[4] = CFG.CRC;                           // check or not CRC
+     Param[5] = CFG.InvIQ;                         // common flag for Tx/Rx
+     Cmd_Write(CMD_SETPACKETPARAMS, Param, 6);     // 0x8C, PacketParam
+     setDioMode( /* IRQ_TXDONE | */ IRQ_RXDONE);
+     Param[0] = (CFG.SYNC&0xF0) | 0x04;
+     Param[1] = (CFG.SYNC<<4)   | 0x04;
+     Regs_Write(REG_LORASYNCWORD, Param, 2); }
+
+   void OGN_Configure(int16_t Channel, const uint8_t *SyncData)
+   { setChannel(Channel);
+     uint8_t Param[12];
+     Pack3bytes(Param, 10240);                     // data bitrate = 32*Xtal/100e3 for OGN 100kbps
+     Param[3] = 0x09;                              // 0x00:no filter, 0x08:BT=0.3, 0x09:BT=0.5, 0x0A:BT=0.7, 0x0B:BT=1.0
+     Param[4] = 0x0A;                              // DSB RX bandwidth: 0x0A=232.3kHz, 0x19=312.2kHz, 0x1B=78.2kHz, 0x13=117.3kHz
+     Pack3bytes(Param+5, 52429);                   // FSK deviation: 50e3*2^25/Xtal for OGN +/-50kHz
+     Cmd_Write(CMD_SETMODULATIONPARAMS, Param, 8); // 0x8B, ModParam
+     Param[0] = 0;                                 //
+     Param[1] = 4;                                 // [bits] preamble length
+     Param[2] = 0x00;                              // preamble detect: 0x00:OFF, 0x04:8bits, 0x05:16bits, 0x06=24bits, 0x07=32bits
+     Param[3] = 8*8;                               // [bits] SYNC word length, write word at 0x06C0
+     Param[4] = 0x00;                              // address filtering: OFF
+     Param[5] = 0x00;                              // fixed packet size
+     Param[6] = 2*26;                              // 26 bytes, software Manchester
+     Param[7] = 0x01;                              // no CRC
+     Param[8] = 0x00;                              // no whitening
+     Cmd_Write(CMD_SETPACKETPARAMS, Param, 9);     // 0x8C, PacketParam
+     setDioMode(/* IRQ_TXDONE | */ IRQ_RXDONE);
+     Regs_Write(REG_SYNCWORD0, SyncData, 8); }     // Write the SYNC word
+
+   void PAW_Configure(const uint8_t *Sync)
+   { setFrequency(869525000);
+     uint8_t Param[12];
+     Pack3bytes(Param, 26667);                     // data bitrate = 32*Xtal/38.4e3 for PAW 38.4kbps
+     Param[3] = 0x09;                              // 0x00:no filter, 0x08:BT=0.3, 0x09:BT=0.5, 0x0A:BT=0.7, 0x0B:BT=1.0
+     Param[4] = 0x18;                              // DSB RX bandwidth: 0x0A=232.3kHz, 0x19=312.2kHz, 0x1B=78.2kHz, 0x13=117.3kHz
+     Pack3bytes(Param+5, 10066);                   // FSK deviation: 9.6e3*2^25/Xtal for PAW +/-9.6kHz
+     Cmd_Write(CMD_SETMODULATIONPARAMS, Param, 8); // 0x8B, ModParam
+     Param[0] = 0;                                 //
+     Param[1] = 10*8;                              // [bits] preamble length
+     Param[2] = 0x06;                              // preamble detect: 0x00:OFF, 0x04:8bits, 0x05:16bits, 0x06=24bits, 0x07=32bits
+     Param[3] = 8*8;                               // [bits] SYNC word length, write word at 0x06C0
+     Param[4] = 0x00;                              // address filtering: OFF
+     Param[5] = 0x00;                              // fixed packet size
+     Param[6] = 25;                                // 25 bytes
+     Param[7] = 0x01;                              // no CRC
+     Param[8] = 0x00;                              // no whitening
+     Cmd_Write(CMD_SETPACKETPARAMS, Param, 9);     // 0x8C, PacketParam
+     setDioMode( /* IRQ_TXDONE | */ IRQ_RXDONE);
+     Regs_Write(REG_SYNCWORD0, Sync, 8); }         // Write the SYNC word
+
+   void ClearIrqFlags(uint16_t Mask=IRQ_ALL) { uint8_t Data[2]; Data[0]=Mask>>8; Data[1]=Mask; Cmd_Write(CMD_CLEARIRQSTATUS, Data, 2); }
+   uint16_t ReadIrqFlags(void) { uint8_t *Stat=Cmd_Read(CMD_GETIRQSTATUS, 2); return (((uint16_t)(Stat[0]))<<8) | Stat[1]; }
+
+   void setModeSleep(void) { uint8_t Config[3] = { 0, 0, 0 }; Cmd_Write(CMD_SETSLEEP, Config, 3); }
+   void setModeStandby(uint8_t Mode=0) { uint8_t Config[1] = { Mode }; Cmd_Write(CMD_SETSTANDBY, Config, 1); }
+   void setModeTX(uint32_t Timeout=0) { uint8_t T[3]; Pack3bytes(T, Timeout); Cmd_Write(CMD_SETTX, T, 3); }
+   void setModeRX(uint32_t Timeout=0) { uint8_t T[3]; Pack3bytes(T, Timeout); Cmd_Write(CMD_SETRX, T, 3); }
+   void setModeSynth(void) { Cmd_Write(CMD_SETFS, 0, 0); }
+
+   void setDioMode(uint16_t Mask = IRQ_RXDONE)
+   { uint8_t Param[8];
+     Param[0] = Mask>>8;   // IRQ mask
+     Param[1] = Mask;
+     Param[2] = Mask>>8;   // DIO1 mask
+     Param[3] = Mask;
+     Param[4] = 0;         // DIO2 mask
+     Param[5] = 0;
+     Param[6] = 0;         // DIO3 mask
+     Param[7] = 0;
+     Cmd_Write(CMD_SETDIOIRQPARAMS, Param, 8); }
 #endif
 
 #if defined(WITH_RFM95) || defined(WITH_SX1272) || defined(WITH_RFM69)
@@ -601,7 +832,9 @@ class RFM_TRX
    void setModeSleep(void)   { WriteMode(RF_OPMODE_SLEEP); }                // FSK sleep
    void setModeStandby(void) { WriteMode(RF_OPMODE_STANDBY); }              // FSK standby
    void setModeTX(void)      { WriteMode(RF_OPMODE_TRANSMITTER); }          // FSK transmit
+   bool  isModeTX(void)      { return ReadMode()==RF_OPMODE_TRANSMITTER; }  // in transmitter mode ?
    void setModeRX(void)      { WriteMode(RF_OPMODE_RECEIVER); }             // FSK receive
+   bool  isModeRX(void)      { return ReadMode()==RF_OPMODE_RECEIVER; }     // in receiver mode ? ?
 #if defined(WITH_RFM95) || defined(WITH_SX1272)
    void setModeLoRaStandby(void)  { WriteMode(RF_OPMODE_LORA_STANDBY); }    // LoRa standby
    void setModeLoRaRXcont(void)   { WriteMode(RF_OPMODE_LORA_RX_CONT); }    // Lora continues recieve
@@ -650,7 +883,7 @@ class RFM_TRX
      WriteWord(0x0140, REG_BITRATEMSB);     // bit rate = 100kbps
      WriteWord(0x0333, REG_FDEVMSB);        // FSK deviation = +/-50kHz
      setChannel(Channel);                   // operating channel
-     FSK_WriteSYNC(8, 7, Sync);             // SYNC pattern (setup for reception)
+     FSK_WriteSYNC(8, 7, Sync);             // SYNC pattern (setup for transmission)
      WriteByte(  0x00, REG_PACKETCONFIG1);  // [0x10] Fixed size packet, no DC-free encoding, no CRC, no address filtering
      WriteByte(0x80+51, REG_FIFOTHRESH);    // [ ] TxStartCondition=FifoNotEmpty, FIFO threshold = 51 bytes
      WriteByte(  2*26, REG_PAYLOADLENGTH);  // [0x40] Packet size = 26 bytes Manchester encoded into 52 bytes
@@ -669,13 +902,6 @@ class RFM_TRX
      WriteByte(  0x00, REG_AFCFEI);         // [0x00] AfcAutoOn=0, AfcAutoclearOn=0
      WriteByte(  0x00, REG_AFCCTRL);        // [0x00] 0x20 = AfcLowBetaOn=1 -> page 64 -> page 33
      WriteByte(   +10, REG_TESTAFC); }      // [0x00] [488Hz] if AfcLowBetaOn
-#endif
-
-
-#ifdef WITH_SX1262
-   void setModulation(uint8_t Mode=0) { Cmd_Write(CMD_SETPACKETTYPE, &Mode, 1); }
-   void setLoRa(void) { setModulation(0x01); } // switch to FSK
-   void setFSK(void)  { setModulation(0x00); } // switch to LoRa
 #endif
 
 // #ifdef WITH_RFM95
@@ -714,7 +940,7 @@ class RFM_TRX
    { WriteMode(RF_OPMODE_SLEEP);
      WriteMode(RF_OPMODE_SLEEP); }
 
-   int LoRa_Configure(RFM_LoRa_Config CFG, uint8_t MaxSize=64)
+   void LoRa_Configure(RFM_LoRa_Config CFG, uint8_t MaxSize=64)
    { WriteByte(0x00,   REG_LORA_HOPPING_PERIOD);                                // disable fast-hopping
      WriteByte(CFG.SYNC,   REG_LORA_SYNC);                                      // SYNC
      WriteWord(CFG.Preamble, REG_LORA_PREAMBLE_MSB);                            // [symbols] minimal preamble
@@ -737,17 +963,17 @@ class RFM_TRX
      setChannel(0);                                 // operating channel
      WriteWord(0x0000, REG_DIOMAPPING1);            // 001122334455___D signals: 00=DIO0 11=DIO1 22=DIO2 33=DIO3 44=DIO4 55=DIO5 D=MapPreambleDetect
                                                     // DIO0: 00=RxDone, 01=TxDone, 10=CadDone
-     return 0; }
+   }
 
-   int FNT_Configure(uint8_t CR=1)                   // configure for FANET/LoRa
+   void FNT_Configure(uint8_t CR=1)                   // configure for FANET/LoRa
    { WriteTxPower(0);
      RFM_LoRa_Config CFG = RFM_FNTcfg; CFG.CR=CR;
-     return LoRa_Configure(CFG, FANET_Packet::MaxBytes); }
+     LoRa_Configure(CFG, FANET_Packet::MaxBytes); }
 
-   int WAN_Configure(uint8_t CR=1)                   // configure for LoRaWAN
+   void WAN_Configure(uint8_t CR=1)                   // configure for LoRaWAN
    { WriteTxPower(0);
      RFM_LoRa_Config CFG = RFM_WANcfg; CFG.CR=CR;
-     return LoRa_Configure(CFG, 40); }
+     LoRa_Configure(CFG, 40); }
 
    void LoRa_setIRQ(uint8_t Mode=0)                  // 0:on RX, 1:on TX, 2: on CAD
    { WriteByte(Mode<<6, REG_DIOMAPPING1); }
@@ -842,7 +1068,7 @@ class RFM_TRX
      // WriteByte(  0x02, REG_RXBW);               // Man=0=16 Exp=2 +/-125kHz Rx (single-side) bandwidth => p.27,67,83,90
      WriteByte(  0x23, REG_RXBW);               // Man=1=20 Exp=3 +/-50kHz Rx (single-side) bandwidth => p.27,67,83,90
      WriteByte(  0x23, REG_AFCBW);              // +/-125kHz AFC bandwidth
-     WriteByte(  0x49, REG_PARAMP);             // BT=0.5 shaping, 40us ramp up/down
+     WriteByte(  0x29, REG_PARAMP);             // 2:BT=1.0 (seems better ?), 4:BT=0.5 shaping, 40us ramp up/down
      WriteByte(  0x0E, REG_RXCONFIG);           // => p.90 (or 0x8E ?)
      WriteByte(  0x07, REG_RSSICONFIG);         // 256 samples for RSSI, no offset, => p.90,82
      WriteByte(  0x20, REG_LNA);                // max. LNA gain, => p.89

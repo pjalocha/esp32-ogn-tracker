@@ -427,20 +427,29 @@ static void esp_ble_gatts_cb(esp_gatts_cb_event_t Event, esp_gatt_if_t gatts_if,
       break;
     case ESP_GATTS_START_EVT: // #12
       break;
+    case ESP_GATTS_STOP_EVT:  //
+      break;
     case ESP_GATTS_UNREG_EVT: // #6
       break;
-    case ESP_GATTS_MTU_EVT:   // #4
-      spp_mtu_size = Param->mtu.mtu;
-      break;
-    case ESP_GATTS_CONNECT_EVT: // #14
+    case ESP_GATTS_CONNECT_EVT: // #14 = GATT client connect
       spp_conn_id = Param->connect.conn_id;
       spp_gatts_if = gatts_if;
       is_connected = true;
       memcpy(&spp_remote_bda, &Param->connect.remote_bda, sizeof(esp_bd_addr_t));
       break;
-    case ESP_GATTS_DISCONNECT_EVT: // #15
+    case ESP_GATTS_DISCONNECT_EVT: // #15 = GATT client disconnect
       is_connected = false;
       esp_ble_gap_start_advertising(&spp_adv_params);
+      break;
+    case ESP_GATTS_MTU_EVT:   // #4 = set MTU complete
+      spp_mtu_size = Param->mtu.mtu;
+      break;
+    case ESP_GATTS_READ_EVT:   // #1 = request read operation
+      break;
+    case ESP_GATTS_WRITE_EVT:   // #2 = request write operation
+      break;
+    case ESP_GATTS_EXEC_WRITE_EVT: // #3  = request execute write opearation
+      // if(Param->exec_write.exec_write_flag) { }
       break;
     default:
       break;
@@ -449,6 +458,8 @@ static void esp_ble_gatts_cb(esp_gatts_cb_event_t Event, esp_gatt_if_t gatts_if,
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   Format_String(CONS_UART_Write, "BLE_GATTS: Event ");
   Format_UnsDec(CONS_UART_Write, (uint32_t)Event);
+  Format_String(CONS_UART_Write, ".");
+  Format_UnsDec(CONS_UART_Write, (uint32_t)gatts_if);
   Format_String(CONS_UART_Write, "\n");
   xSemaphoreGive(CONS_Mutex);
 }
@@ -467,6 +478,8 @@ static void esp_ble_gap_cb(esp_gap_ble_cb_event_t Event, esp_ble_gap_cb_param_t 
     case ESP_GAP_BLE_NC_REQ_EVT: // #16 = Numeric Comparison REQuest
       break;
     case ESP_GAP_BLE_AUTH_CMPL_EVT: // #8 = AUTHentication CoMPLete
+      break;
+    case ESP_GAP_BLE_KEY_EVT: // #9 = 
       break;
     case ESP_GAP_BLE_ADV_START_COMPLETE_EVT: // #6 = starting advertise complete
       break;
@@ -504,8 +517,8 @@ int BT_SPP_Init(void)
   Err = esp_bt_controller_enable((esp_bt_mode_t)BTconf.mode); if(Err!=ESP_OK) return Err;   // mode must be same as in BTconf
   Err = esp_bluedroid_init(); if(Err!=ESP_OK) return Err;                                   // init the BT stack
   Err = esp_bluedroid_enable(); if(Err!=ESP_OK) return Err;                                 // enable the BT stack
-  Err = esp_ble_gap_register_callback(esp_ble_gap_cb); if(Err!=ESP_OK) return Err;
-  Err = esp_ble_gatts_register_callback(esp_ble_gatts_cb); if(Err!=ESP_OK) return Err;
+  Err = esp_ble_gap_register_callback(esp_ble_gap_cb); if(Err!=ESP_OK) return Err;          // GAP callback
+  Err = esp_ble_gatts_register_callback(esp_ble_gatts_cb); if(Err!=ESP_OK) return Err;      // GATTS callback
   Err = esp_ble_gatts_app_register(ESP_SPP_APP_ID); if(Err!=ESP_OK) return Err;
 
   esp_ble_io_cap_t IOcap = ESP_IO_CAP_NONE; // no input and no output capabilities

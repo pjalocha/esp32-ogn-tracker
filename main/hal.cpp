@@ -13,6 +13,10 @@
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
 
+#if ESP_IDF_VERSION_MINOR>=3
+#include "soc/adc_channel.h" // v4.3
+#endif
+
 #include "esp_system.h"
 #include "esp_freertos_hooks.h"
 
@@ -278,7 +282,7 @@ GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    Foll
 
 #ifdef WITH_TBEAM_V10
 #ifdef WITH_SX1262
-#define PIN_RFM_BUSY GPIO_NUM_32  // for the T-Beam with SX1262
+#define PIN_RFM_BUSY GPIO_NUM_32  // for the T-Beam with SX1262 (watch for conflict with the LCD)
 #endif
 #endif
 
@@ -302,7 +306,7 @@ GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    Foll
 
 #define RFM_SPI_HOST  VSPI_HOST   // or H or VSPI_HOST ?
 #define RFM_SPI_DMA   1           // DMA channel
-#define RFM_SPI_SPEED 4000000     // [Hz] 4MHz SPI clock rate for RF chip
+#define RFM_SPI_SPEED 4000000     // [Hz] 2MHz SPI clock rate for RF chip
 
 #ifdef WITH_ST7789
 #ifdef WITH_TBEAM                  // old T-Beam
@@ -1726,7 +1730,7 @@ void IO_Configuration(void)
     input_delay_ns   : 0,
     spics_io_num     : PIN_RFM_SS,
     flags            : 0,
-    queue_size       : 3,
+    queue_size       : 1,
     pre_cb           : 0,
     post_cb          : 0
   };

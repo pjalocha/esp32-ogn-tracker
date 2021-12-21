@@ -23,8 +23,8 @@ class LoRaWANnode
    uint32_t JoinNonce;     // from Join-Accept: unique must not be reused
    uint32_t HomeNetID;     // from Join-Accept: Home Network ID
    uint32_t DevAddr;       // from Join-Accept: Device Address
-   uint8_t  DLsetting;     // from Join-Accept: DownLink configuration: OptNeg | RX1DRoffset | RX2 data rate
-   uint8_t  RxDelay;       // from Join-Accept:
+   uint8_t  DLsetting;     // from Join-Accept: DownLink configuration: OptNeg:1 | RX1 data rate offset:3 | RX2 data rate:4
+   uint8_t  RxDelay;       // from Join-Accept: RFU:4 | Del:4  Del=1..15s for the RX1, RX2 delay is Del+1
    uint8_t  State;         // 0:disconencted, 1:join-request sent, 2:join-accept received, 3:uplink-packet sent
    uint8_t  Chan;          // [0..7] Current channel being used
    uint32_t UpCount;       // [seq] Uplink frame counter: reset when joining the network
@@ -58,6 +58,9 @@ class LoRaWANnode
      DevEUI=MAC;
      if(AppKey) memcpy(this->AppKey, AppKey, 16);
      Reset(); }
+
+   void Disconnect(void)
+   { State=0; }
 
    uint8_t incrChan(uint8_t Step=1) { Chan+=Step; if(Chan>=Chans) Chan-=Chans; return Chan; }
 
@@ -172,24 +175,26 @@ class LoRaWANnode
    { int Len=getDataPacket(Packet, Data, DataLen, Port, Confirm); *Pkt = Packet; return Len; }
 
    int procRxData(const RFM_LoRa_RxPacket &RxPacket)
-   { int Ret=procRxData(RxPacket.Byte, RxPacket.Len); if(Ret<0) return Ret;
-     RxSNR += (RxPacket.SNR-RxSNR+1)/2;
+   { int Ret = procRxData(RxPacket.Byte, RxPacket.Len); if(Ret<0) return Ret;
+     RxSNR  += (RxPacket.SNR-RxSNR+1)/2;                            // if good packet then update the signal statistics
      RxRSSI += (RxPacket.RSSI-RxRSSI+1)/2;
      return Ret; }
 
    int procRxData(const uint8_t *PktData, int PktLen)
    { if(PktLen<12) return -1;
-     uint8_t Type = PktData[0]>>5; if(Type!=3 && Type!=5) return -1;
-     uint32_t Addr=readInt<uint32_t>(PktData+1, 4);
-     if(Addr!=DevAddr) return 0;
-     uint8_t Ctrl = PktData[5];                                      // Frame control: ADR | RFU | ACK | FPending | FOptLen[4]
-     uint32_t Count=readInt<uint32_t>(PktData+6, 2);
-     int16_t CountDiff = Count-DnCount;                              //
-     if(CountDiff<=0) return -1;                                      // attempt to reuse the counter: drop this packet
+     uint8_t Type = PktData[0]>>5; if(Type!=3 && Type!=5) return -1; // Frame Type: 3=unconfirmed data downlink, 5=confirmed data downlink
+     uint32_t Addr=readInt<uint32_t>(PktData+1, 4);                  // device address
+     if(Addr!=DevAddr) return 0;                                     // check if packet is for us (it could be for somebody else)
+     uint8_t Ctrl = PktData[5];                                      // Frame Control: ADR | RFU | ACK | FPending | FOptLen[4]
+     uint32_t Count = readInt<uint32_t>(PktData+6, 2);               // download counter
+     int16_t CountDiff = Count-DnCount;                              // how many we have missed ?
+     if(CountDiff<=0) return -1;                                     // attempt to reuse the counter: drop this packet
      uint32_t MIC=0;
      LoRaMacComputeMic(PktData, PktLen-4, NetSesKey, Addr, 0x01, Count, &MIC);
      if(memcmp(PktData+PktLen-4, &MIC, 4)) return -1;                // give up if MIC does not match
-     uint8_t DataOfs = 8 + (Ctrl&0x0F);                              // where the port byte should be
+     uint8_t OptLen = Ctrl&0x0F;                                     // Options: how many bytes
+     uint8_t DataOfs = 8 + OptLen;                                   // where the port byte should be
+     if(OptLen) procRxOpt(PktData+8, OptLen);                        // process the options (these are not encrypted)
      uint8_t DataLen = PktLen-DataOfs-4;                             // number of bytes of the user data field
      if(DataLen)                                                     // if non-zero
      { Packet[0] = PktData[DataOfs];                                 // copy port number
@@ -205,7 +210,19 @@ class LoRaWANnode
      if(Type==5) TxACK=1;                                            // if ACK requested
      RxPend = Ctrl&0x10;                                             // is there more data pending to be received on next round ?
      State=2;
+     // if(DataLen==0)
+     // { Packet[0]=0x00; DataLen++;                                    // copy MAC commands to user buffer for debug
+     //   for(uint8_t Idx=0; Idx<OptLen; Idx++)
+     //   { Packet[DataLen++] = PktData[8+Idx]; }
+     // }
      return DataLen; }
+
+     void procRxOpt(const uint8_t *Opt, uint8_t Len)                 // process the options
+     { }
+     // { Format_String(CONS_UART_Write, "LoRaWAN Opt: ");
+     //   for(uint8_t Idx=0; Idx<Len; Idx++)
+     //     Format_Hex(CONS_UART_Write, Opt[Idx]);
+     //   Format_String(CONS_UART_Write, "\n"); }
 
 #ifdef WITH_ESP32
   esp_err_t WriteToNVS(const char *Name="LoRaWAN", const char *NameSpace="TRACKER")

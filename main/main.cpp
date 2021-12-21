@@ -79,6 +79,7 @@ void app_main(void)
       { WANdev.Reset(getUniqueID(), Parameters.AppKey); // then reset LoRaWAN to this key
         WANdev.WriteToNVS(); }                          // and save LoRaWAN config. to NVS
       Parameters.clrAppKey(); }
+    WANdev.Disconnect();                                // restart with network join-request/accept at each restart
 #endif
 
     CONS_UART_SetBaudrate(Parameters.CONbaud);
