@@ -618,15 +618,19 @@ void vTaskPROC(void* pvParameters)
       if(TxBackOff) TxBackOff--;
       else
       { RF_TxFIFO.Write();                                                // complete the write into the TxFIFO
-        TxBackOff = AverSpeed>=10 ? 1 : 3+(RX_Random&0x1); }
+        TxBackOff = AverSpeed>=10 ? 0 : 3+(RX_Random&0x1); }
       Position->Sent=1;
 #ifdef WITH_FANET
-    if( (SlotTime&0x07)==(RX_Random&0x07) )                                              // every 8sec
+    static uint8_t FNTbackOff=0;
+    if(FNTbackOff) FNTbackOff--;
+    // if( (SlotTime&0x07)==(RX_Random&0x07) )                            // every 8sec
+    else
     { FANET_Packet *FNTpkt = FNT_TxFIFO.getWrite();
       FNTpkt->setAddress(Parameters.Address);
       Position->EncodeAirPos(*FNTpkt, Parameters.AcftType, !Parameters.Stealth);
       XorShift32(RX_Random);
-      FNT_TxFIFO.Write(); }
+      FNT_TxFIFO.Write();
+      FNTbackOff = 8+(RX_Random&0x1); }                                   // every 9 or 10sec
 #endif
 #ifdef WITH_LOOKOUT
       const LookOut_Target *Tgt=Look.ProcessOwn(PosPacket.Packet);        // process own position, get the most dangerous target
