@@ -272,7 +272,7 @@ static void ReadStatus(OGN_Packet &Packet)
     Line[Len++]=',';
     Len+=Format_SignDec(Line+Len, -5*TRX.averRSSI, 2, 1);                     // average RF level (over all channels)
     Line[Len++]=',';
-    Len+=Format_SignDec(Line+Len, TX_Credit/100, 2, 1);
+    Len+=Format_SignDec(Line+Len, TX_Credit/100, 2, 1);                       // [sec] transmitter on-air time counter
     Line[Len++]=',';
     Len+=Format_SignDec(Line+Len, (int16_t)TRX.chipTemp);                     // the temperature of the RF chip
     Line[Len++]=',';
@@ -618,7 +618,9 @@ void vTaskPROC(void* pvParameters)
       if(TxBackOff) TxBackOff--;
       else
       { RF_TxFIFO.Write();                                                // complete the write into the TxFIFO
-        TxBackOff = AverSpeed>=10 ? 0 : 3+(RX_Random&0x1); }
+        TxBackOff = 0;
+        if(AverSpeed<10 && Parameters.AcftType!=3 && Parameters.AcftType!=0xD) TxBackOff += 3+(RX_Random&0x1);
+        if(TX_Credit<=0) TxBackOff+=1; }
       Position->Sent=1;
 #ifdef WITH_FANET
     static uint8_t FNTbackOff=0;
