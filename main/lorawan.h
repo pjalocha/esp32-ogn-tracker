@@ -13,68 +13,100 @@
 
 class LoRaWANnode
 { public:
-   static const uint8_t Chans=8;
-   uint64_t AppEUI;        // from application registration: Application identification
-   uint8_t  AppKey[16];    // from device registration: application encryption/decryption key
-   uint64_t DevEUI;        // Device identification (MAC)
-   uint32_t DevNonce;      // unique counter kept by the device for Join-Requests
-   uint8_t  NetSesKey[16]; // from Join-Accept: Network Session Key
-   uint8_t  AppSesKey[16]; // from Join-Accept: App Session Key
-   uint32_t JoinNonce;     // from Join-Accept: unique must not be reused
-   uint32_t HomeNetID;     // from Join-Accept: Home Network ID
-   uint32_t DevAddr;       // from Join-Accept: Device Address
-   uint8_t  DLsetting;     // from Join-Accept: DownLink configuration: OptNeg:1 | RX1 data rate offset:3 | RX2 data rate:4
-   uint8_t  RxDelay;       // from Join-Accept: RFU:4 | Del:4  Del=1..15s for the RX1, RX2 delay is Del+1
-   uint8_t  State;         // 0:disconencted, 1:join-request sent, 2:join-accept received, 3:uplink-packet sent
-   uint8_t  Chan;          // [0..7] Current channel being used
-   uint32_t UpCount;       // [seq] Uplink frame counter: reset when joining the network
-   uint32_t DnCount;       // [seq] Downlink frame counter: reset when joining the network
-   uint32_t TxCount;       // [packets] transmitted to the network
-   uint32_t LastTx;        // [sec] last transmission
-   uint32_t RxCount;       // [packets] received from the network
-   uint32_t LastRx;        // [sec] when last heard from the network
-    int8_t  RxSNR;         // [0.25dB] SNR on receive
-    int8_t  RxRSSI;        // [dBm] signal strength
-   union
-   { uint8_t  Flags;
-     struct
-     { bool RxACK :1;    // received ACK
-       bool TxACK :1;    // ACK to be transmitted
-       bool RxPend:1;    // more frames pending for reception
-     } ;
-   } ;
-   uint8_t  Spare;
-   uint8_t  Packet[40];    // generic packet for storage/processing
+   static const uint8_t Chans = 8;
+   static const size_t UsedBytes = 112;   // [bytes] actually used
+   static const size_t SaveBytes = 128;   // [bytes] round up and including CRC32
+   static const size_t SaveWords = SaveBytes/4;
+
+  union
+  {  uint8_t Byte[SaveBytes];
+    uint32_t Word[SaveWords];
+    struct
+    { uint64_t AppEUI;        // from application registration: Application identification
+      uint8_t  AppKey[16];    // from device registration: application encryption/decryption key
+      uint64_t DevEUI;        // Device identification (MAC)
+      uint32_t DevNonce;      // unique counter kept by the device for Join-Requests
+                              // the four items above need to be kept stored permanently per each device
+                              // the other elements below are obtained when join-accept is received from the LoRaWAN network
+      uint8_t  NetSesKey[16]; // from Join-Accept: Network Session Key
+      uint8_t  AppSesKey[16]; // from Join-Accept: App Session Key
+      uint32_t JoinNonce;     // from Join-Accept: unique must not be reused
+      uint32_t HomeNetID;     // from Join-Accept: Home Network ID
+      uint32_t DevAddr;       // from Join-Accept: Device Address
+      uint8_t  DLsetting;     // from Join-Accept: DownLink configuration: OptNeg:1 | RX1 data rate offset:3 | RX2 data rate:4
+      uint8_t  RxDelay;       // from Join-Accept: RFU:4 | Del:4  Del=1..15s for the RX1, RX2 delay is Del+1
+      uint8_t  State;         // 0:disconencted, 1:join-request sent, 2:join-accept received, 3:uplink-packet sent
+      uint8_t  Chan;          // [0..7] Current channel being used
+      uint32_t UpCount;       // [seq] Uplink frame counter: reset when joining the network
+      uint32_t DnCount;       // [seq] Downlink frame counter: reset when joining the network
+      uint32_t TxCount;       // [packets] transmitted to the network
+      uint32_t LastTx;        // [sec] last transmission
+      uint32_t RxCount;       // [packets] received from the network
+      uint32_t LastRx;        // [sec] when last heard from the network
+       int8_t  RxSNR;         // [0.25dB] SNR on receive (can be negative)
+       int8_t  RxRSSI;        // [dBm] signal strength
+      union
+      { uint8_t  Flags;
+        struct
+        { bool RxACK :1;      // received ACK
+          bool TxACK :1;      // ACK to be transmitted
+          bool RxPend:1;      // more frames pending for reception
+          bool Enable:1;      // Enable/disable operation
+          bool SaveReq:1;     // Request to save the node state
+        } ;
+      } ;
+      uint8_t  Spare;         // 112 bytes up to this point
+      uint32_t LastSaved;     // [sec] when saved to EEPROM or other permament storage
+      uint8_t  Dummy[8];      // just to fill up the space, could be used later
+      uint32_t CRC32;         // 128 bytes up to here: fits into 1kbit EEPROM
+    } ;
+  } ;
+
+   // uint8_t  TxMAC[16];
+   // uint8_t  TxMACs;
+   static const size_t MaxPacketSize = 64; // [bytes]
+   uint8_t  Packet[MaxPacketSize];    // generic packet for storage/processing
 
   public:
    LoRaWANnode() { Reset(); }
 
    void Reset(void)
    { State=0; DevNonce=0; JoinNonce=0;
-     LastTx=0; TxCount=0; LastRx=0; RxCount=0; Flags=0; }
+     LastTx=0; TxCount=0; LastRx=0; RxCount=0; Flags=0; LastSaved=0;
+     setCRC(); }
 
    void Reset(uint64_t MAC, uint8_t *AppKey=0)
-   { AppEUI=0x70B3D57ED0035895;
-     DevEUI=MAC;
-     if(AppKey) memcpy(this->AppKey, AppKey, 16);
-     Reset(); }
+   { AppEUI=0x70B3D57ED0035895;                    // set OGN application
+     DevEUI=MAC;                                   // set DevEUI from MAC
+     if(AppKey) memcpy(this->AppKey, AppKey, 16);  // set the AppKey
+     Reset(); }                                    // reset to not-joined state
 
    void Disconnect(void)
    { State=0; }
 
-   uint8_t incrChan(uint8_t Step=1) { Chan+=Step; if(Chan>=Chans) Chan-=Chans; return Chan; }
+   uint32_t calcCRC(void) const
+   { uint32_t Sum=0x87654321;                      // start the sum with some magic
+     for(size_t Idx=0; Idx<SaveWords; Idx++)
+       Sum+=Word[Idx];                             // sum all the Words
+     return Sum; }                                 // return the Sum
 
-   int Save(FILE *File) { return fwrite(this, sizeof(LoRaWANnode), 1, File); }
-   int Save(const char *FileName)
+   bool goodCRC(void) const { return calcCRC()==0; }
+   void setCRC(void) { CRC32=0; CRC32 = CRC32-calcCRC(); }
+
+   uint8_t incrChan(uint8_t Step=1)
+   { Chan+=Step; if(Chan>=Chans) Chan-=Chans; return Chan; }
+
+   int Save(FILE *File) { return fwrite(this, sizeof(LoRaWANnode), 1, File); } // save to a file
+   int Save(const char *FileName)                                              // save to a file
    { FILE *File=fopen(FileName, "wb"); if(File==0) return 0;
      int Written=Save(File); fclose(File); return Written; }
 
-   int Restore(FILE *File) { return fread(this, sizeof(LoRaWANnode), 1, File); }
-   int Restore(const char *FileName)
-   { FILE *File=fopen(FileName, "rb"); if(File==0) return 0;
-     int Read=Restore(File); fclose(File); return Read; }
+   // int Restore(FILE *File) { return fread(this, sizeof(LoRaWANnode), 1, File); }
+   // int Restore(const char *FileName)
+   // { FILE *File=fopen(FileName, "rb"); if(File==0) return 0;
+   //   int Read=Restore(File); fclose(File); return Read; }
 
-   static int ReadHex(uint8_t *Data, int Len, const char *Inp)
+   static int ReadHex(uint8_t *Data, int Len, const char *Inp)                 // read Len bytes from a hex string
    { int Bytes=0;
      for( ; Bytes<Len; )
      { int8_t H = Read_Hex1(*Inp++); if(H<0) break;
@@ -83,7 +115,7 @@ class LoRaWANnode
      return Bytes; }
 
    // int readAppEUI(const char *Inp) { return ReadHex(&AppEUI, 8, Inp); }
-   int readAppKey(const char *Inp) { return ReadHex(AppKey,16, Inp); }
+   int readAppKey(const char *Inp) { return ReadHex(AppKey,16, Inp); }         // read key from the hex string
    // int readDevEUI(const char *Inp) { return ReadHex(&DevEUI, 8, Inp); }
 
   template<class Type>
@@ -168,6 +200,9 @@ class LoRaWANnode
      LoRaMacPayloadEncrypt(Data, DataLen, AppSesKey, DevAddr, 0, UpCount, Packet+PktLen); PktLen+=DataLen; // copy+encrypt user data
      uint32_t MIC=0;
      LoRaMacComputeMic(Packet, PktLen, NetSesKey, DevAddr, 0x00, UpCount, &MIC); // calc. MIC
+     // uint8_t MIC2[4];
+     // Tiny.Calculate_MIC(Packet, MIC2, PktLen, UpCount, 0x00);
+     // printf("Data packet MIC: %08X <=> %02X%02X%02X%02X\n", MIC, MIC2[3], MIC2[2], MIC2[1], MIC2[0]);
      memcpy(Packet+PktLen, &MIC, 4); PktLen+=4;               // append MIC
      UpCount++; State=3; return PktLen; }                     // return the packet size
 
@@ -175,8 +210,8 @@ class LoRaWANnode
    { int Len=getDataPacket(Packet, Data, DataLen, Port, Confirm); *Pkt = Packet; return Len; }
 
    int procRxData(const RFM_LoRa_RxPacket &RxPacket)
-   { int Ret = procRxData(RxPacket.Byte, RxPacket.Len); if(Ret<0) return Ret;
-     RxSNR  += (RxPacket.SNR-RxSNR+1)/2;                            // if good packet then update the signal statistics
+   { int Ret=procRxData(RxPacket.Byte, RxPacket.Len); if(Ret<0) return Ret;
+     RxSNR += (RxPacket.SNR-RxSNR+1)/2;
      RxRSSI += (RxPacket.RSSI-RxRSSI+1)/2;
      return Ret; }
 
@@ -191,6 +226,7 @@ class LoRaWANnode
      if(CountDiff<=0) return -1;                                     // attempt to reuse the counter: drop this packet
      uint32_t MIC=0;
      LoRaMacComputeMic(PktData, PktLen-4, NetSesKey, Addr, 0x01, Count, &MIC);
+     // printf("RxData: %08X\n", MIC);
      if(memcmp(PktData+PktLen-4, &MIC, 4)) return -1;                // give up if MIC does not match
      uint8_t OptLen = Ctrl&0x0F;                                     // Options: how many bytes
      uint8_t DataOfs = 8 + OptLen;                                   // where the port byte should be
@@ -224,12 +260,22 @@ class LoRaWANnode
      //     Format_Hex(CONS_UART_Write, Opt[Idx]);
      //   Format_String(CONS_UART_Write, "\n"); }
 
+  int WriteToFile(const char *Name)
+  { FILE *File = fopen(Name, "wb"); if(File==0) return -1;
+    int Written = fwrite(this, 1, SaveBytes, File);
+    fclose(File); return Written; }
+
+  int ReadFromFile(const char *Name)
+  { FILE *File = fopen(Name, "rb"); if(File==0) return -1;
+    int Read = fread(this, 1, SaveBytes, File);
+    fclose(File); return Read; }
+
 #ifdef WITH_ESP32
   esp_err_t WriteToNVS(const char *Name="LoRaWAN", const char *NameSpace="TRACKER")
   { nvs_handle Handle;
     esp_err_t Err = nvs_open(NameSpace, NVS_READWRITE, &Handle);
     if(Err!=ESP_OK) return Err;
-    Err = nvs_set_blob(Handle, Name, this, sizeof(LoRaWANnode)-40);
+    Err = nvs_set_blob(Handle, Name, this, SaveBytes);
     if(Err==ESP_OK) Err = nvs_commit(Handle);
     nvs_close(Handle);
     return Err; }
@@ -240,11 +286,21 @@ class LoRaWANnode
     if(Err!=ESP_OK) return Err;
     size_t Size=0;
     Err = nvs_get_blob(Handle, Name,    0, &Size);                  // get the Size of the blob in the Flash
-    if( (Err==ESP_OK) && (Size<=(sizeof(LoRaWANnode)-40)) )
+    if( (Err==ESP_OK) && (Size<=SaveBytes) )
       Err = nvs_get_blob(Handle, Name, this, &Size);                // read the Blob from the Flash
     nvs_close(Handle);
     return Err; }
 #endif // WITH_ESP32
+
+#ifdef RTLSDR_API
+  int Read(RTLSDR &SDR) { return SDR.readEEPROM(Byte, 0x80, SaveBytes); }
+  int Write(RTLSDR &SDR) { return SDR.writeEEPROM(Byte, 0x80, SaveBytes); }
+#endif
+
+  bool isFF(void)
+  { for(size_t Idx=0; Idx<SaveBytes; Idx++)
+    { if(Byte[Idx]!=0xFF) return 0; }
+    return 1; }
 
 } ;
 

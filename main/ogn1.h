@@ -5,6 +5,7 @@
 
 #include <string.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #include "ognconv.h"
 
@@ -282,7 +283,7 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      printf("\n");
    }
 
-   int WriteJSON(char *JSON) const
+   int WriteStxJSON(char *JSON) const                              // Stratux JSON message
    { int Len=0;
      Len+=Format_String(JSON+Len, "\"addr\":\"");
      Len+=Format_Hex(JSON+Len, (uint8_t) (Header.Address>>16));
@@ -552,13 +553,13 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      if(Header.NonPos)                                            // status and info packets
      { if(Status.ReportType==0) Len+=WriteStatus(Msg+Len);
                            else Len+=WriteDeviceInfo(Msg+Len);
-       Msg[Len++]='\n'; Msg[Len]=0; return Len; }
+       /* Msg[Len++]='\n'; */ Msg[Len]=0; return Len; }
 
      if(Header.Encrypted)                                         // encrypted packets
      { Msg[Len++]=' ';
        for(int Idx=0; Idx<4; Idx++)
        { Len+=EncodeAscii85(Msg+Len, Data[Idx]); }
-       Msg[Len++]='\n'; Msg[Len]=0; return Len; }
+       /* Msg[Len++]='\n'; */ Msg[Len]=0; return Len; }
 
      const char *Icon = getAprsIcon(Position.AcftType);
 
@@ -616,7 +617,9 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      Msg[Len++] = ' ';  Msg[Len++] = 'g'; Msg[Len++] = 'p'; Msg[Len++] = 's';
      Len+=Format_UnsDec(Msg+Len, HorPrec); Msg[Len++] = 'x'; Len+=Format_UnsDec(Msg+Len, VerPrec);
 
-     Msg[Len++]='\n'; Msg[Len]=0; return Len; }
+     // Msg[Len++]='\n';
+     Msg[Len]=0;
+     return Len; }
 
 #endif // __AVR__
 

@@ -585,6 +585,12 @@ template<class OGNx_Packet, uint8_t Size=8>
    uint8_t getNew(void)                                                       // get (index of) a free or lowest rank packet
    { Sum-=Packet[LowIdx].Rank; Packet[LowIdx].Rank=0; Low=0; return LowIdx; } // remove old packet from the rank sum
 
+   uint8_t size(void)
+   { uint8_t Count=0;
+     for(uint8_t Idx=0; Idx<Size; Idx++)
+     { if(Packet[Idx].Rank) Count++; }
+     return Count; }
+
    OGN_RxPacket<OGNx_Packet> *addNew(uint8_t NewIdx)                         // add the new packet to the queue
    { OGN_RxPacket<OGNx_Packet> *Prev = 0;
      uint32_t AddressAndType = Packet[NewIdx].Packet.getAddressAndType();     // get ID of this packet: ID is address-type and address (2+24 = 26 bits)
@@ -784,15 +790,20 @@ class GPS_Time
      Prev=Hour;
      Hour=Read_Dec2(Value);  if(Hour<0) return -1;            // read hour (two digits), return when invalid
      if(Prev!=Hour) Same=0;
+     Value+=2;
+     if(Value[0]==':') Value++;
      Prev=Min;
-     Min=Read_Dec2(Value+2); if(Min<0)  return -1;            // read minute (two digits), return when invalid
+     Min=Read_Dec2(Value); if(Min<0)  return -1;            // read minute (two digits), return when invalid
      if(Prev!=Min) Same=0;
+     Value+=2;
+     if(Value[0]==':') Value++;
      Prev=Sec;
-     Sec=Read_Dec2(Value+4); if(Sec<0)  return -1;            // read second (two digits), return when invalid
+     Sec=Read_Dec2(Value); if(Sec<0)  return -1;            // read second (two digits), return when invalid
+     Value+=2;
      if(Prev!=Sec) Same=0;
      int16_t mPrev = mSec;
-     if(Value[6]=='.')                                        // is there a fraction
-     { uint16_t Frac=0; int8_t Len=Read_UnsDec(Frac, Value+7); if(Len<1) return -1; // read the fraction, return when invalid
+     if(Value[0]=='.')                                        // is there a fraction
+     { uint16_t Frac=0; int8_t Len=Read_UnsDec(Frac, Value+1); if(Len<1) return -1; // read the fraction, return when invalid
             if(Len==1) mSec = Frac*100;
        else if(Len==2) mSec = Frac*10;
        else if(Len==3) mSec = Frac;
@@ -802,9 +813,13 @@ class GPS_Time
      return Same; }                                           // return 1 when time did not change (both RMC and GGA were for same time)
 
    int8_t ReadDate(const char *Param)                         // read the field DDMMYY
-   { Day=Read_Dec2(Param);     if(Day<0)   return -1;         // read calendar day
-     Month=Read_Dec2(Param+2); if(Month<0) return -1;         // read calendar month
-     Year=Read_Dec2(Param+4);  if(Year<0)  return -1;         // read calendar year (two digits - thus need to be extended to four)
+   { Day=Read_Dec2(Param);   if(Day<0)   return -1;           // read calendar year (two digits - thus need to be extended to four)
+     Param+=2;
+     if(Param[0]=='/') Param++;
+     Month=Read_Dec2(Param); if(Month<0) return -1;           // read calendar month
+     Param+=2;
+     if(Param[0]=='/') Param++;
+     Year=Read_Dec2(Param);  if(Year<0)  return -1;           // read calendar day
      return 0; }                                              // return 0 when field valid and was read correctly
 
   private:
@@ -918,6 +933,12 @@ class GPS_Position: public GPS_Time
      if(Satellites<=0)  return 0;                    // if number of satellites none or invalid
      return 1; }
 
+   void copyDOP(GPS_Position &RefPos)
+   { HDOP = RefPos.HDOP;
+     VDOP = RefPos.VDOP;
+     PDOP = RefPos.PDOP;
+     FixMode = RefPos.FixMode; }
+
    void copyBaro(GPS_Position &RefPos, int16_t dTime=0)
    { if(!RefPos.hasBaro) { hasBaro=0; return; }
      StdAltitude = RefPos.StdAltitude;
@@ -927,7 +948,7 @@ class GPS_Position: public GPS_Time
      if(dTime)
      { int32_t dAlt = calcAltitudeExtrapolation(dTime);                         // [0.1m]
        StdAltitude += dAlt;                                                     // [0.1m]
-       Pressure += 4000*dAlt/Atmosphere::PressureLapseRate(Pressure/4, Temperature); } // [0.25Pa] ([Pa], [0.1degC])
+       if(Pressure) Pressure += 4000*dAlt/Atmosphere::PressureLapseRate(Pressure/4, Temperature); } // [0.25Pa] ([Pa], [0.1degC])
      hasBaro=1; }
 
 #ifndef __AVR__ // there is not printf() with AVR
@@ -1189,18 +1210,23 @@ class GPS_Position: public GPS_Time
      else if(TimeDiff>=180000) TimeDiff-=360000;
      return TimeDiff; }                                                                     // [0.01s]
 */
-   int16_t calcDifferentials(GPS_Position &RefPos) // calculate climb rate and turn rate with an earlier reference position
+   int16_t calcDifferentials(GPS_Position &RefPos, bool useBaro=1) // calculate climb rate and turn rate with an earlier reference position
    { ClimbRate=0; TurnRate=0;
-     if(RefPos.FixQuality==0) return 0;
-     int16_t TimeDiff = calcTimeDiff(RefPos); // [ms]
-     if(TimeDiff<10) return 0;
-     TurnRate = Heading-RefPos.Heading;
-     if(TurnRate>1800) TurnRate-=3600; else if(TurnRate<(-1800)) TurnRate+=3600;
-     ClimbRate = Altitude-RefPos.Altitude;
-     if(hasBaro && RefPos.hasBaro && (abs(Altitude-StdAltitude)<2500) )
-     { ClimbRate = StdAltitude-RefPos.StdAltitude; }
-     Accel = Speed-RefPos.Speed;
-     if(TimeDiff==200)
+     if(RefPos.FixQuality==0) return 0;            // give up if no fix on the reference position
+     int16_t TimeDiff = calcTimeDiff(RefPos);      // [ms] time difference between positions
+     if(TimeDiff<10) return 0;                     // [ms] give up if smaller than 10ms (as well when negative)
+     TurnRate = Heading-RefPos.Heading;            // [0.1deg/s] turn rate
+     if(TurnRate>1800) TurnRate-=3600; else if(TurnRate<(-1800)) TurnRate+=3600; // wrap-around
+     ClimbRate = Altitude-RefPos.Altitude;         // [0.1m/s] climb rate as altitude difference
+     if(useBaro && hasBaro && RefPos.hasBaro && (abs(Altitude-StdAltitude)<2500) ) // if there is baro data then
+     { ClimbRate += StdAltitude-RefPos.StdAltitude; // [0.1m/s] on pressure altitude
+       ClimbRate = (ClimbRate+1)>>1; }
+     Accel = Speed-RefPos.Speed;                   // longitual acceleration
+     if(TimeDiff==100)                             // [ms] if 0.1sec difference
+     { ClimbRate*=10;
+       TurnRate *=10;
+       Accel    *=10; }
+     if(TimeDiff==200)                             // [ms] if 0.2sec difference
      { ClimbRate*=5;
        TurnRate *=5;
        Accel    *=5; }
@@ -1551,26 +1577,26 @@ class GPS_Position: public GPS_Time
      Format_UnsDec(Out+4, Sec , 2);
      return 6; }
 
-   int WriteIGC(char *Out) const
+   int WriteIGC(char *Out) const                                  // write IGC B-record
    { // if(!isValid()) return 0;
      int Len=0;
      Out[Len++] = 'B';
-     if(isTimeValid()) Len+=WriteHHMMSS(Out+Len);
-                  else Len+=Format_String(Out+Len, "      ");
-     if(isValid())
-     { Len+=WriteIGCcoord(Out+Len, Latitude, 2, "NS");
-       Len+=WriteIGCcoord(Out+Len, Longitude, 3, "EW");
-       Out[Len++] = FixMode>2 ? 'A':'V'; }
-     else Len+=Format_String(Out+Len, "                    ");
-     if(hasBaro)
-     { int32_t Alt = StdAltitude/10;      // [m]
-       if(Alt<0) { Alt = (-Alt); Out[Len++] = '-'; Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 4); }
-            else { Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 5); }
+     if(isTimeValid()) Len+=WriteHHMMSS(Out+Len);                 // if time is valid
+                  else Len+=Format_String(Out+Len, "      ");     // or leave empty
+     if(isValid())                                                // if position valid
+     { Len+=WriteIGCcoord(Out+Len, Latitude, 2, "NS");            // DDMM.MMM latitude
+       Len+=WriteIGCcoord(Out+Len, Longitude, 3, "EW");           // DDDMM.MMM longitude
+       Out[Len++] = FixMode>2 ? 'A':'V'; }                        // fix mode
+     else Len+=Format_String(Out+Len, "                    ");    // is position not valid then leave empty
+     if(hasBaro)                                                  // if pressure data is there
+     { int32_t Alt = StdAltitude/10;                              // [m] pressure altitude
+       if(Alt<0) { Alt = (-Alt); Out[Len++] = '-'; Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 4); } // -AAAA (when negative)
+            else { Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 5); }                                 // AAAAA
      } else Len+=Format_String(Out+Len, "     ");
-     if(isValid())
-     { int32_t Alt = (Altitude+GeoidSeparation)/10;   // [m]
-       if(Alt<0) { Alt = (-Alt); Out[Len++] = '-'; Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 4); }
-            else { Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 5); }
+     if(isValid())                                                // if position is valid
+     { int32_t Alt = (Altitude+GeoidSeparation)/10;               // [m] HAE GPS altitude
+       if(Alt<0) { Alt = (-Alt); Out[Len++] = '-'; Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 4); } // -AAAA (when negative)
+            else { Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 5); }                                 // AAAAA
      } else Len+=Format_String(Out+Len, "     ");
      Out[Len++]='\n'; Out[Len]=0; return Len; }
 

@@ -41,7 +41,7 @@ static uint32_t  RF_SlotTime;               // [sec] UTC time which belongs to t
        FIFO<FANET_Packet, 4> FNT_TxFIFO;
 #endif
 
-       int32_t TX_Credit  = 0;              // [ms] counts transmitter time avoid using more than 1%
+       int32_t TX_Credit  = 0;              // [ms] counts transmitter time avoid using more than 1% or air time
 
        uint8_t RX_OGN_Packets=0;            // [packets] counts received packets
 static LowPass2<uint32_t, 4,2,4> RX_RSSI;   // low pass filter to average the RX noise
@@ -80,7 +80,8 @@ static void SetTxChannel(uint8_t TxChan=RX_Channel)         // default channel t
 static void SetRxChannel(uint8_t RxChan=RX_Channel)
 {
 #ifdef WITH_SX1262
-  // TRX.setChannel(RxChan&0x7F);
+  TRX.setChannel(RxChan&0x7F);
+  TRX.FSK_WriteSYNC(7, 7, OGN_SYNC);                            // Shorter SYNC for RX
 #else
   TRX.WriteTxPowerMin();                                        // setup for RX
   TRX.setChannel(RxChan&0x7F);
@@ -102,7 +103,7 @@ static uint8_t ReceivePacket(void)                              // see if a pack
   RxPkt->Channel = RX_Channel;                                  // store reception channel
   RxPkt->RSSI    = RxRSSI;                                      // store signal strength
   TRX.OGN_ReadPacket(RxPkt->Data, RxPkt->Err);                  // get the packet data from the FIFO
-  RxPkt->Print(CONS_UART_Write);                                // for debug
+  // RxPkt->Print(CONS_UART_Write);                                // for debug
 
   RF_RxFIFO.Write();                                            // complete the write to the receiver FIFO
   TRX.setModeRX();                                              // back to receive (but we already have AutoRxRestart)
@@ -116,6 +117,15 @@ static uint32_t ReceiveUntil(TickType_t End)
     int32_t Left = End-xTaskGetTickCount();
     if(Left<=0) break;
     vTaskDelay(1); }
+#ifdef WITH_SX1262
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "ReceiveUntil() => 0x");
+  Format_Hex(CONS_UART_Write, TRX.ReadIrqFlags());
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
+#endif
   return Count; }
 
 // static uint32_t ReceiveFor(TickType_t Ticks)                     // keep receiving packets for given period of time
@@ -171,7 +181,7 @@ static uint8_t Transmit(uint8_t TxChan, const uint8_t *PacketByte, uint8_t Thres
   Format_String(CONS_UART_Write, "ms\n");
   xSemaphoreGive(CONS_Mutex);
 #endif
-#else
+#else // of WITH_SX1262
   TRX.ClearIrqFlags();
   TRX.OGN_WritePacket(PacketByte);                                // write packet into FIFO
   TRX.setModeTX();                                               // transmit
@@ -188,6 +198,15 @@ static uint8_t Transmit(uint8_t TxChan, const uint8_t *PacketByte, uint8_t Thres
   SetRxChannel();
   TRX.setModeRX();                                            // back to receive mode
   TRX.ClearIrqFlags();
+#ifdef WITH_SX1262
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "setModeRX() => 0x");
+  Format_Hex(CONS_UART_Write, TRX.getStatus());
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
+#endif
   return 1; }
                                                                            // make a time-slot: listen for packets and transmit given PacketByte$
 static void TimeSlot(uint8_t TxChan, uint32_t SlotLen, const uint8_t *PacketByte, uint8_t Rx_RSSI, uint8_t MaxWait=8, uint32_t TxTime=0)
@@ -428,7 +447,7 @@ extern "C"
       TRX.WAN_Configure();                                 // LoRa for WAN config.
       TRX.setChannel(WANdev.Chan);                         // set the channel
       TRX.LoRa_InvertIQ(1); TRX.LoRa_setCRC(0); TRX.LoRa_setIRQ(0); // setup for WAN RX
-      TRX.setModeLoRaRXsingle();                         // wait for a single packet
+      TRX.setModeLoRaRXsingle();                           // wait for a single packet
       int Wait=WAN_RespLeft+100;                           // 100ms timeout after the expected reception
       for( ; Wait>0; Wait--)
       { vTaskDelay(1);
@@ -446,15 +465,15 @@ extern "C"
              if(WANdev.State==1) WANdev.procJoinAccept(WAN_RxPacket);    // if join-request state then expect a join-accept packet
         else if(WANdev.State==3) RxLen=WANdev.procRxData(WAN_RxPacket);  // if data send then respect ACK and/or downlink data packet
       }
-      else WANdev.State--;                                  // if no packet received then retreat the State
-      TRX.setFSK();                                         // back to FSK
-      SetFreqPlanOGN();                                     // OGN frequency plan
-      TRX.OGN_Configure(0, OGN_SYNC);                       // OGN config
+      else WANdev.State--;                                 // if no packet received then retreat the State
+      TRX.setFSK();                                        // back to FSK
+      SetFreqPlanOGN();                                    // OGN frequency plan
+      TRX.OGN_Configure(0, OGN_SYNC);                      // OGN config
       SetRxChannel();
-      TRX.setModeRX();                                      // switch to receive mode
+      TRX.setModeRX();                                     // switch to receive mode
       TRX.ClearIrqFlags();
-      WANdev.WriteToNVS();                                  // store new WAN state in flash
-      if(RxLen>0)                                           // if Downlink data received
+      WANdev.WriteToNVS();                                 // store new WAN state in flash
+      if(RxLen>0)                                          // if Downlink data received
       { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
         Format_String(CONS_UART_Write, "LoRaWAN Msg: ");
         // Format_UnsDec(CONS_UART_Write, (uint16_t)RxLen);
@@ -542,7 +561,7 @@ extern "C"
     } while(TimeSync_msTime()<350);                                            // keep going until 400 ms after PPS
     RX_RSSI.Process(RxRssiSum/RxRssiCount);                                    // [-0.5dBm] average noise on channel
 
-    TX_Credit+=10; if(TX_Credit>3600000) TX_Credit=3600000;                    // [ms] count the transmission credit
+    TX_Credit+=10; if(TX_Credit>3600000) TX_Credit=600000;                     // [ms] count the transmission credit
 
     XorShift32(RX_Random);
     uint32_t TxTime = (RX_Random&0x3F)+1; TxTime*=6; TxTime+=50;               // random transmission time: (1..64)*6+50 [ms]
@@ -630,22 +649,22 @@ extern "C"
 #ifdef WITH_PAW
    static uint8_t PAWtxBackOff = 4;
 #ifdef WITH_LORAWAN
-   if(!WANtx && TxPkt0)
+   if(!WANtx && TxPkt0 && WANdev.State!=1 && WANdev.State!=3)         // if no WAN transmission/reception scheduled
 #else
    if(TxPkt0)
 #endif
    { PAW_Packet Packet; Packet.Clear();
      OGN1_Packet TxPkt = TxPkt0->Packet;
-     TxPkt.Dewhiten();
-     XorShift32(RX_Random);
+     TxPkt.Dewhiten();                                                // de-whiten the OGN packet so it can be converted to PAW format
+     XorShift32(RX_Random);                                           // convert PAW to OGN
      if(PAWtxBackOff==0 && Parameters.TxPower!=(-32) && !TxPkt.Header.Relay && Packet.Copy(TxPkt) && TxPkt.Position.Time<60)
      { TRX.setModeStandby();
        TRX.PAW_Configure(PAW_SYNC);
        TRX.WriteTxPower(Parameters.TxPower+6);
        vTaskDelay(RX_Random&0x3F);
        TRX.ClearIrqFlags();
-       TRX.PAW_WritePacket(Packet.Byte, 24);
-       TRX.setModeTX();
+       TRX.PAW_WritePacket(Packet.Byte, 24);                          //
+       TRX.setModeTX();                                               // 
        vTaskDelay(8);                                                 // wait 8ms (about the PAW packet time)
 #ifdef WITH_SX1262
        TRX.WaitWhileBusy_ms(2);

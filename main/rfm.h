@@ -299,9 +299,9 @@ class RFM_TRX
    uint16_t WaitWhileBusy(uint16_t Loops=100)             // 50 seems to be still too short on RPI
    { for( ; Loops; Loops--)
      { if(!readBusy()) break; }
-     return Loops; }
+     return Loops; }                                      // return number of looks left or zero (=> still busy)
 
-   uint16_t WaitWhileBusy_ms(uint16_t ms=10)
+   uint16_t WaitWhileBusy_ms(uint16_t ms=100)
    { WaitWhileBusy(50);
      for( ; ms; ms--)
      { if(!readBusy()) break;
@@ -699,35 +699,22 @@ class RFM_TRX
    uint8_t getModulation(void) { return Cmd_Read(CMD_GETPACKETTYPE, 1)[0]; }
 
    uint8_t getStatus(void) { return Cmd_Read(CMD_GETSTATUS, 0)[-1]; }               // RMMM SSSR MMM: 2=STBY_RC, 3=STBY_XOSC, 4:FS, 5:RX, 6:TX p.95
+   bool  isModeRX(void) { uint8_t Mode=getStatus(); Mode = (Mode>>4)&7; return Mode==5; }
 
-   void WriteTxPower(int8_t TxPower)
+   void WriteTxPower(int8_t TxPower, uint8_t TxRamp=0x04)                           // 0x04 = 200us ramp time
    { if(TxPower>22) TxPower=22;                                                     // for high power PA
-     else if(TxPower<(-9)) TxPower=(-9);
+     else if(TxPower<(-3)) TxPower=(-3);
      uint8_t PAparm[4] = { 0x04, 0x07, 0x00, 0x01 } ;                               // for high power PA: paDutyCycle, hpMax, deviceSel, paLut
      Cmd_Write(CMD_SETPACONFIG, PAparm, 4);                                         // Power Amplifier Configuration
-     uint8_t TxParm[2] = { (uint8_t)TxPower, 0x04 } ;                               // RampTime = 200us
+     uint8_t MaxCurr = 0x38;                                                        // 160mA max. total current
+     Regs_Write(REG_OCPCONFIG, &MaxCurr, 1);
+     uint8_t TxParm[2] = { (uint8_t)TxPower, TxRamp } ;                             //
      Cmd_Write(CMD_SETTXPARAMS, TxParm, 2); }                                       // 0x8E, Power, RampTime
-   void WriteTxPowerMin(void) { WriteTxPower(-8); }
+   void WriteTxPowerMin(void) { WriteTxPower(-3); }
 
    void Calibrate(void)                                                             // Calibrate receiver image rejection
    { uint8_t CalParm[2] = { 0xD7, 0xDB }; // for 868MHz                             // { 0xE1, 0xE9 } for 915MHz
      Cmd_Write(CMD_SETTXPARAMS, CalParm, 2); }
-
-   void FSK_WriteSYNC(uint8_t WriteSize, uint8_t SyncTol, const uint8_t *SyncData)
-   { if(SyncTol>7) SyncTol=7;
-     if(WriteSize>8) WriteSize=8;
-     uint8_t Param[12];
-     Param[0] = 0;                                 //
-     Param[1] = 4;                                 // [bits] preamble length
-     Param[2] = 0x04;                              // preamble detect: 0x00:OFF, 0x04:8bits, 0x05:16bits, 0x06=24bits, 0x07=32bits
-     Param[3] = WriteSize*8;                       // [bits] SYNC word length, write word at 0x06C0
-     Param[4] = 0x00;                              // address filtering: OFF
-     Param[5] = 0x00;                              // fixed packet size
-     Param[6] = 2*26;                              // 26 bytes, software Manchester
-     Param[7] = 0x01;                              // no CRC
-     Param[8] = 0x00;                              // no whitening
-     Cmd_Write(CMD_SETPACKETPARAMS, Param, 9);     // 0x8C, PacketParam
-     Regs_Write(REG_SYNCWORD0, SyncData+(8-WriteSize), WriteSize); } // Write the SYNC word
 
    static void Pack3bytes(uint8_t *Byte, uint32_t Value) { Byte[0]=Value>>16; Byte[1]=Value>>8; Byte[2]=Value; }
 
@@ -756,6 +743,22 @@ class RFM_TRX
      Param[1] = (CFG.SYNC<<4)   | 0x04;
      Regs_Write(REG_LORASYNCWORD, Param, 2); }
 
+   void FSK_WriteSYNC(uint8_t WriteSize, uint8_t SyncTol, const uint8_t *SyncData)
+   { if(SyncTol>7) SyncTol=7;
+     if(WriteSize>8) WriteSize=8;
+     uint8_t Param[12];
+     Param[0] = 0;                                 //
+     Param[1] = 4;                                 // [bits] preamble length
+     Param[2] = 0x04;                              // preamble detect: 0x00:OFF, 0x04:8bits, 0x05:16bits, 0x06=24bits, 0x07=32bits
+     Param[3] = WriteSize*8;                       // [bits] SYNC word length, write word at 0x06C0
+     Param[4] = 0x00;                              // address filtering: OFF
+     Param[5] = 0x00;                              // fixed packet size
+     Param[6] = 2*26;                              // 26 bytes, software Manchester
+     Param[7] = 0x01;                              // no CRC
+     Param[8] = 0x00;                              // no whitening
+     Cmd_Write(CMD_SETPACKETPARAMS, Param, 9);     // 0x8C, PacketParam
+     Regs_Write(REG_SYNCWORD0, SyncData+(8-WriteSize), WriteSize); } // Write the SYNC word
+
    void OGN_Configure(int16_t Channel, const uint8_t *SyncData)
    { setChannel(Channel);
      uint8_t Param[12];
@@ -764,9 +767,9 @@ class RFM_TRX
      Param[4] = 0x0A;                              // DSB RX bandwidth: 0x0A=232.3kHz, 0x19=312.2kHz, 0x1B=78.2kHz, 0x13=117.3kHz
      Pack3bytes(Param+5, 52429);                   // FSK deviation: 50e3*2^25/Xtal for OGN +/-50kHz
      Cmd_Write(CMD_SETMODULATIONPARAMS, Param, 8); // 0x8B, ModParam
-     Param[0] = 0;                                 //
-     Param[1] = 4;                                 // [bits] preamble length
-     Param[2] = 0x00;                              // preamble detect: 0x00:OFF, 0x04:8bits, 0x05:16bits, 0x06=24bits, 0x07=32bits
+     Param[0] = 0;                                 // [bits] MSB
+     Param[1] = 8;                                 // [bits] LSB preamble length
+     Param[2] = 0x04;                              // preamble detect: 0x00:OFF, 0x04:8bits, 0x05:16bits, 0x06=24bits, 0x07=32bits
      Param[3] = 8*8;                               // [bits] SYNC word length, write word at 0x06C0
      Param[4] = 0x00;                              // address filtering: OFF
      Param[5] = 0x00;                              // fixed packet size
@@ -834,7 +837,7 @@ class RFM_TRX
    void setModeTX(void)      { WriteMode(RF_OPMODE_TRANSMITTER); }          // FSK transmit
    bool  isModeTX(void)      { return ReadMode()==RF_OPMODE_TRANSMITTER; }  // in transmitter mode ?
    void setModeRX(void)      { WriteMode(RF_OPMODE_RECEIVER); }             // FSK receive
-   bool  isModeRX(void)      { return ReadMode()==RF_OPMODE_RECEIVER; }     // in receiver mode ? ?
+   bool  isModeRX(void)      { return ReadMode()==RF_OPMODE_RECEIVER; }     // in receiver mode ?
 #if defined(WITH_RFM95) || defined(WITH_SX1272)
    void setModeLoRaStandby(void)  { WriteMode(RF_OPMODE_LORA_STANDBY); }    // LoRa standby
    void setModeLoRaRXcont(void)   { WriteMode(RF_OPMODE_LORA_RX_CONT); }    // Lora continues recieve
@@ -970,10 +973,10 @@ class RFM_TRX
      RFM_LoRa_Config CFG = RFM_FNTcfg; CFG.CR=CR;
      LoRa_Configure(CFG, FANET_Packet::MaxBytes); }
 
-   void WAN_Configure(uint8_t CR=1)                   // configure for LoRaWAN
+   void WAN_Configure(RFM_LoRa_Config CFG = RFM_WANcfg, uint8_t MaxPktSize=40) // configure for LoRaWAN
    { WriteTxPower(0);
-     RFM_LoRa_Config CFG = RFM_WANcfg; CFG.CR=CR;
-     LoRa_Configure(CFG, 40); }
+     // RFM_LoRa_Config CFG = RFM_WANcfg; CFG.CR=CR;
+     LoRa_Configure(CFG, MaxPktSize); }
 
    void LoRa_setIRQ(uint8_t Mode=0)                  // 0:on RX, 1:on TX, 2: on CAD
    { WriteByte(Mode<<6, REG_DIOMAPPING1); }

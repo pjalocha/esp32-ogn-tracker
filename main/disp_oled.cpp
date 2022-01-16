@@ -464,17 +464,18 @@ void OLED_DrawBaro(u8g2_t *OLED, GPS_Position *GPS)
   u8g2_DrawStr(OLED, 0, 48, Line);
 }
 
-static uint8_t BattCapacity(uint16_t mVolt)
-{ if(mVolt>=4100) return 100;
-  if(mVolt<=3600) return   0;
-  return (mVolt-3600+2)/5; }
+static int8_t BattCapacity(uint16_t mVolt) // deduce battery capacity from its voltage
+{ if(mVolt>=4100) return 100;              // if 4.1V or more then full
+  if(mVolt<=1000) return  -1;              // if below 1.0V then no-battery
+  if(mVolt<=3600) return   0;              // if below 3.6V then empty
+  return (mVolt-3600+2)/5; }               // otherwise a linear function from 3.6V to 4.1V
 
 void OLED_DrawBattery(u8g2_t *OLED, GPS_Position *GPS) // draw battery status page
 {
 #ifdef WITH_MAVLINK
-  uint8_t Cap=MAVLINK_BattCap;                         // [%] from the drone's telemetry
+   int8_t Cap=MAVLINK_BattCap;                         // [%] from the drone's telemetry
 #else
-  uint8_t Cap=BattCapacity(BatteryVoltage>>8);         // [%] est. battery capacity based on the voltage readout
+   int8_t Cap=BattCapacity(BatteryVoltage>>8);         // [%] est. battery capacity based on the voltage readout
 #endif
   // u8g2_SetFont(OLED, u8g2_font_battery19_tn);
   // u8g2_DrawGlyph(OLED, 120, 60, '0'+(Cap+10)/20);
@@ -486,13 +487,14 @@ void OLED_DrawBattery(u8g2_t *OLED, GPS_Position *GPS) // draw battery status pa
 
   u8g2_SetFont(OLED, u8g2_font_9x15_tr);
 
-  strcpy(Line, "   %");
-  if(Cap>=100) Format_UnsDec(Line, Cap, 3);
-  else if(Cap>=10) Format_UnsDec(Line+1, Cap, 2);
-  else Line[2]='0'+Cap;
-  u8g2_DrawStr  (OLED, 16, 32, Line);                  // print battery est. capacity
-  u8g2_DrawFrame(OLED, 12, 20, 42, 14);                // draw battery empty box around it
-  u8g2_DrawBox  (OLED,  8, 23,  4,  8);                // and the battery tip
+  if(Cap>=0)
+  { strcpy(Line, "   %");
+    if(Cap>=100) Format_UnsDec(Line, (uint8_t)Cap, 3);
+    else if(Cap>=10) Format_UnsDec(Line+1, (uint8_t)Cap, 2);
+    else Line[2]='0'+Cap;
+    u8g2_DrawStr  (OLED, 16, 32, Line);                  // print battery est. capacity
+    u8g2_DrawFrame(OLED, 12, 20, 42, 14);                // draw battery empty box around it
+    u8g2_DrawBox  (OLED,  8, 23,  4,  8); }              // and the battery tip
 
   strcpy(Line, " .   V");
 #ifdef WITH_MAVLINK
@@ -555,9 +557,9 @@ void OLED_DrawBattery(u8g2_t *OLED, GPS_Position *GPS) // draw battery status pa
 void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS)   // status bar on top of the OLED
 { static bool Odd=0;
 #ifdef WITH_MAVLINK
-  uint8_t Cap = MAVLINK_BattCap;                           // [%]
+   int8_t Cap = MAVLINK_BattCap;                           // [%]
 #else
-  uint8_t Cap = BattCapacity(BatteryVoltage>>8);           // [%] est. battery capacity
+   int8_t Cap = BattCapacity(BatteryVoltage>>8);           // [%] est. battery capacity
 #endif
   uint8_t BattLev = (Cap+10)/20;                           // [0..5] convert to display scale
   uint8_t Charging = 0;                                    // charging or not changing ?
@@ -578,14 +580,15 @@ void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS)   // status bar on top 
 #else
   uint8_t &DispLev = BattLev;
 #endif
-  if(BattLev==0 && !Charging && Odd)                // when battery is empty, then flash it at 0.5Hz
-  { }                                               // thus here avoid printing the battery symbol for flashing effect
-  else                                              // print the battery symbol with DispLev
-  { u8g2_SetFont(OLED, u8g2_font_battery19_tn);
-    u8g2_SetFontDirection(OLED, 3);
-    u8g2_DrawGlyph(OLED, 20, 10, '0'+DispLev);
-    u8g2_SetFontDirection(OLED, 0); }
-  Odd=!Odd;
+  if(Cap>=0)
+  { if(BattLev==0 && !Charging && Odd)                // when battery is empty, then flash it at 0.5Hz
+    { }                                               // thus here avoid printing the battery symbol for flashing effect
+    else                                              // print the battery symbol with DispLev
+    { u8g2_SetFont(OLED, u8g2_font_battery19_tn);
+      u8g2_SetFontDirection(OLED, 3);
+      u8g2_DrawGlyph(OLED, 20, 10, '0'+DispLev);
+      u8g2_SetFontDirection(OLED, 0); }
+    Odd=!Odd; }
 #ifdef WITH_SD
   if(SD_isMounted())
   { u8g2_SetFont(OLED, u8g2_font_twelvedings_t_all);

@@ -47,11 +47,11 @@ class FANET_Packet
      if(Pref==0x08 || Pref==0x11 || Pref==0x20 || Pref==0xDD || Pref==0xDE || Pref==0xDF) return 2;
      return 3; }
 
-   void setAddress(uint32_t Addr) { setAddrPref(Addr>>16); setAddrLow(Addr); }
-   void setAddrPref(uint8_t Prefix) { Byte[1]=Prefix; }
-   void setAddrLow(uint16_t Addr  ) { Byte[2]=Addr; Byte[3]=Addr>>8; }
+   void setAddress(uint32_t Addr) { setAddrPref(Addr>>16); setAddrLow(Addr); }   // full 24-bit address
+   void setAddrPref(uint8_t Prefix) { Byte[1]=Prefix; }                          // address prefix
+   void setAddrLow(uint16_t Addr  ) { Byte[2]=Addr; Byte[3]=Addr>>8; }           // lower 16-bits of the address
    void setHeader(uint8_t Type) { Byte[0] = 0x40 | (Type&0x3F); }
-   void setType(uint8_t Type) { Byte[0] = (Byte[0]&0xC0) | (Type&0x3F); }
+   void setType(uint8_t Type) { Byte[0] = (Byte[0]&0xC0) | (Type&0x3F); }        // packet-type: 1=air-position
 
    uint8_t ExtHeaderLen(void) const // length ot the extended header (zero in most cases)
    { if(!ExtHeader()) return 0;
@@ -62,7 +62,8 @@ class FANET_Packet
 
   uint8_t MsgOfs(void) const { return 4+ExtHeaderLen(); }              // offset to the actual message (past the header and ext. header)
   uint8_t MsgLen(void) const { return Len-4-ExtHeaderLen(); }          // length of the actual message
-  const uint8_t *Msg(void) const { return Byte+MsgOfs(); }
+  const uint8_t *Msg(void) const { return Byte+MsgOfs(); }             // pointer to the message, past the header
+  uint8_t *Msg(void)         { return Byte+MsgOfs(); }
 
   void setName(const char *Name)
   { setHeader(2);
@@ -325,7 +326,7 @@ class FANET_RxPacket: public FANET_Packet
      printf("%s CR%c%c%c %3.1fdB/%de %+3.1fkHz ", HHMMSS, '0'+CR, hasCRC?'c':'_', badCRC?'-':'+', 0.25*SNR, BitErr, 1e-2*FreqOfs);
      FANET_Packet::Print(Name); }
 
-   int WriteJSON(char *JSON) const
+   int WriteStxJSON(char *JSON) const
    { int Len=0;
      Len+=Format_String(JSON+Len, "\"addr\":\"");
      Len+=Format_Hex(JSON+Len, Byte[1]);
@@ -378,7 +379,29 @@ class FANET_RxPacket: public FANET_Packet
        Len+=Format_String(JSON+Len, ",\"lat_deg\":");
        Len+=Format_SignDec(JSON+Len, CoordUBX(Lat), 8, 7, 1);
        Len+=Format_String(JSON+Len, ",\"lon_deg\":");
-       Len+=Format_SignDec(JSON+Len, CoordUBX(Lon), 8, 7, 1); }
+       Len+=Format_SignDec(JSON+Len, CoordUBX(Lon), 8, 7, 1);
+       int Idx=7;
+       if(Service&0x40)
+       { Len+=Format_String(JSON+Len, ",\"temp_deg\":");
+         Len+=Format_SignDec(JSON+Len, (int16_t)5*((int8_t)Msg[Idx++]), 2, 1, 1); }
+       if(Service&0x20)
+       { uint16_t Dir  = Msg[Idx++];                                 // [cordic]
+         Len+=Format_String(JSON+Len, ",\"wind_deg\":");
+         Len+=Format_UnsDec(JSON+Len, (45*Dir+16)>>5, 2, 1);
+         uint16_t Wind = getSpeed(Msg[Idx++]);                       // [0.2km/h]
+         Len+=Format_String(JSON+Len, ",\"wind_kmh\":");
+         Len+=Format_UnsDec(JSON+Len, 2*Wind, 2, 1);
+         uint16_t Gust = getSpeed(Msg[Idx++]);
+         Len+=Format_String(JSON+Len, ",\"gust_kmh\":");
+         Len+=Format_UnsDec(JSON+Len, 2*Gust, 2, 1); }
+       if(Service&0x10)
+       { Len+=Format_String(JSON+Len, ",\"hum_perc\":");
+         Len+=Format_UnsDec(JSON+Len, (uint16_t)4*Msg[Idx++], 2, 1); }
+       if(Service&0x08)
+       { Len+=Format_String(JSON+Len, ",\"press_hpa\":");
+         Len+=Format_UnsDec(JSON+Len, getPressure(Msg+Idx), 2, 1);
+         Idx+=2; }
+     }
      if(Type==1 || Type==7)                                    // airborne or ground position
      { int32_t Lat = getLat(Msg);                              // [cordic] decode the latitude
        int32_t Lon = getLon(Msg+3);                            // [cordic] decode the longitude
@@ -568,7 +591,7 @@ class FANET_RxPacket: public FANET_Packet
      }
      if(SNR>0)
      { Out[Len++]=' ';
-       Len+=Format_UnsDec(Out+Len, ((uint16_t)SNR*10+2)/4, 2, 1);
+       Len+=Format_SignDec(Out+Len, ((int16_t)SNR*10+2-843)/4, 2, 1, 1);
        Out[Len++]='d'; Out[Len++]='B'; }
      Out[Len++]=' ';
      Len+=Format_SignDec(Out+Len, FreqOfs/10, 2, 1);
