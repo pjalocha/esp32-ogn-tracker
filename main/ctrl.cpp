@@ -165,26 +165,13 @@ static void ProcessCtrlV(void)
   Verbose = Parameters.Verbose; VerboseSuspendTime=TimeSync_Time(); Parameters.Verbose=0;
 }
 
-static void ProcessCtrlC(void)                                  // print system state to the console
+static void ProcessCtrlK(void)                                  // print public key to the console
 { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-  // Parameters.WritePOGNS(Line);
-  // Format_String(CONS_UART_Write, Line);
-  Parameters.Print(Line);
-  Format_String(CONS_UART_Write, Line);
-  Format_String(CONS_UART_Write, "GPS: ");
-  Format_UnsDec(CONS_UART_Write, GPS_getBaudRate(), 1);
-  Format_String(CONS_UART_Write, "bps");
-  CONS_UART_Write(',');
-  Format_UnsDec(CONS_UART_Write, GPS_PosPeriod, 4, 3);
-  CONS_UART_Write('s');
-  if(GPS_Status.PPS)         Format_String(CONS_UART_Write, ",PPS");
-  if(GPS_Status.NMEA)        Format_String(CONS_UART_Write, ",NMEA");
-  if(GPS_Status.UBX)         Format_String(CONS_UART_Write, ",UBX");
-  if(GPS_Status.MAV)         Format_String(CONS_UART_Write, ",MAV");
-  if(GPS_Status.BaudConfig)  Format_String(CONS_UART_Write, ",BaudOK");
-  if(GPS_Status.ModeConfig)  Format_String(CONS_UART_Write, ",ModeOK");
-  CONS_UART_Write('\r'); CONS_UART_Write('\n');
-  PrintTasks(CONS_UART_Write);                               // print the FreeRTOS tasks
+
+  xSemaphoreGive(CONS_Mutex); }
+
+static void ProcessCtrlF(void)                                  // list log files to the console
+{ xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
 
 #ifdef WITH_SPIFFS
   char FullName[32];
@@ -215,10 +202,7 @@ static void ProcessCtrlC(void)                                  // print system 
     Format_String(CONS_UART_Write, "kB total, "); }
   Format_UnsDec(CONS_UART_Write, Files);
   Format_String(CONS_UART_Write, " files\n");
-#endif // WITH_SPIFFS
-
-  Parameters.Write(CONS_UART_Write);                         // write the parameters to the console
-  // Parameters.WriteFile(stdout);                                   // write the parameters to the stdout
+#endif
 
 #ifdef WITH_SD
   Format_String(CONS_UART_Write, "SD card:");
@@ -232,8 +216,69 @@ static void ProcessCtrlC(void)                                  // print system 
   Format_String(CONS_UART_Write, "\n");
 #endif
 
-  xSemaphoreGive(CONS_Mutex);
-}
+  xSemaphoreGive(CONS_Mutex); }
+
+
+static void ProcessCtrlC(void)                                  // print system state to the console
+{ xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  // Parameters.WritePOGNS(Line);
+  // Format_String(CONS_UART_Write, Line);
+  Parameters.Print(Line);
+  Format_String(CONS_UART_Write, Line);
+  Format_String(CONS_UART_Write, "GPS: ");
+  Format_UnsDec(CONS_UART_Write, GPS_getBaudRate(), 1);
+  Format_String(CONS_UART_Write, "bps");
+  CONS_UART_Write(',');
+  Format_UnsDec(CONS_UART_Write, GPS_PosPeriod, 4, 3);
+  CONS_UART_Write('s');
+  if(GPS_Status.PPS)         Format_String(CONS_UART_Write, ",PPS");
+  if(GPS_Status.NMEA)        Format_String(CONS_UART_Write, ",NMEA");
+  if(GPS_Status.UBX)         Format_String(CONS_UART_Write, ",UBX");
+  if(GPS_Status.MAV)         Format_String(CONS_UART_Write, ",MAV");
+  if(GPS_Status.BaudConfig)  Format_String(CONS_UART_Write, ",BaudOK");
+  if(GPS_Status.ModeConfig)  Format_String(CONS_UART_Write, ",ModeOK");
+  CONS_UART_Write('\r'); CONS_UART_Write('\n');
+  PrintTasks(CONS_UART_Write);                               // print the FreeRTOS tasks
+
+  Parameters.Write(CONS_UART_Write);                         // write the parameters to the console
+  // Parameters.WriteFile(stdout);                                   // write the parameters to the stdout
+
+  Format_String(CONS_UART_Write, "Batt: ");
+  Format_UnsDec(CONS_UART_Write, (10*BatteryVoltage+128)>>8, 5, 4);
+  Format_String(CONS_UART_Write, "V ");
+  Format_SignDec(CONS_UART_Write, (600*BatteryVoltageRate+128)>>8, 3, 1);
+  Format_String(CONS_UART_Write, "mV/min\n");
+
+#ifdef WITH_AXP
+  uint16_t Batt=AXP.readBatteryVoltage();       // [mV]
+  uint16_t InpCurr=AXP.readBatteryInpCurrent(); // [mA]
+  uint16_t OutCurr=AXP.readBatteryOutCurrent(); // [mA]
+  uint16_t Vbus=AXP.readVbusVoltage();          // [mV]
+  uint16_t VbusCurr=AXP.readVbusCurrent();      // [mA]
+   int16_t Temp=AXP.readTemperature();          // [0.1degC]
+  uint32_t InpCharge=AXP.readBatteryInpCharge();
+  uint32_t OutCharge=AXP.readBatteryOutCharge();
+  Format_String(CONS_UART_Write, "Batt:");
+  Format_UnsDec(CONS_UART_Write, Batt, 4, 3);
+  Format_String(CONS_UART_Write, "V ");
+  Format_UnsDec(CONS_UART_Write, InpCurr, 4, 3);
+  Format_String(CONS_UART_Write, "/");
+  Format_UnsDec(CONS_UART_Write, OutCurr, 4, 3);
+  Format_String(CONS_UART_Write, "A USB:");
+  Format_UnsDec(CONS_UART_Write, Vbus, 4, 3);
+  Format_String(CONS_UART_Write, "V ");
+  Format_UnsDec(CONS_UART_Write, VbusCurr, 4, 3);
+  Format_String(CONS_UART_Write, "A Charge:");
+  Format_UnsDec(CONS_UART_Write, ((InpCharge<<12)+562)/1125, 2, 1);
+  Format_String(CONS_UART_Write, "-");
+  Format_UnsDec(CONS_UART_Write, ((OutCharge<<12)+562)/1125, 2, 1);
+  Format_String(CONS_UART_Write, "mAh Temp:");
+  Format_SignDec(CONS_UART_Write, Temp, 2, 1);
+  Format_String(CONS_UART_Write, "degC\n");
+
+#endif
+
+  xSemaphoreGive(CONS_Mutex); }
 
 static void ProcessCtrlL(void)                                    // print system state to the console
 {
@@ -348,6 +393,8 @@ static void ProcessInput(void)
   { uint8_t Byte; int Err=CONS_UART_Read(Byte); if(Err<=0) break; // get byte from console, if none: exit the loop
 #ifndef WITH_GPS_UBX_PASS
     if(Byte==0x03) ProcessCtrlC();                                // if Ctrl-C received: print parameters
+    if(Byte==0x06) ProcessCtrlF();                                // if Ctrl-F received: list files
+    if(Byte==0x0B) ProcessCtrlK();                                // if Ctrl-K received: print public key
     if(Byte==0x0C) ProcessCtrlL();                                // if Ctrl-L received: list log files
     if(Byte==0x16) ProcessCtrlV();                                // if Ctrl-L received: suspend (verbose) printout
     if(Byte==0x18)
