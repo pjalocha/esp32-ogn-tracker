@@ -1,0 +1,99 @@
+#ifndef __IGC_KEY_H__
+#define __IGC_KEY_H__
+
+#include "mbedtls/md5.h"
+#include "mbedtls/rsa.h"
+#include "mbedtls/platform.h"
+#include "mbedtls/x509_csr.h"
+#include "mbedtls/entropy.h"
+#include "mbedtls/ctr_drbg.h"
+#include "mbedtls/ecdsa.h"
+#include "mbedtls/sha256.h"
+#include "mbedtls/ecp.h"
+#include "mbedtls/pk.h"
+
+// Uncomment to force use of a specific curve
+// #define ECPARAMS    MBEDTLS_ECP_DP_SECP192R1
+
+#if !defined(ECPARAMS)
+#define ECPARAMS    mbedtls_ecp_curve_list()->grp_id
+#endif
+
+class IGC_Key
+{ public:
+   mbedtls_ecdsa_context SignCtx; // this seems to be the key-pair as it is defined: typedef mbedtls_ecp_keypair mbedtls_ecdsa_context;
+
+   mbedtls_ctr_drbg_context CtrDrbgCtx; // RNG parameter, used to produce the key but as well to produce signature
+
+   mbedtls_pk_context Key;
+   mbedtls_x509write_csr Req;
+   mbedtls_entropy_context Entropy;
+
+   static const uint8_t PrivBinSize = 72;                      // [bytes] max. size for the private key in binary form
+
+ public:
+   // IGC_Key() { Init(); }
+
+   int Init(void)                                              // initialize on startup
+   { const char *Pers = "ecdsa";
+     mbedtls_x509write_csr_init(&Req);
+     mbedtls_pk_init(&Key);
+     mbedtls_ecdsa_init(&SignCtx);
+     mbedtls_ctr_drbg_init(&CtrDrbgCtx);
+     mbedtls_entropy_init(&Entropy);
+     int Ret = mbedtls_ctr_drbg_seed( &CtrDrbgCtx, mbedtls_entropy_func, &Entropy,
+                                      (const unsigned char *)Pers, strlen(Pers) );
+     return Ret; }                                             // return zero on success
+
+   int Generate(void)                                          // produce a new pair of keys: private and public key
+   {                                                           // key-pair, curve, RNG function, RNG parameter
+     int Ret = mbedtls_ecdsa_genkey(&SignCtx, ECPARAMS, mbedtls_ctr_drbg_random, &CtrDrbgCtx);  // produce key-pair
+     if(Ret!=0) return Ret;
+     Ret = mbedtls_pk_setup(&Key, mbedtls_pk_info_from_type(MBEDTLS_PK_ECKEY));
+     if(Ret!=0) return Ret;
+     Key.pk_ctx = &SignCtx;                                    // ?
+     return Ret; }                                             // return zero on success
+
+   int Write(uint8_t *Data, int MaxLen=240)                     // write both private and public keys to a binary record
+   { if(MaxLen<=PrivBinSize) return 0;
+     if(Priv_WriteBin(Data, PrivBinSize)!=0) return 0;
+     int Len=Pub_WriteBin(Data+PrivBinSize, MaxLen-PrivBinSize); if(Len==0) return 0;
+     return Len+PrivBinSize; }                                 // return the number of bytes
+
+   int Read(const uint8_t *Data, int Len)
+   { if(Len<=PrivBinSize) return 0;
+     if(Priv_ReadBin(Data, PrivBinSize)!=0) return 0;
+     if(Pub_ReadBin(Data+PrivBinSize, Len-PrivBinSize)!=0) return 0;
+     // int Ret = mbedtls_pk_setup(&Key, mbedtls_pk_info_from_type(MBEDTLS_PK_ECKEY));
+     Key.pk_ctx = &SignCtx;                                    // ?
+     return Len; }                                             // return number of bytes read
+
+   int SignMD5(uint8_t *Sign, const uint8_t *Hash, int HashLen)      // sign an MD5 Hash
+   { size_t SignLen=0;
+     int Ret=mbedtls_ecdsa_write_signature(&SignCtx, MBEDTLS_MD_SHA256, Hash, HashLen, Sign, &SignLen, mbedtls_ctr_drbg_random, &CtrDrbgCtx);
+     if(Ret!=0) return 0;                                      // return zero if failure
+     return SignLen; }                                         // return the size of the signature
+
+   int Pub_WriteBin(uint8_t *Data, int MaxLen)                 // write the public key in a binary form
+   { size_t Len=0;
+     if(mbedtls_ecp_point_write_binary(&SignCtx.grp, &SignCtx.Q, MBEDTLS_ECP_PF_UNCOMPRESSED, &Len, Data, MaxLen)!=0) return 0;
+     return Len; }                                             // return number of bytes written
+
+   int Pub_ReadBin(const uint8_t *Data, int Len)
+   { return mbedtls_ecp_point_read_binary(&SignCtx.grp, &SignCtx.Q, Data, Len); } // return zero for success
+
+   int Priv_WriteBin(uint8_t *Data, int Len=PrivBinSize)       // write the private key in a binary form
+   { return mbedtls_mpi_write_binary(&SignCtx.d, Data, Len); } // return zero if success (always fills the whole buffer adding leading zeros)
+
+   int Priv_ReadBin(const uint8_t *Data, int Len=PrivBinSize)  // read the private key in the binary form
+   { return mbedtls_mpi_read_binary(&SignCtx.d, Data, Len); }  // return zero for success
+
+   int Pub_Write(uint8_t *Out, int MaxLen)                     // write the public key in an ASCII form
+   { return mbedtls_pk_write_pubkey_pem(&Key, Out, MaxLen); }  // return zero if success
+
+   int Priv_Write(uint8_t *Out, int MaxLen)                    // write the private key in an ASCII form
+   { return mbedtls_pk_write_key_pem(&Key, Out, MaxLen); }     // return zero if success
+
+} ;
+
+#endif // __IGC_KEY_H__

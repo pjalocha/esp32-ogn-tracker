@@ -5,9 +5,13 @@
 
 #include "hal.h"
 
+#include "igc-key.h"
+
 void Log_Write(char Byte);
 int  Log_Free(void);
 extern SemaphoreHandle_t Log_Mutex;
+
+extern IGC_Key IGC_SignKey;
 
 #ifdef __cplusplus
   extern "C"

@@ -6,21 +6,23 @@
 #include <unistd.h>
 
 #include "mbedtls/md5.h"
-#include "mbedtls/rsa.h"
-#include "mbedtls/platform.h"
-#include "mbedtls/x509_csr.h"
-#include "mbedtls/entropy.h"
-#include "mbedtls/ctr_drbg.h"
-#include "mbedtls/ecdsa.h"
-#include "mbedtls/sha256.h"
-#include "mbedtls/ecp.h"
-#include "mbedtls/pk.h"
+// #include "mbedtls/rsa.h"
+// #include "mbedtls/platform.h"
+// #include "mbedtls/x509_csr.h"
+// #include "mbedtls/entropy.h"
+// #include "mbedtls/ctr_drbg.h"
+// #include "mbedtls/ecdsa.h"
+// #include "mbedtls/sha256.h"
+// #include "mbedtls/ecp.h"
+// #include "mbedtls/pk.h"
 
 #include "hal.h"
 #include "gps.h"
 #include "sdlog.h"
 #include "timesync.h"
 #include "fifo.h"
+
+#include "igc-key.h"
 
 // ============================================================================================
 
@@ -312,6 +314,8 @@ static void IGC_Check(void)                                          // check if
 
 #ifdef WITH_SDLOG
 
+IGC_Key IGC_SignKey;
+
 /*
 // Uncomment to force use of a specific curve
 #define ECPARAMS    MBEDTLS_ECP_DP_SECP192R1
@@ -348,6 +352,7 @@ static int IGC_GenKey(void)
 extern "C"
  void vTaskSDLOG(void* pvParameters)
 {
+
 /*
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   Format_String(CONS_UART_Write, "vTaskSDLOG() Start generating key pair\n");
@@ -363,6 +368,9 @@ extern "C"
   IGC_Serial[2] = Flight.Code36(ID%36); ID/=36;
   IGC_Serial[1] = Flight.Code36(ID%36); ID/=36;
   IGC_Serial[0] = Flight.Code36(ID%36);
+
+  IGC_SignKey.Init();
+  IGC_SignKey.Generate();
 
   mbedtls_md5_init(&IGC_MD5);
 
