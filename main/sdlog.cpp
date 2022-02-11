@@ -5,24 +5,13 @@
 #include <utime.h>
 #include <unistd.h>
 
-#include "mbedtls/md5.h"
-// #include "mbedtls/rsa.h"
-// #include "mbedtls/platform.h"
-// #include "mbedtls/x509_csr.h"
-// #include "mbedtls/entropy.h"
-// #include "mbedtls/ctr_drbg.h"
-// #include "mbedtls/ecdsa.h"
-// #include "mbedtls/sha256.h"
-// #include "mbedtls/ecp.h"
-// #include "mbedtls/pk.h"
-
 #include "hal.h"
 #include "gps.h"
 #include "sdlog.h"
 #include "timesync.h"
 #include "fifo.h"
 
-#include "igc-key.h"
+#include "igc-key.h"                                              // IGC key generate/read/write/sign with
 
 // ============================================================================================
 
@@ -106,8 +95,8 @@ static FILE  *IGC_File=0;                                         //
 static uint32_t IGC_SaveTime=0;
        uint16_t IGC_FlightNum=0;                                  // flight counter
 
-static mbedtls_md5_context IGC_MD5;                               //
-static uint8_t IGC_Digest[16];                                    //
+static SHA256 IGC_SHA256;                                         //
+static uint8_t IGC_Digest[32];                                    //
 
 static void IGC_TimeStamp(void)
 { struct stat FileStat;
@@ -170,7 +159,7 @@ static void IGC_Reopen(void)
 
 static int IGC_LogLine(const char *Line, int Len)
 { int Written = fwrite(Line, 1, Len, IGC_File);
-  mbedtls_md5_update_ret(&IGC_MD5, (uint8_t *)Line, Written);
+  IGC_SHA256.Update((uint8_t *)Line, Written);
   return Written; }
 
 static int IGC_LogLine(const char *Line)
@@ -282,12 +271,12 @@ static void IGC_Check(void)                                          // check if
   if(IGC_File)                                                       // if IGC file already open
   { IGC_Log(GPS_Pos[PosIdx]);                                        // log position
     if(!inFlight)                                                    // if no longer in flight
-    { mbedtls_md5_finish_ret(&IGC_MD5, IGC_Digest);
-      Line[0]='G';                                                   // produce G-record with MD5
-      for(int Idx=0; Idx<16; Idx++)                                  // 16 MD5 bytes
+    { IGC_SHA256.Finish(IGC_Digest);
+      Line[0]='G';                                                   // produce G-record with SH256
+      for(int Idx=0; Idx<32; Idx++)                                  // 32 SHA256 bytes
         Format_Hex(Line+1+2*Idx, IGC_Digest[Idx]);                   // printed as hex
-      Line[33]='\n'; Line[34]=0;                                     // end-of-line, end-of-string
-      IGC_LogLine(Line, 34);                                         // write to IGC
+      Line[65]='\n'; Line[66]=0;                                     // end-of-line, end-of-string
+      IGC_LogLine(Line, 66);                                         // write to IGC
       IGC_Close(); IGC_TimeStamp(); }                                // then close the IGC file
     else
     { uint32_t Time=TimeSync_Time();
@@ -300,7 +289,7 @@ static void IGC_Check(void)                                          // check if
     { for(int Try=0; Try<8; Try++)
       { int Err=IGC_Open(); if(Err!=(-2)) break; }                   // try to open a new IGC file but don't overwrite the old ones
       if(IGC_File)                                                   // if open succesfully
-      { mbedtls_md5_starts_ret(&IGC_MD5);                            // start the MD5 calculation
+      { IGC_SHA256.Start();                                          // start the SHA256 calculation
         IGC_Header(GPS_Pos[PosIdx]);                                 // then write header
         IGC_ID();
         IGC_Log(GPS_Pos[PosIdx]); }                                  // log first B-record
@@ -312,9 +301,9 @@ static void IGC_Check(void)                                          // check if
 
 // ============================================================================================
 
-#ifdef WITH_SDLOG
-
 IGC_Key IGC_SignKey;
+
+#ifdef WITH_SDLOG
 
 /*
 // Uncomment to force use of a specific curve
@@ -371,8 +360,13 @@ extern "C"
 
   IGC_SignKey.Init();
   IGC_SignKey.Generate();
+  if(IGC_SignKey.ReadFromNVS()!=ESP_OK) IGC_SignKey.WriteToNVS();
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  if(IGC_SignKey.Pub_Write((uint8_t *)Line, 512)==0)
+    Format_String(CONS_UART_Write, Line);
+  xSemaphoreGive(CONS_Mutex);
 
-  mbedtls_md5_init(&IGC_MD5);
+  IGC_SHA256.Init();
 
   Log_FIFO.Clear();
 

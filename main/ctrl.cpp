@@ -15,6 +15,7 @@
 #include "ctrl.h"
 #include "proc.h"
 #include "log.h"
+#include "sdlog.h"
 
 #include "gps.h"
 #include "ubx.h"
@@ -166,8 +167,10 @@ static void ProcessCtrlV(void)
 }
 
 static void ProcessCtrlK(void)                                  // print public key to the console
-{ xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-
+{ uint8_t Out[512];
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  if(IGC_SignKey.Pub_Write(Out, 512)==0)
+    Format_String(CONS_UART_Write, (const char *)Out);
   xSemaphoreGive(CONS_Mutex); }
 
 static void ProcessCtrlF(void)                                  // list log files to the console
@@ -396,7 +399,7 @@ static void ProcessInput(void)
     if(Byte==0x06) ProcessCtrlF();                                // if Ctrl-F received: list files
     if(Byte==0x0B) ProcessCtrlK();                                // if Ctrl-K received: print public key
     if(Byte==0x0C) ProcessCtrlL();                                // if Ctrl-L received: list log files
-    if(Byte==0x16) ProcessCtrlV();                                // if Ctrl-L received: suspend (verbose) printout
+    if(Byte==0x16) ProcessCtrlV();                                // if Ctrl-V received: suspend (verbose) printout
     if(Byte==0x18)
     {
 #ifdef WITH_SPIFFS
