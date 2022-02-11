@@ -603,7 +603,7 @@ void vTaskPROC(void* pvParameters)
       TxPacket->Packet.Whiten();                                              // just whiten if there is no encryption
 #endif
       TxPacket->calcFEC();                                                    // calculate FEC code
-// #ifdef DEBUG_PRINT
+#ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       // Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60, 2);
       // CONS_UART_Write('.');
@@ -613,7 +613,7 @@ void vTaskPROC(void* pvParameters)
       Format_Hex(CONS_UART_Write, TxPacket->Packet.HeaderWord);
       CONS_UART_Write('\r'); CONS_UART_Write('\n');
       xSemaphoreGive(CONS_Mutex);
-// #endif
+#endif
       XorShift32(RX_Random);
       static uint8_t TxBackOff=0;
       if(TxBackOff) TxBackOff--;
@@ -724,14 +724,14 @@ void vTaskPROC(void* pvParameters)
       OGN_TxPacket<OGN_Packet> *TxPacket = RF_TxFIFO.getWrite();
       TxPacket->Packet = PosPacket.Packet;                            // copy the position packet
       TxPacket->Packet.Whiten(); TxPacket->calcFEC();                 // whiten and calculate FEC code
-// #ifdef DEBUG_PRINT
+#ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_UnsDec(CONS_UART_Write, PosTime);
       Format_String(CONS_UART_Write, " (_) TxFIFO <- ");
       Format_Hex(CONS_UART_Write, TxPacket->Packet.HeaderWord);
       CONS_UART_Write('\r'); CONS_UART_Write('\n');
       xSemaphoreGive(CONS_Mutex);
-// #endif
+#endif
       XorShift32(RX_Random);
       if(PosTime && ((RX_Random&0x7)==0) )                              // send if some position in the packet and at 1/8 normal rate
         RF_TxFIFO.Write();                                              // complete the write into the TxFIFO
