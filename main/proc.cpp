@@ -556,8 +556,8 @@ void vTaskPROC(void* pvParameters)
               else { SatSNR=0; }
       StatPacket.Packet.Status.SatSNR = SatSNR; }
 
-    if(Position && Position->isTimeValid() && Position->isDateValid()) PosTime=Position->getUnixTime();
-                                                                 else  PosTime=0;
+    // if(Position && Position->isTimeValid() && Position->isDateValid()) PosTime=Position->getUnixTime();
+    //                                                              else  PosTime=0;
 
     if( Position && Position->isReady && (!Position->Sent) && Position->isValid() )
     { int16_t AverSpeed=GPS_AverageSpeed();                             // [0.1m/s] average speed, including the vertical speed
@@ -572,7 +572,7 @@ void vTaskPROC(void* pvParameters)
       Format_String(CONS_UART_Write, " -> Sent\n");
       xSemaphoreGive(CONS_Mutex);
 #endif
-      // PosTime=Position->getUnixTime();
+      PosTime=Position->getUnixTime();
       PosPacket.Packet.HeaderWord=0;
       PosPacket.Packet.Header.Address    = Parameters.Address;         // set address
       PosPacket.Packet.Header.AddrType   = Parameters.AddrType;        // address-type
@@ -586,9 +586,9 @@ void vTaskPROC(void* pvParameters)
       { while(BestResid>=500) BestResid-=1000;                         // remove full seconds
         Position->Encode(PosPacket.Packet, BestResid); }
       PosPacket.Packet.Position.AcftType = Parameters.AcftType;        // aircraft-type
-      PosPacket.Packet.Position.Stealth = 0; // Parameters.Stealth;
+      PosPacket.Packet.Position.Stealth = Parameters.Stealth;
 #ifdef DEBUG_PRINT
-      { uint8_t Len=PosPacket.Packet.WriteAPRS(Line, PosTime);           // print on the console as APRS message
+      { uint8_t Len=PosPacket.Packet.WriteAPRS(Line, PosTime);         // print on the console as APRS message
         xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
         Format_String(CONS_UART_Write, Line, 0, Len);
         xSemaphoreGive(CONS_Mutex); }
@@ -603,16 +603,17 @@ void vTaskPROC(void* pvParameters)
       TxPacket->Packet.Whiten();                                              // just whiten if there is no encryption
 #endif
       TxPacket->calcFEC();                                                    // calculate FEC code
-#ifdef DEBUG_PRINT
+// #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-      Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60, 2);
-      CONS_UART_Write('.');
-      Format_UnsDec(CONS_UART_Write, TimeSync_msTime(), 3);
-      Format_String(CONS_UART_Write, " TxFIFO <- ");
+      // Format_UnsDec(CONS_UART_Write, TimeSync_Time()%60, 2);
+      // CONS_UART_Write('.');
+      // Format_UnsDec(CONS_UART_Write, TimeSync_msTime(), 3);
+      Format_UnsDec(CONS_UART_Write, PosTime);
+      Format_String(CONS_UART_Write, " (*) TxFIFO <- ");
       Format_Hex(CONS_UART_Write, TxPacket->Packet.HeaderWord);
       CONS_UART_Write('\r'); CONS_UART_Write('\n');
       xSemaphoreGive(CONS_Mutex);
-#endif
+// #endif
       XorShift32(RX_Random);
       static uint8_t TxBackOff=0;
       if(TxBackOff) TxBackOff--;
@@ -623,29 +624,29 @@ void vTaskPROC(void* pvParameters)
         if(TX_Credit<=0) TxBackOff+=1; }
       Position->Sent=1;
 #ifdef WITH_FANET
-    static uint8_t FNTbackOff=0;
-    if(FNTbackOff) FNTbackOff--;
-    // if( (SlotTime&0x07)==(RX_Random&0x07) )                            // every 8sec
-    else
-    { FANET_Packet *FNTpkt = FNT_TxFIFO.getWrite();
-      FNTpkt->setAddress(Parameters.Address);
-      Position->EncodeAirPos(*FNTpkt, Parameters.AcftType, !Parameters.Stealth);
-      XorShift32(RX_Random);
-      FNT_TxFIFO.Write();
-      FNTbackOff = 8+(RX_Random&0x1); }                                   // every 9 or 10sec
+      static uint8_t FNTbackOff=0;
+      if(FNTbackOff) FNTbackOff--;
+      // if( (SlotTime&0x07)==(RX_Random&0x07) )                            // every 8sec
+      else
+      { FANET_Packet *FNTpkt = FNT_TxFIFO.getWrite();
+        FNTpkt->setAddress(Parameters.Address);
+        Position->EncodeAirPos(*FNTpkt, Parameters.AcftType, !Parameters.Stealth);
+        XorShift32(RX_Random);
+        FNT_TxFIFO.Write();
+        FNTbackOff = 8+(RX_Random&0x1); }                                   // every 9 or 10sec
 #endif
 #ifdef WITH_LOOKOUT
-      const LookOut_Target *Tgt=Look.ProcessOwn(PosPacket.Packet);        // process own position, get the most dangerous target
+        const LookOut_Target *Tgt=Look.ProcessOwn(PosPacket.Packet);        // process own position, get the most dangerous target
 #ifdef WITH_PFLAA
-      if(Parameters.Verbose)
-      { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-        Look.WritePFLA(CONS_UART_Write);                                  // produce PFLAU and PFLAA for all tracked targets
-        xSemaphoreGive(CONS_Mutex);
+        if(Parameters.Verbose)
+        { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+          Look.WritePFLA(CONS_UART_Write);                                  // produce PFLAU and PFLAA for all tracked targets
+          xSemaphoreGive(CONS_Mutex);
 #ifdef WITH_SDLOG
-       if(Log_Free()>=512)
-       { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
-         Look.WritePFLA(Log_Write);
-         xSemaphoreGive(Log_Mutex); }
+         if(Log_Free()>=512)
+         { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
+           Look.WritePFLA(Log_Write);
+           xSemaphoreGive(Log_Mutex); }
 #endif
       }
 #else
@@ -655,10 +656,10 @@ void vTaskPROC(void* pvParameters)
         Format_String(CONS_UART_Write, Line, 0, Len);
         xSemaphoreGive(CONS_Mutex);
 #ifdef WITH_SDLOG
-        if(Log_Free()>=128)
-        { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
-          Format_String(Log_Write, Line, 0, Len);                                // send the NMEA out to the log file
-          xSemaphoreGive(Log_Mutex); }
+      if(Log_Free()>=128)
+      { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
+        Format_String(Log_Write, Line, 0, Len);                                // send the NMEA out to the log file
+        xSemaphoreGive(Log_Mutex); }
 #endif
       }
 #endif // WITH_PFLAA
@@ -721,17 +722,18 @@ void vTaskPROC(void* pvParameters)
     } else // if GPS position is not complete, contains no valid position, etc.
     { if((SlotTime-PosTime)>=30) { PosPacket.Packet.Position.Time=0x3F; } // if no valid position for more than 30 seconds then set the time as unknown for the transmitted packet
       OGN_TxPacket<OGN_Packet> *TxPacket = RF_TxFIFO.getWrite();
-      TxPacket->Packet = PosPacket.Packet;
+      TxPacket->Packet = PosPacket.Packet;                            // copy the position packet
       TxPacket->Packet.Whiten(); TxPacket->calcFEC();                 // whiten and calculate FEC code
-#ifdef DEBUG_PRINT
+// #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-      Format_String(CONS_UART_Write, "TxFIFO: ");
+      Format_UnsDec(CONS_UART_Write, PosTime);
+      Format_String(CONS_UART_Write, " (_) TxFIFO <- ");
       Format_Hex(CONS_UART_Write, TxPacket->Packet.HeaderWord);
       CONS_UART_Write('\r'); CONS_UART_Write('\n');
       xSemaphoreGive(CONS_Mutex);
-#endif
+// #endif
       XorShift32(RX_Random);
-      if(PosTime && ((RX_Random&0x3)==0) )                              // send if some position in the packet and at 1/4 normal rate
+      if(PosTime && ((RX_Random&0x7)==0) )                              // send if some position in the packet and at 1/8 normal rate
         RF_TxFIFO.Write();                                              // complete the write into the TxFIFO
       if(Position) Position->Sent=1;
     }

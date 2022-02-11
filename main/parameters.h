@@ -469,7 +469,7 @@ uint16_t StratuxPort;
     Line[Len++]=HexDigit(AddrType); Line[Len++]=':';
     Len+=Format_Hex(Line+Len, Address, 6);
     { uint64_t ID=getUniqueID(); Line[Len++]='/';
-      Len+=Format_Hex(Line+Len, (uint16_t)(ID>>32)); Len+=Format_Hex(Line+Len, (uint32_t)ID); }
+      Len+=Format_Hex(Line+Len, (uint32_t)(ID>>32)); Len+=Format_Hex(Line+Len, (uint32_t)ID); }
     // uint32_t DefaultAddr=getUniqueAddress();
     // if(Address!=DefaultAddr)
     // { Line[Len++]='/'; Len+=Format_Hex(Line+Len, DefaultAddr, 6); }
@@ -498,7 +498,7 @@ uint16_t StratuxPort;
   { uint8_t Len=0;
     Len+=Format_String(Line+Len, "$POGNS,CPU=0x");
     uint64_t CPU=getUniqueID();
-    Len+=Format_Hex(Line+Len, (uint16_t)(CPU>>32));
+    Len+=Format_Hex(Line+Len, (uint32_t)(CPU>>32));
     Len+=Format_Hex(Line+Len, (uint32_t)CPU);
     Len+=Format_String(Line+Len, ",Address=0x");
     Len+=Format_Hex(Line+Len, Address, 6);
