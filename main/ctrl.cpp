@@ -25,13 +25,17 @@
 #include "disp_oled.h"
 #include "disp_lcd.h"
 
+#include "igc-key.h"
+
 // #include "ymodem.h"
 
 // #define DEBUG_PRINT
 
-static char Line[160];
+static char Line[512];
 
 // FIFO<uint8_t, 8> KeyBuffer;
+
+IGC_Key IGC_SignKey;
 
 // ========================================================================================================================
 
@@ -167,10 +171,10 @@ static void ProcessCtrlV(void)
 }
 
 static void ProcessCtrlK(void)                                  // print public key to the console
-{ uint8_t Out[512];
+{ // uint8_t Out[512];
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-  if(IGC_SignKey.Pub_Write(Out, 512)==0)
-    Format_String(CONS_UART_Write, (const char *)Out);
+  if(IGC_SignKey.Pub_Write((uint8_t *)Line, 512)==0)
+    Format_String(CONS_UART_Write, Line);
   xSemaphoreGive(CONS_Mutex); }
 
 static void ProcessCtrlF(void)                                  // list log files to the console
@@ -432,6 +436,14 @@ static void ProcessInput(void)
 extern "C"
 void vTaskCTRL(void* pvParameters)
 {
+
+  IGC_SignKey.Init();
+  IGC_SignKey.Generate();
+  if(IGC_SignKey.ReadFromNVS()!=ESP_OK) IGC_SignKey.WriteToNVS();
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  if(IGC_SignKey.Pub_Write((uint8_t *)Line, 512)==0)
+    Format_String(CONS_UART_Write, Line);
+  xSemaphoreGive(CONS_Mutex);
 
   uint8_t Len=Format_String(Line, "$POGNS,SysStart");
   Len+=NMEA_AppendCheckCRNL(Line, Len);

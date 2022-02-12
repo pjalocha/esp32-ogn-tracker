@@ -11,7 +11,7 @@
 #include "timesync.h"
 #include "fifo.h"
 
-#include "igc-key.h"                                              // IGC key generate/read/write/sign with
+#include "ctrl.h"
 
 // ============================================================================================
 
@@ -96,7 +96,8 @@ static uint32_t IGC_SaveTime=0;
        uint16_t IGC_FlightNum=0;                                  // flight counter
 
 static SHA256 IGC_SHA256;                                         //
-static uint8_t IGC_Digest[32];                                    //
+const int IGC_Digest_Size = 32;
+static uint8_t IGC_Digest[IGC_Digest_Size];                       //
 
 static void IGC_TimeStamp(void)
 { struct stat FileStat;
@@ -272,11 +273,12 @@ static void IGC_Check(void)                                          // check if
   { IGC_Log(GPS_Pos[PosIdx]);                                        // log position
     if(!inFlight)                                                    // if no longer in flight
     { IGC_SHA256.Finish(IGC_Digest);
-      Line[0]='G';                                                   // produce G-record with SH256
-      for(int Idx=0; Idx<32; Idx++)                                  // 32 SHA256 bytes
-        Format_Hex(Line+1+2*Idx, IGC_Digest[Idx]);                   // printed as hex
-      Line[65]='\n'; Line[66]=0;                                     // end-of-line, end-of-string
-      IGC_LogLine(Line, 66);                                         // write to IGC
+      int Len=0;
+      Line[Len++]='G';                                               // produce G-record with SH256
+      for(int Idx=0; Idx<IGC_Digest_Size; Idx++)                     // 32 SHA256 bytes
+        Len+=Format_Hex(Line+Len, IGC_Digest[Idx]);                  // printed as hex
+      Line[Len++]='\n'; Line[Len]=0;                                 // end-of-line, end-of-string
+      IGC_LogLine(Line, Len);                                        // write to IGC
       IGC_Close(); IGC_TimeStamp(); }                                // then close the IGC file
     else
     { uint32_t Time=TimeSync_Time();
@@ -301,7 +303,7 @@ static void IGC_Check(void)                                          // check if
 
 // ============================================================================================
 
-IGC_Key IGC_SignKey;
+// IGC_Key IGC_SignKey;
 
 #ifdef WITH_SDLOG
 
@@ -358,13 +360,13 @@ extern "C"
   IGC_Serial[1] = Flight.Code36(ID%36); ID/=36;
   IGC_Serial[0] = Flight.Code36(ID%36);
 
-  IGC_SignKey.Init();
-  IGC_SignKey.Generate();
-  if(IGC_SignKey.ReadFromNVS()!=ESP_OK) IGC_SignKey.WriteToNVS();
-  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-  if(IGC_SignKey.Pub_Write((uint8_t *)Line, 512)==0)
-    Format_String(CONS_UART_Write, Line);
-  xSemaphoreGive(CONS_Mutex);
+  // IGC_SignKey.Init();
+  // IGC_SignKey.Generate();
+  // if(IGC_SignKey.ReadFromNVS()!=ESP_OK) IGC_SignKey.WriteToNVS();
+  // xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  // if(IGC_SignKey.Pub_Write((uint8_t *)Line, 512)==0)
+  //   Format_String(CONS_UART_Write, Line);
+  // xSemaphoreGive(CONS_Mutex);
 
   IGC_SHA256.Init();
 
