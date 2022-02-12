@@ -11,7 +11,7 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
 
  class NMEA_RxMsg                    // receiver for the NMEA sentences
 { public:
-   static const uint8_t MaxLen=104;  // maximum length
+   static const uint8_t MaxLen=120;  // maximum length
    static const uint8_t MaxParms=24; // maximum number of parameters (commas)
    uint8_t Data[MaxLen];             // the message itself
    uint8_t Len;                      // number of bytes

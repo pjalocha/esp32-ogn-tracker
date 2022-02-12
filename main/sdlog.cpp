@@ -277,8 +277,11 @@ static void IGC_Check(void)                                          // check if
       int SigLen = IGC_SignKey.Sign_MD5_SHA256(Sig, IGC_Digest, IGC_Digest_Size);
       int Len=0;
       Line[Len++]='G';                                               // produce G-record with SH256
-//      for(int Idx=0; Idx<IGC_Digest_Size; Idx++)                     // 32 SHA256 bytes
-//        Len+=Format_Hex(Line+Len, IGC_Digest[Idx]);                  // printed as hex
+      for(int Idx=0; Idx<IGC_Digest_Size; Idx++)                     // 32 SHA256 bytes
+        Len+=Format_Hex(Line+Len, IGC_Digest[Idx]);                  // printed as hex
+      Line[Len++]='\n'; Line[Len]=0;                                 // end-of-line, end-of-string
+      IGC_LogLine(Line, Len);
+      Len=1;                                                         // 2nd G-record with the signature
       for(int Idx=0; Idx<SigLen; Idx++)                              // signature bytes
         Len+=Format_Hex(Line+Len, Sig[Idx]);                         // printed as hex
       Line[Len++]='\n'; Line[Len]=0;                                 // end-of-line, end-of-string
