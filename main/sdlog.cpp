@@ -196,9 +196,9 @@ static int IGC_Header(const GPS_Position &Pos)                      // write the
   IGC_HeadParm("HFCIDCompetitionID:", Parameters.ID);               // competition ID
   {
 #ifdef WITH_FollowMe
-    int Len=Format_String(Line, "HFRHWHardwareVersion:FollowMe\n");
+    int Len=Format_String(Line, "HFRHWHardwareVersion:FollowMe");
 #else
-    int Len=Format_String(Line, "HFRHWHardwareVersion:ESP32+LoRa\n"); // hardware version
+    int Len=Format_String(Line, "HFRHWHardwareVersion:ESP32+LoRa"); // hardware version
 #endif
     Line[Len++]='\n'; Line[Len]=0;
     IGC_LogLine(Line, Len); }
