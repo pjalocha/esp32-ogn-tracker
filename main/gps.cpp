@@ -618,12 +618,26 @@ static void GPS_NMEA(void)                                                 // wh
        if(NMEA.isGxGSV()) ProcessGSV(NMEA);                                      // process satellite data
   else if(NMEA.isGxRMC())
   { int8_t SameTime = GPS_DateTime.ReadTime((const char *)NMEA.ParmPtr(0)); // 1=same time, 0=diff. time, -1=error
-    if(SameTime==0 && GPS_Burst.GxRMC) { GPS_BurstComplete(); GPS_BurstEnd(); GPS_BurstStart(NMEA.Len); }
+    if(SameTime==0 && GPS_Burst.GxGGA) { GPS_BurstComplete(); GPS_BurstEnd(); GPS_BurstStart(NMEA.Len); }
+    GPS_DateTime.ReadDate((const char *)NMEA.ParmPtr(8));
+#ifdef DEBUG_PRINT
+    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    Format_String(CONS_UART_Write, "GPS_NMEA() RMC ");
+    Format_SignDec(CONS_UART_Write, (int16_t)(GPS_DateTime.Year), 2);
+    Format_String(CONS_UART_Write, "\n");
+    xSemaphoreGive(CONS_Mutex);
+#endif
     GPS_Burst.GxRMC=1; }
   else if(NMEA.isGxGGA())
   { int8_t SameTime = GPS_DateTime.ReadTime((const char *)NMEA.ParmPtr(0)); // 1=same time, 0=diff. time, -1=error
-    if(SameTime==0 && GPS_Burst.GxGGA) { GPS_BurstComplete(); GPS_BurstEnd(); GPS_BurstStart(NMEA.Len); }
-    GPS_DateTime.ReadDate((const char *)NMEA.ParmPtr(6));
+    if(SameTime==0 && GPS_Burst.GxRMC) { GPS_BurstComplete(); GPS_BurstEnd(); GPS_BurstStart(NMEA.Len); }
+#ifdef DEBUG_PRINT
+    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    Format_String(CONS_UART_Write, "GPS_NMEA() GGA ");
+    Format_SignDec(CONS_UART_Write, (int16_t)(GPS_DateTime.Sec), 2);
+    Format_String(CONS_UART_Write, "s\n");
+    xSemaphoreGive(CONS_Mutex);
+#endif
     GPS_Burst.GxGGA=1; }
   else if(NMEA.isGxGSA())
   { GPS_Burst.GxGSA=1; }
@@ -645,7 +659,7 @@ static void GPS_NMEA(void)                                                 // wh
   // bool RatePass=0;
   // Count++; if(Count>=5) { Count=0; RatePass=1; }
   // if( NMEA.isP() || NMEA.isGxRMC() || NMEA.isGxGGA() || NMEA.isGxGSA() || NMEA.isGxGSV() || NMEA.isGPTXT()) )
-  if( NMEA.isP() || NMEA.isBD() || NMEA.isGx() )
+  // if( NMEA.isP() || NMEA.isBD() || NMEA.isGx() )
   // we would need to patch the GGA here for the GPS which does not calc. nor correct for GeoidSepar
 #endif
   { if(Parameters.Verbose)

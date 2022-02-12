@@ -39,11 +39,20 @@ static int Log_Open(void)
   // int32_t Year  = (LogDate>>9)-20;
   int32_t Day   =  GPS_DateTime.Day;                                 // get day, month, year
   int32_t Month =  GPS_DateTime.Month;
-  int32_t Year  =  GPS_DateTime.Year-20;
+  int32_t Year  =  GPS_DateTime.Year;
   uint32_t Date = 0;
-  if(Year>=0) Date = Day*10000 + Month*100 + Year;                // create DDMMYY number for easy printout
+  if(Year>=20 && Year<70) Date = Year*10000 + Month*100 + Day;    // create YYMMDD number for easy printout and sort
   strcpy(LogFileName, "/sdcard/CONS/TR000000.LOG");
   Format_UnsDec(LogFileName+15, Date, 6);                         // format the date into the log file name
+#ifdef DEBUG_PRINT
+  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  Format_String(CONS_UART_Write, "Log_Open() ");
+  Format_String(CONS_UART_Write, LogFileName);
+  Format_String(CONS_UART_Write, " Year:");
+  Format_SignDec(CONS_UART_Write, Year);
+  Format_String(CONS_UART_Write, "\n");
+  xSemaphoreGive(CONS_Mutex);
+#endif
   LogFile = fopen(LogFileName, "at");                             // try to open the file
   if(LogFile==0)                                                  // if this fails
   { if(mkdir("/sdcard/CONS", 0777)<0) return -1;                  // try to create the sub-directory

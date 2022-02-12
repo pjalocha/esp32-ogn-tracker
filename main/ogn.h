@@ -807,7 +807,7 @@ class GPS_Time
             if(Len==1) mSec = Frac*100;
        else if(Len==2) mSec = Frac*10;
        else if(Len==3) mSec = Frac;
-       else if(Len==4) mSec = Frac/10; 
+       else if(Len==4) mSec = Frac/10;
        else return -1; }
      if(mPrev!=mSec) Same=0;                                  // return 0 when time is valid but did not change
      return Same; }                                           // return 1 when time did not change (both RMC and GGA were for same time)
