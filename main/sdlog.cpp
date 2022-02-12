@@ -273,10 +273,14 @@ static void IGC_Check(void)                                          // check if
   { IGC_Log(GPS_Pos[PosIdx]);                                        // log position
     if(!inFlight)                                                    // if no longer in flight
     { IGC_SHA256.Finish(IGC_Digest);
+      uint8_t *Sig = (uint8_t *)Line+256;
+      int SigLen = IGC_SignKey.Sign_MD5_SHA256(Sig, IGC_Digest, IGC_Digest_Size);
       int Len=0;
       Line[Len++]='G';                                               // produce G-record with SH256
-      for(int Idx=0; Idx<IGC_Digest_Size; Idx++)                     // 32 SHA256 bytes
-        Len+=Format_Hex(Line+Len, IGC_Digest[Idx]);                  // printed as hex
+//      for(int Idx=0; Idx<IGC_Digest_Size; Idx++)                     // 32 SHA256 bytes
+//        Len+=Format_Hex(Line+Len, IGC_Digest[Idx]);                  // printed as hex
+      for(int Idx=0; Idx<SigLen; Idx++)                              // signature bytes
+        Len+=Format_Hex(Line+Len, Sig[Idx]);                         // printed as hex
       Line[Len++]='\n'; Line[Len]=0;                                 // end-of-line, end-of-string
       IGC_LogLine(Line, Len);                                        // write to IGC
       IGC_Close(); IGC_TimeStamp(); }                                // then close the IGC file
