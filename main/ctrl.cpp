@@ -440,10 +440,10 @@ void vTaskCTRL(void* pvParameters)
   IGC_SignKey.Init();
   IGC_SignKey.Generate();
   if(IGC_SignKey.ReadFromNVS()!=ESP_OK) IGC_SignKey.WriteToNVS();
-  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-  if(IGC_SignKey.Pub_Write((uint8_t *)Line, 512)==0)
-    Format_String(CONS_UART_Write, Line);
-  xSemaphoreGive(CONS_Mutex);
+  // xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  // if(IGC_SignKey.Pub_Write((uint8_t *)Line, 512)==0)
+  //   Format_String(CONS_UART_Write, Line);
+  // xSemaphoreGive(CONS_Mutex);
 
   uint8_t Len=Format_String(Line, "$POGNS,SysStart");
   Len+=NMEA_AppendCheckCRNL(Line, Len);
