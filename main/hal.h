@@ -223,6 +223,7 @@ extern BQ24295 BQ;
 
 #ifdef WITH_AXP
 #include "axp192.h"
+// extern SemaphoreHandle_t AXP_Mutex;
 extern AXP192 AXP;
 #endif
 

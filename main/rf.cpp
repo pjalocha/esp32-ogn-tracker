@@ -456,16 +456,21 @@ extern "C"
       { TRX.LoRa_ReceivePacket(WAN_RxPacket);
         xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
         Format_UnsDec(CONS_UART_Write, xTaskGetTickCount(), 4, 3);
-        Format_String(CONS_UART_Write, "s LoRaWAN Rx: ");
+        Format_String(CONS_UART_Write, "s LoRaWAN Rx[");
+        CONS_UART_Write('0'+WANdev.State);
+        Format_String(CONS_UART_Write, "]: ");
         Format_UnsDec(CONS_UART_Write, (uint16_t)WAN_RxPacket.Len);
         Format_String(CONS_UART_Write, "B/");
-        Format_UnsDec(CONS_UART_Write, (unsigned)Wait);
+        Format_UnsDec(CONS_UART_Write, (unsigned)Wait);    // amount of timeout left
         Format_String(CONS_UART_Write, "ms\n");
         xSemaphoreGive(CONS_Mutex);
              if(WANdev.State==1) WANdev.procJoinAccept(WAN_RxPacket);    // if join-request state then expect a join-accept packet
         else if(WANdev.State==3) RxLen=WANdev.procRxData(WAN_RxPacket);  // if data send then respect ACK and/or downlink data packet
+        WANdev.RxSilent=0;
       }
-      else WANdev.State--;                                 // if no packet received then retreat the State
+      else                                                 // if no packet received then retreat the State
+      { WANdev.State--;
+        WANdev.RxSilent++; if(WANdev.RxSilent>30) WANdev.Disconnect(); } // count silence when reception expected, if too many then disconnect
       TRX.setFSK();                                        // back to FSK
       SetFreqPlanOGN();                                    // OGN frequency plan
       TRX.OGN_Configure(0, OGN_SYNC);                      // OGN config
@@ -545,7 +550,7 @@ extern "C"
     RX_Channel = TxChan;
     SetRxChannel();
     TRX.setModeRX();                                                           // switch to receive mode
-    TRX.ClearIrqFlags();                                                                               // here we can read the chip temperature
+    TRX.ClearIrqFlags();                                                       // here we can read the chip temperature
     vTaskDelay(1);
 
     uint32_t RxRssiSum=0; uint16_t RxRssiCount=0;                              // measure the average RSSI for the upper frequency
@@ -657,11 +662,11 @@ extern "C"
      OGN1_Packet TxPkt = TxPkt0->Packet;
      TxPkt.Dewhiten();                                                // de-whiten the OGN packet so it can be converted to PAW format
      XorShift32(RX_Random);                                           // convert PAW to OGN
-     if(PAWtxBackOff==0 && Parameters.TxPower!=(-32) && !TxPkt.Header.Relay && Packet.Copy(TxPkt) && TxPkt.Position.Time<60)
-     { TRX.setModeStandby();
+     if(PAWtxBackOff==0 && Parameters.TxPower!=(-32) && TxPkt.Header.NonPos==0 && !TxPkt.Header.Relay && Packet.Copy(TxPkt) && TxPkt.Position.Time<60)
+     { TRX.setModeStandby();                                          //
        TRX.PAW_Configure(PAW_SYNC);
-       TRX.WriteTxPower(Parameters.TxPower+6);
-       vTaskDelay(RX_Random&0x3F);
+       TRX.WriteTxPower(Parameters.TxPower+6);                        //
+       vTaskDelay(RX_Random&0x3F);                                    //
        TRX.ClearIrqFlags();
        TRX.PAW_WritePacket(Packet.Byte, 24);                          //
        TRX.setModeTX();                                               // 
@@ -722,16 +727,21 @@ extern "C"
       }
       if(RespDelay)
       { vTaskDelay(8);
-        for( uint8_t Wait=100; Wait; Wait--)                 // wait for the end of transmission
+        uint8_t Wait = 100;                                  // [ms]
+        for( ; Wait; Wait--)                                 // wait for the end of transmission
         { vTaskDelay(1); if(!TRX.isModeLoRaTX()) break; }
           // uint8_t Mode=TRX.ReadMode();
           // if(Mode!=RF_OPMODE_LORA_TX) break; }
         WAN_RespTick=xTaskGetTickCount()+RespDelay;          // when to expect the response after the end of transmitted packet
         xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
         Format_UnsDec(CONS_UART_Write, xTaskGetTickCount(), 4, 3);
-        Format_String(CONS_UART_Write, "s LoRaWAN Tx: ");
-        Format_UnsDec(CONS_UART_Write, (unsigned)TxPktLen);
-        Format_String(CONS_UART_Write, "B\n");
+        Format_String(CONS_UART_Write, "s LoRaWAN Tx[");
+        CONS_UART_Write('0'+WANdev.State);
+        Format_String(CONS_UART_Write, "]: ");
+        Format_UnsDec(CONS_UART_Write, (unsigned)TxPktLen);  // packet size
+        Format_String(CONS_UART_Write, "B/");
+        Format_UnsDec(CONS_UART_Write, (unsigned)Wait);      // amount of timeout left
+        Format_String(CONS_UART_Write, "ms\n");
         xSemaphoreGive(CONS_Mutex);
       }
       TRX.setFSK();                                        // back to FSK

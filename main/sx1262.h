@@ -27,11 +27,11 @@
 
 #define CMD_SETRFFREQUENCY              0x86  // [4] frequency [Fxtal/2^25]
 #define CMD_SETPACKETTYPE               0x8A  // [1] 0x00=GFSK, 0x01=LoRa (must be the first configuration command)
-#define CMD_GETPACKETTYPE               0x11
+#define CMD_GETPACKETTYPE               0x11  // [ ]
 #define CMD_SETTXPARAMS                 0x8E  // [2] TxPower: -17..+14 or -9..+22 [dBm] depending on PA config RampTime: 0..7: 10,20,40,80,200,800,1700,3400us
 #define CMD_SETMODULATIONPARAMS         0x8B  // [8] depends on the protocol: FSK or LoRa
 #define CMD_SETPACKETPARAMS             0x8C  // [9]
-#define CMD_SETCADPARAMS                0x88
+#define CMD_SETCADPARAMS                0x88  // [ ]
 #define CMD_SETBUFFERBASEADDRESS        0x8F  // [2] Tx-base address, Rx-base address
 #define CMD_SETLORASYMBNUMTIMEOUT       0xA0  // [1] timeout [symbols]
 
@@ -69,7 +69,7 @@
 #define REG_RANDOMNUMBERGEN2    0x081B
 #define REG_RANDOMNUMBERGEN3    0x081C
 #define REG_RXGAIN              0x08AC
-#define REG_OCPCONFIG           0x08E7
+#define REG_OCPCONFIG           0x08E7  // max. PA current ?
 #define REG_XTATRIM             0x0911
 #define REG_XTBTRIM             0x0912
 

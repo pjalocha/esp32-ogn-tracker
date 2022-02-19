@@ -48,6 +48,9 @@ void app_main(void)
     CONS_UART_Init();
     CONS_Mutex = xSemaphoreCreateMutex();    // semaphore for sharing the writing to the console
     I2C_Mutex  = xSemaphoreCreateMutex();    // semaphore for sharing the I2C bus
+#ifdef WITH_AXP
+    // AXP_Mutex  = xSemaphoreCreateMutex();    // semaphore for sharing the AXP power controller
+#endif
 
     NVS_Init();                              // initialize Non-Volatile-Storage in Flash and read the tracker parameters
 
@@ -79,7 +82,7 @@ void app_main(void)
       { WANdev.Reset(getUniqueID(), Parameters.AppKey); // then reset LoRaWAN to this key
         WANdev.WriteToNVS(); }                          // and save LoRaWAN config. to NVS
       Parameters.clrAppKey(); }
-    WANdev.Disconnect();                                // restart with network join-request/accept at each restart
+    // WANdev.Disconnect();                                // restart with network join-request/accept at each restart
 #endif
 
     CONS_UART_SetBaudrate(Parameters.CONbaud);

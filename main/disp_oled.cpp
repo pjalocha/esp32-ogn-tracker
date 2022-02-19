@@ -292,6 +292,9 @@ void OLED_DrawRF(u8g2_t *OLED, GPS_Position *GPS) // RF
 #ifdef WITH_RFM95
   Len+=Format_String(Line+Len, "RFM95");
 #endif
+#ifdef WITH_SX1262
+  Len+=Format_String(Line+Len, "SX1262");
+#endif
 #ifdef WITH_SX1272
   Len+=Format_String(Line+Len, "SX1272");
 #endif
@@ -665,6 +668,9 @@ void OLED_DrawSystem(u8g2_t *OLED, GPS_Position *GPS)
 #endif
 #ifdef WITH_RFM95
   Len+=Format_String(Line+Len, "RFM95 v");
+#endif
+#ifdef WITH_SX1262
+  Len+=Format_String(Line+Len, "SX1262 v");
 #endif
 #ifdef WITH_SX1272
   Len+=Format_String(Line+Len, "SX1272 v");

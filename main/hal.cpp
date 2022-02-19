@@ -1467,6 +1467,7 @@ void vApplicationTickHook(void) // RTOS timer tick hook
 // AXP192
 
 #ifdef WITH_AXP
+// SemaphoreHandle_t AXP_Mutex;
 AXP192 AXP;
 #endif
 

@@ -184,14 +184,17 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      Out[Len++]='/'; Out[Len++]='0'+Status.FixQuality;
      Out[Len++]='/'; Len+=Format_UnsDec(Out+Len, Status.SatSNR+8); Out[Len++]='d'; Out[Len++]='B';
      Out[Len++]=' '; Len+=Format_SignDec(Out+Len, DecodeAltitude(), 1, 0, 1); Out[Len++]='m';
-     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, (((uint32_t)Status.Pressure<<3)+5)/10, 2, 1); Out[Len++]='h'; Out[Len++]='P'; Out[Len++]='a';
-     Out[Len++]=' '; Len+=Format_SignDec(Out+Len, DecodeTemperature(), 2, 1); Out[Len++]='d'; Out[Len++]='e'; Out[Len++]='g'; Out[Len++]='C';
-     Out[Len++]=' '; Len+=Format_SignDec(Out+Len, DecodeHumidity(), 2, 1); Out[Len++]='%';
+     if(Status.Pressure>0)
+     { Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, (((uint32_t)Status.Pressure<<3)+5)/10, 2, 1); Out[Len++]='h'; Out[Len++]='P'; Out[Len++]='a'; }
+     if(hasTemperature())
+     { Out[Len++]=' '; Len+=Format_SignDec(Out+Len, DecodeTemperature(), 2, 1); Out[Len++]='d'; Out[Len++]='e'; Out[Len++]='g'; Out[Len++]='C'; }
+     if(hasHumidity())
+     { Out[Len++]=' '; Len+=Format_SignDec(Out+Len, DecodeHumidity(), 2, 1); Out[Len++]='%'; }
      Out[Len++]=' '; Len+=Format_SignDec(Out+Len, ((uint32_t)DecodeVoltage()*100+32)>>6, 3, 2); Out[Len++]='V';
      Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, Status.TxPower+4);
      Out[Len++]='/'; Out[Len++]='-'; Len+=Format_UnsDec(Out+Len, 5*Status.RadioNoise, 2, 1); Out[Len++]='d'; Out[Len++]='B'; Out[Len++]='m';
      Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, (1<<Status.RxRate)-1); Out[Len++]='/'; Out[Len++]='m'; Out[Len++]='i'; Out[Len++]='n';
-     return Len; }
+     Out[Len]=0; return Len; }
 
    uint8_t WriteDeviceStatus(char *Out)
    { return sprintf(Out, " h%02X v%02X %dsat/%d/%ddB %ldm %3.1fhPa %+4.1fdegC %3.1f%% %4.2fV %d/%+4.1fdBm %d/min",

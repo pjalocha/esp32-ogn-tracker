@@ -484,6 +484,9 @@ uint16_t StratuxPort;
 #ifdef WITH_SX1272
     Len+=Format_String(Line+Len, " SX1272");
 #endif
+#ifdef WITH_SX1262
+    Len+=Format_String(Line+Len, " SX1262");
+#endif
     Line[Len++]='/';
     Len+=Format_SignDec(Line+Len, (int16_t)TxPower);
     Len+=Format_String(Line+Len, "dBm");

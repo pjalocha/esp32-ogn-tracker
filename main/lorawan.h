@@ -55,7 +55,7 @@ class LoRaWANnode
           bool SaveReq:1;     // Request to save the node state
         } ;
       } ;
-      uint8_t  Spare;         // 112 bytes up to this point
+      uint8_t  RxSilent;      // count non-receptions <- 112 bytes up to (and including) this point
       uint32_t LastSaved;     // [sec] when saved to EEPROM or other permament storage
       uint8_t  Dummy[8];      // just to fill up the space, could be used later
       uint32_t CRC32;         // 128 bytes up to here: fits into 1kbit EEPROM
@@ -72,7 +72,7 @@ class LoRaWANnode
 
    void Reset(void)
    { State=0; DevNonce=0; JoinNonce=0;
-     LastTx=0; TxCount=0; LastRx=0; RxCount=0; Flags=0; LastSaved=0;
+     LastTx=0; TxCount=0; LastRx=0; RxCount=0; RxSilent=0; Flags=0; LastSaved=0;
      setCRC(); }
 
    void Reset(uint64_t MAC, uint8_t *AppKey=0)
@@ -82,7 +82,7 @@ class LoRaWANnode
      Reset(); }                                    // reset to not-joined state
 
    void Disconnect(void)
-   { State=0; }
+   { State=0; RxSilent=0; }
 
    uint32_t calcCRC(void) const
    { uint32_t Sum=0x87654321;                      // start the sum with some magic

@@ -250,7 +250,7 @@ static void ProcessCtrlC(void)                                  // print system 
   Parameters.Write(CONS_UART_Write);                         // write the parameters to the console
   // Parameters.WriteFile(stdout);                                   // write the parameters to the stdout
 
-  Format_String(CONS_UART_Write, "Batt: ");
+  Format_String(CONS_UART_Write, "Batt:");
   Format_UnsDec(CONS_UART_Write, (10*BatteryVoltage+128)>>8, 5, 4);
   Format_String(CONS_UART_Write, "V ");
   Format_SignDec(CONS_UART_Write, (600*BatteryVoltageRate+128)>>8, 3, 1);
@@ -269,13 +269,13 @@ static void ProcessCtrlC(void)                                  // print system 
   Format_UnsDec(CONS_UART_Write, Batt, 4, 3);
   Format_String(CONS_UART_Write, "V ");
   Format_UnsDec(CONS_UART_Write, InpCurr, 4, 3);
-  Format_String(CONS_UART_Write, "/");
+  Format_String(CONS_UART_Write, "-");
   Format_UnsDec(CONS_UART_Write, OutCurr, 4, 3);
   Format_String(CONS_UART_Write, "A USB:");
   Format_UnsDec(CONS_UART_Write, Vbus, 4, 3);
   Format_String(CONS_UART_Write, "V ");
   Format_UnsDec(CONS_UART_Write, VbusCurr, 4, 3);
-  Format_String(CONS_UART_Write, "A Charge:");
+  Format_String(CONS_UART_Write, "A CC:");
   Format_UnsDec(CONS_UART_Write, ((InpCharge<<12)+562)/1125, 2, 1);
   Format_String(CONS_UART_Write, "-");
   Format_UnsDec(CONS_UART_Write, ((OutCharge<<12)+562)/1125, 2, 1);
