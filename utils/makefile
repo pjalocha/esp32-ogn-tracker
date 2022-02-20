@@ -1,6 +1,9 @@
 read_log:	read_log.cc
 	g++ -Wall -Wno-misleading-indentation -O2 -o read_log read_log.cc format.cpp
 
+tlg2aprs:	tlg2aprs.cc
+	g++ -Wall -Wno-misleading-indentation -O2 -o tlg2aprs tlg2aprs.cc format.cpp ognconv.cpp
+
 aprs2igc:	aprs2igc.cc
 	g++ -Wall -Wno-misleading-indentation -O2 -o aprs2igc aprs2igc.cc format.cpp ognconv.cpp
 
