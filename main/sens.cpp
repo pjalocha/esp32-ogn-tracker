@@ -228,8 +228,7 @@ static void ProcBaro(void)
 #ifdef WITH_BME280
         if(Baro.hasHumidity())
         { PosPtr->Humidity = Baro.Humidity;
-          // PosPtr->hasHum=1;
-        }
+          PosPtr->hasHum=1; }
 #endif
         PosPtr->hasBaro=1; }                                         // tick "hasBaro" flag
     }

@@ -869,14 +869,14 @@ class GPS_Position: public GPS_Time
     struct
     { bool hasGPS   :1;         // all required GPS information has been supplied (but this is not the GPS lock status)
       bool hasBaro  :1;         // pressure sensor information: pressure, standard pressure altitude, temperature, humidity
-      // bool hasHum   :1;         //
+      bool hasHum   :1;         //
       bool isReady  :1;         // is ready for the following treaement
       bool Sent     :1;         // has been transmitted
       bool hasTime  :1;         // Time has been supplied
       bool hasRMC   :1;         // GxRMC has been supplied
       bool hasGGA   :1;         // GxGGA has been supplied
       bool hasGSA   :1;         // GxGSA has been supplied
-      // bool hasGSV   :1;
+      bool hasGSV   :1;
     } ;
   } ;
 
@@ -987,9 +987,10 @@ class GPS_Position: public GPS_Time
      Out[Len++]=hasTime?'T':'_';
      Out[Len++]=hasGPS ?'G':'_';
      Out[Len++]=hasBaro?'B':'_';
+     Out[Len++]=hasHum ?'H':'_';
      Out[Len++]=hasRMC ?'R':'_';
      Out[Len++]=hasGGA ?'G':'_';
-     Out[Len++]=hasGSA ?'G':'_';
+     Out[Len++]=hasGSA ?'S':'_';
      Out[Len++]=isValid() ?'V':'_';
      Out[Len++]=isTimeValid() ?'T':'_';
      Out[Len++]=isDateValid() ?'D':'_';
@@ -1377,9 +1378,11 @@ class GPS_Position: public GPS_Time
      if(hasBaro)
      { Packet.EncodeTemperature(Temperature);
        Packet.Status.Pressure = (Pressure+16)>>5;
-       Packet.EncodeHumidity(Humidity); }
+       if(hasHum) Packet.EncodeHumidity(Humidity);
+             else Packet.clrHumidity(); }
      else
      { Packet.Status.Pressure = 0;
+       Packet.clrTemperature();
        Packet.clrHumidity(); }
    }
 

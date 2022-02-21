@@ -11,8 +11,15 @@ class AXP192
    static const uint8_t REG_STATUS          = 0x00; // bit #2 = charge/discharge, bit #0 = power-on triggered by Vbus/ACin
    static const uint8_t REG_MODE_CHGSTATUS  = 0x01; // charge mode and status
    static const uint8_t REG_ID              = 0x03;
-   static const uint8_t REG_LDO234_DC23_CTL = 0x12; // [bit mask] control outputs ON/OFF
+   static const uint8_t REG_DATA_SAVE       = 0x06; // 4 bytes which can be saved as long as the battery ot backup is applied
+   static const uint8_t REG_EXTEN_DC2_CTL   = 0x10; // [bit mask] control outputs ON/OFF
+   static const uint8_t REG_LDO23_DC13_CTL  = 0x12; // [bit mask] control outputs ON/OFF
+   static const uint8_t REG_DC2_VOLTAGE     = 0x23;
    static const uint8_t REG_DC1_VOLTAGE     = 0x26; // [25mV] controls DC1 voltage
+   static const uint8_t REG_DC3_VOLTAGE     = 0x27;
+   static const uint8_t REG_LOD23_VOLTAGE   = 0x28;
+   static const uint8_t REG_VBUS_CTL        = 0x30; // USB control, voltage/current limit
+   static const uint8_t REG_OFF_VOLT        = 0x31; // Power-off voltage: 2.6 + 0.1*(3-LSB-value), default=3=2.9V
    static const uint8_t REG_OFF_CTL         = 0x32; // power-off, battery check, LED control
    static const uint8_t REG_CHARGE_1        = 0x33; // target voltage, current
    static const uint8_t REG_CHARGE_2        = 0x34;
@@ -50,9 +57,9 @@ class AXP192
    static const uint8_t REG_ADC_SPEED       = 0x84; // 25Hz by default
    static const uint8_t REG_ADC_RANGE       = 0x85;
 
-   static const uint8_t REG_BAT_INP_CHG     = 0xB0;
-   static const uint8_t REG_BAT_OUT_CHG     = 0xB4;
-   static const uint8_t REG_BAT_MON         = 0xB8;
+   static const uint8_t REG_BAT_INP_CC      = 0xB0;
+   static const uint8_t REG_BAT_OUT_CC      = 0xB4;
+   static const uint8_t REG_BAT_MON         = 0xB8; // Battery coulomb counter control
 
    static const uint8_t AXP192_ID           = 0x03; // ID for the AXP192
 
@@ -94,13 +101,13 @@ class AXP192
    { Error=I2C_Write(Bus, ADDR, REG_POK_SET, Byte);
      return Error; }
 
-   uint8_t setPowerOutput(uint8_t Channel, bool ON=1)
+   uint8_t setPowerOutput(uint8_t Channel, bool ON=1)    // Channel: 3=LDO3, 2=LDO2, 1=DC-DC3, 0=DC-DC1
    { uint8_t Byte;
-     Error=I2C_Read(Bus, ADDR, REG_LDO234_DC23_CTL, Byte); if(Error) return Error;
-     uint8_t Mask=1; Mask<<=Channel;
-     if(ON) Byte |=  Mask;
+     Error=I2C_Read(Bus, ADDR, REG_LDO23_DC13_CTL, Byte); if(Error) return Error;
+     uint8_t Mask=1; Mask<<=Channel;                     // mask for the given bit thus channel
+     if(ON) Byte |=  Mask;                               // set or clear the corresponding bit
        else Byte &= ~Mask;
-     Error=I2C_Write(Bus, ADDR, REG_LDO234_DC23_CTL, Byte);
+     Error=I2C_Write(Bus, ADDR, REG_LDO23_DC13_CTL, Byte);
      return Error; }
 
    uint8_t setDCDC1(uint16_t mV) // [mV] set voltage on DCDC1 output
@@ -117,7 +124,7 @@ class AXP192
      Error=I2C_Write(Bus, ADDR, REG_OFF_CTL, Byte);
      return Error; }
 
-   uint8_t setLED(uint8_t Mode) // 0=OFF, 1=1Hz, 2=4Hz, 3=ON, 4=reflect charging status
+   uint8_t setLED(uint8_t Mode=4) // 0=OFF, 1=1Hz, 2=4Hz, 3=ON, 4=reflect charging status
    { uint8_t Byte;
      Error=I2C_Read(Bus, ADDR, REG_OFF_CTL, Byte); if(Error) return Error;
      if(Mode<4)
@@ -128,6 +135,9 @@ class AXP192
      Error=I2C_Write(Bus, ADDR, REG_OFF_CTL, Byte);
      return Error; }
 
+   void setLED_OFF(void) { setLED(0); }
+   void setLED_ON (void) { setLED(3); }
+
    uint8_t enableADC(uint16_t Mask)
    { Error=I2C_Write(Bus, ADDR, REG_ADC_EN1, Mask   ); if(Error) return Error;
      Error=I2C_Write(Bus, ADDR, REG_ADC_EN2, Mask>>8); return Error; }
@@ -136,13 +146,13 @@ class AXP192
    { uint8_t Byte[2]; Error=I2C_Read(Bus, ADDR, Reg, Byte, 2); if(Error) return 0;
      uint16_t Word = Byte[0]; Word<<=4; Word|=Byte[1]&0x0F; return Word; }
 
-   uint16_t readVbusVoltage(void)
+   uint16_t readVbusVoltage(void)                                            // voltage from the USB
    { uint16_t Volt=readH8L4(REG_VBUS_VOLT_H8); return (Volt*17+5)/10; }      // [1mV]
 
-   uint16_t readVbusCurrent(void)
+   uint16_t readVbusCurrent(void)                                            // current flowing from the USB
    { uint16_t Curr=readH8L4(REG_VBUS_CURR_H8); return (Curr*15+20)/40; }     // [mA]
 
-   uint16_t readBatteryVoltage(void)
+   uint16_t readBatteryVoltage(void)                                         // Battery voltage
    { uint16_t Volt=readH8L4(REG_BAT_VOLT_H8); return (Volt*11+5)/10; }       // [mV]
 
    // uint16_t readVbusVoltage(void)
@@ -160,7 +170,7 @@ class AXP192
    //   uint8_t L4; Error=I2C_Read(Bus, ADDR, REG_BAT_VOLT_L4, L4); if(Error) return 0;
    //   uint16_t Volt=H8; Volt<<=4; Volt|=L4&0x0F; return (Volt*11+5)/10; }      // [1mV]
 
-    int16_t readTemperature(void)
+    int16_t readTemperature(void)                             // read NTP sensor temperature (but it could be a fake 10k resistor)
    { int16_t Temp=readH8L4(REG_TEMP_H8); return Temp-1447; }  // [0.1degC]
 
    //  int16_t readTemperature(void)
@@ -172,10 +182,10 @@ class AXP192
    { uint8_t Byte[2]; Error=I2C_Read(Bus, ADDR, Reg, Byte, 2); if(Error) return 0;
      uint16_t Word = Byte[0]; Word<<=5; Word|=Byte[1]&0x01F; return Word; }
 
-   uint16_t readBatteryInpCurrent(void)
+   uint16_t readBatteryInpCurrent(void)                             // current flowing into (charging) the battery
    { uint16_t Curr=readH8L5(REG_BAT_INP_CURR_H8); return Curr/2; }  // [mA]
 
-   uint16_t readBatteryOutCurrent(void)
+   uint16_t readBatteryOutCurrent(void)                             // current flowing out (discharging) the battery
    { uint16_t Curr=readH8L5(REG_BAT_OUT_CURR_H8); return Curr/2; }  // [mA]
 
    // uint16_t readBatteryInpCurrent(void)
@@ -188,28 +198,28 @@ class AXP192
    //   uint8_t L5; Error=I2C_Read(Bus, ADDR, REG_BAT_OUT_CURR_L5, L5); if(Error) return 0;
    //   uint16_t Curr=H8; Curr<<=5; Curr|=L5&0x1F; return Curr/2; }      // [1mA]
 
-   uint16_t read32bit(uint8_t Reg)
+   uint16_t read32bit(uint8_t Reg)                                    // read a 32-bit register
    { uint8_t Byte[4]; Error=I2C_Read(Bus, ADDR, Reg, Byte, 4); if(Error) return 0;
      uint32_t Word=Byte[0];
      for(uint8_t Idx=1; Idx<4; Idx++)
      { Word<<=8; Word|=Byte[Idx]; }
      return Word; }
 
-   uint32_t readBatteryInpCharge(void)                                // [0x8000/25 mAs]
-   { uint32_t Charge = read32bit(REG_BAT_INP_CHG); return Charge; }
+   uint32_t readBatteryInpCharge(void)                                // charge counter for battery charge
+   { uint32_t Charge = read32bit(REG_BAT_INP_CC); return Charge; }    // [0x8000/25 mAs]
 
-   uint32_t readBatteryOutCharge(void)                                // [0x8000/25 mAs]
-   { uint32_t Charge = read32bit(REG_BAT_OUT_CHG); return Charge; }
+   uint32_t readBatteryOutCharge(void)                                // charge counter for battery discharge
+   { uint32_t Charge = read32bit(REG_BAT_OUT_CC); return Charge; }    // [0x8000/25 mAs]
 
-   uint8_t setBatMon(uint8_t Byte=0x80)
-   { Error=I2C_Write(Bus, ADDR, REG_BAT_MON, Byte); return Error; }
+   uint8_t setBatMon(uint8_t Byte=0x80)                               // Battery coulomb counter control
+   { Error=I2C_Write(Bus, ADDR, REG_BAT_MON, Byte); return Error; }   // #7=Open/Close, #6=Pause, #5=Clear
 
    uint8_t  enableBatMon(void) { return setBatMon(0x80); }
    uint8_t disableBatMon(void) { return setBatMon(0x00); }
    uint8_t    stopBatMon(void) { return setBatMon(0xC0); }
    uint8_t   clearBatMon(void) { return setBatMon(0xA0); }
 
-   bool isBatteryConnected(void)
+   bool isBatteryConnected(void)                                      // battery detector status
    { uint8_t Byte;
      Error=I2C_Read(Bus, ADDR, REG_MODE_CHGSTATUS, Byte); if(Error) return 0;
      return Byte&0x20; } // 1=battery connected, 0=no battery connected

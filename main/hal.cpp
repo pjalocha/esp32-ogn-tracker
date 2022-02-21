@@ -624,8 +624,13 @@ void LED_PCB_Off  (void) { gpio_set_level(PIN_LED_PCB, 0); }
 #endif
 #else                                            // if LED on the PCB is absent, just make dummy calls
 void LED_PCB_Dir  (void) { }
+#ifdef WITH_AXP                                  // but with the T-Beam v1.0 and AXP chip we have an LED to control
+void LED_PCB_On   (void) { AXP.setLED_ON(); }
+void LED_PCB_Off  (void) { AXP.setLED_OFF(); }
+#else
 void LED_PCB_On   (void) { }
 void LED_PCB_Off  (void) { }
+#endif
 #endif
 
 #ifdef WITH_LED_TX
@@ -934,10 +939,11 @@ void Play(uint8_t Note, uint8_t Len)             // [Note] [ms] put a new not to
 
 uint8_t Play_Busy(void) { return Play_Counter; } // is a note being played right now ?
 
-void Play_TimerCheck(void)                       // every ms serve the note playing
+void Play_TimerCheck(uint8_t Ticks)              // every ms serve the note playing
 { uint8_t Counter=Play_Counter;
   if(Counter)                                    // if counter non-zero
-  { Counter--;                                   // decrement it
+  { if(Counter>Ticks) Counter-=Ticks;            // decrement it
+                 else Counter=0;
     if(!Counter) Beep_Note(Play_Note=0x00);      // if reached zero, stop playing the note
   }
   if(!Counter)                                   // if counter reached zero
@@ -1658,7 +1664,7 @@ void IO_Configuration(void)
   AXP.checkID();
   AXP.setPOK(0xDC);                      // power-on = 11 = 1sec, long-press = 01 = 1.5sec, power-off = enable, PWROK delay = 64ms, power-off = 00 = 4sec
   uint8_t PwrStatus = AXP.readStatus();
-  AXP.setLED(1);
+  AXP.setLED_ON();
   AXP.setPowerOutput(AXP.OUT_DCDC1, 1);  // 3.3V on the pin header for LCD and BME280
   AXP.setDCDC1(3300);
   // vTaskDelay(100);
@@ -1823,13 +1829,18 @@ void IO_Configuration(void)
 
 extern "C"
 void vTaskTICK(void* pvParameters)
-{
+{ TickType_t LastTick = xTaskGetTickCount();
+
   for( ; ; )
   { vTaskDelay(1);
-    LED_TimerCheck(1);
+    TickType_t Tick = xTaskGetTickCount();
+    TickType_t NewTicks = Tick-LastTick;
+    LastTick = Tick;
+
+    LED_TimerCheck(NewTicks);
 
 #ifdef WITH_BEEPER
-    Play_TimerCheck();                                // update the LED flashes
+    Play_TimerCheck(NewTicks);                        // update the LED flashes
 #endif
 
     int32_t PressRelease=Button_TimerCheck();         // 0 = no change
