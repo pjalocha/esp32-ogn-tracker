@@ -87,13 +87,14 @@ class FlashParameters
   union
   { uint8_t  GNSS;
     struct
-    { bool EnableGPS :1;     //
-      bool EnableSBAS:1;     //
-      bool EnableGAL :1;     //
-      bool EnableBEI :1;     //
-      bool EnableIMES:1;     //
-      bool EnableQZSS:1;     //
-      bool EnableGLO :1;     //
+    { bool EnableGPS :1;     // 1
+      bool EnableSBAS:1;     // 1
+      bool EnableGAL :1;     // 1
+      bool EnableBEI :1;     // 0
+      bool EnableIMES:1;     // 0
+      bool EnableQZSS:1;     // 1
+      bool EnableGLO :1;     // 1
+      //
     } ;
   } ;
 

@@ -109,10 +109,11 @@ FlightMonitor Flight;
 
 // ----------------------------------------------------------------------------
 
-static char GPS_Cmd[64];
+static char GPS_Cmd[64];         // command to be send to the GPS
 
-static uint16_t SatSNRsum = 0;   // sum up the satellite SNR's
-static uint8_t  SatSNRcount = 0; // sum counter
+// Satellite count and SNR per system, 0=GPS, 1=GLONASS, 2=GALILEO, 3=BEIDO
+static uint16_t SatSNRsum[4]   = { 0, 0, 0, 0 }; // sum up the satellite SNR's
+static uint8_t  SatSNRcount[4] = { 0, 0, 0, 0 }; // sum counter
 
 struct GPS_Sat          // store GPS satellite data in single 32-bit word
 { union
@@ -136,33 +137,43 @@ static void ProcessGSV(NMEA_RxMsg &GSV)              // process GxGSV to extract
   Format_String(CONS_UART_Write, ")\n");
   xSemaphoreGive(CONS_Mutex);
 #endif
-  if(!GSV.isGPGSV()) return;                        // for now, only the GPS satellites, before we learn to mix the others in
+  uint8_t SatSys=0;
+       if(GSV.isGPGSV()) { SatSys=0; }
+  else if(GSV.isGLGSV()) { SatSys=1; }
+  else if(GSV.isGAGSV()) { SatSys=2; }
+  else return;
   if(GSV.Parms<3) return;
-  int8_t Pkts=Read_Dec1((const char *)GSV.ParmPtr(0)); if(Pkts<0) return;
-  int8_t Pkt =Read_Dec1((const char *)GSV.ParmPtr(1)); if(Pkt <0) return;
-  int8_t Sats=Read_Dec2((const char *)GSV.ParmPtr(2));                               //
-  if(Sats<0) Sats=Read_Dec1((const char *)GSV.ParmPtr(2));                           //
+  int8_t Pkts=Read_Dec1((const char *)GSV.ParmPtr(0)); if(Pkts<0) return;            // how many packets to pass all sats
+  int8_t Pkt =Read_Dec1((const char *)GSV.ParmPtr(1)); if(Pkt <0) return;            // which packet in the sequence
+  int8_t Sats=Read_Dec2((const char *)GSV.ParmPtr(2));                               // total number of satellites
+  if(Sats<0) Sats=Read_Dec1((const char *)GSV.ParmPtr(2));                           // could be a single or double digit number
   if(Sats<0) return;
-  for( int Parm=3; Parm<GSV.Parms; )
-  { int8_t PRN =Read_Dec2((const char *)GSV.ParmPtr(Parm++)); if(PRN <0) break;
-    int8_t Elev=Read_Dec2((const char *)GSV.ParmPtr(Parm++)); if(Elev<0) break;
-   int16_t Azim=Read_Dec3((const char *)GSV.ParmPtr(Parm++)); if(Azim<0) break;
-    int8_t SNR =Read_Dec2((const char *)GSV.ParmPtr(Parm++)); if(SNR<=0) continue;
-    SatSNRsum+=SNR; SatSNRcount++; }
-  if(Pkt==Pkts)
+  if(Pkt==1) { SatSNRsum[SatSys]=0; SatSNRcount[SatSys]=0; }                         // if 1st packet then clear the sum and counter
+  for( int Parm=3; Parm<GSV.Parms; )                                                 // up to 4 sats per packet
+  { int8_t PRN =Read_Dec2((const char *)GSV.ParmPtr(Parm++)); if(PRN <0) break;      // PRN number
+    int8_t Elev=Read_Dec2((const char *)GSV.ParmPtr(Parm++)); if(Elev<0) break;      // [deg] eleveation
+   int16_t Azim=Read_Dec3((const char *)GSV.ParmPtr(Parm++)); if(Azim<0) break;      // [deg] azimuth
+    int8_t SNR =Read_Dec2((const char *)GSV.ParmPtr(Parm++)); if(SNR<=0) continue;   // [dB] SNR or absent when not tracked
+    SatSNRsum[SatSys]+=SNR; SatSNRcount[SatSys]++; }                                 // add up SNR
+  if(Pkt==Pkts)                                                                      // if the last packet
   {
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-    Format_String(CONS_UART_Write, "SatSNR: ");
-    Format_UnsDec(CONS_UART_Write, SatSNRsum);
+    Format_String(CONS_UART_Write, "SatSNR[");
+    CONS_UART_Write('0'+SatSys);
+    Format_String(CONS_UART_Write, "] ");
+    Format_UnsDec(CONS_UART_Write, SatSNRsum[SatSys]);
     CONS_UART_Write('/');
-    Format_UnsDec(CONS_UART_Write, (uint16_t)SatSNRcount);
+    Format_UnsDec(CONS_UART_Write, (uint16_t)SatSNRcount[SatSys]);
     Format_String(CONS_UART_Write, "\n");
     xSemaphoreGive(CONS_Mutex);
 #endif
-    if(SatSNRcount) GPS_SatSNR = (4*SatSNRsum+SatSNRcount/2)/SatSNRcount;
-              else  GPS_SatSNR = 0;
-    SatSNRsum=0; SatSNRcount=0; }
+    uint8_t Count=0; uint16_t Sum=0;
+    for(uint8_t Sys=0; Sys<4; Sys++)
+    { Count+=SatSNRcount[Sys]; Sum+=SatSNRsum[Sys]; }
+    if(Count) GPS_SatSNR = (4*Sum+Count/2)/Count;
+        else  GPS_SatSNR = 0;
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -342,7 +353,7 @@ static void GPS_BurstStart(int CharDelay=0)  // when GPS starts sending the data
           GPS_Cmd[Len++]=',';
           GPS_Cmd[Len++]='0';                        // GALILEO full mode (whatever it is ?)  (not supported yet)
           GPS_Cmd[Len++]=',';
-          GPS_Cmd[Len++]='0';                        // search (or not) for BAIDOU satellites (not supported yet)
+          GPS_Cmd[Len++]='0'+Parameters.EnableBEI;   // search (or not) for BAIDOU satellites (not supported yet ?)
           Len += NMEA_AppendCheck(GPS_Cmd, Len);
           GPS_Cmd[Len++]='\r';
           GPS_Cmd[Len++]='\n';
