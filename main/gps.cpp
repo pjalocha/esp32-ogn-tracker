@@ -56,11 +56,14 @@ static   TickType_t Burst_Tick;            // [msec] System Tick when the data b
           int32_t   GPS_Altitude  = 0;     // [0.1m] last valid altitude
           int32_t   GPS_Latitude  = 0;     // [1/60000deg]
           int32_t   GPS_Longitude = 0;     // [1/60000deg]
-         GPS_Time   GPS_DateTime = { 0, 0, 0, 0, 0, 0, 0 } ;
+         GPS_Time   GPS_DateTime = { -1, -1, -1, -1, -1, -1, -1 } ;
           int16_t   GPS_GeoidSepar= 0;     // [0.1m]
          uint16_t   GPS_LatCosine = 3000;  // [1.0/4096]
+
          uint32_t   GPS_Random = 0x12345678; // random number from the LSB of the GPS data
-         uint16_t   GPS_SatSNR = 0;        // [0.25dB]
+
+         uint16_t   GPS_SatSNR = 0;        // [0.25dB] average SNR from the GSV sentences
+         uint8_t    GPS_SatCnt = 0;
 
          Status     GPS_Status;            // GPS status flags
 
@@ -171,6 +174,7 @@ static void ProcessGSV(NMEA_RxMsg &GSV)              // process GxGSV to extract
     uint8_t Count=0; uint16_t Sum=0;
     for(uint8_t Sys=0; Sys<4; Sys++)
     { Count+=SatSNRcount[Sys]; Sum+=SatSNRsum[Sys]; }
+    GPS_SatCnt = Count;
     if(Count) GPS_SatSNR = (4*Sum+Count/2)/Count;
         else  GPS_SatSNR = 0;
   }

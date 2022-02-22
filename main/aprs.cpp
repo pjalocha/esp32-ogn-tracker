@@ -10,6 +10,7 @@
 #include "socket.h"
 
 #include "proc.h"
+#include "gps.h"
 
 #ifdef WITH_APRS
 
@@ -33,7 +34,10 @@ static void AP_Print(void (*Output)(char))
     Format_String(Output, Line); }
 }
 
-Socket APRS_Socket;                                                 // socket to talk to APRS server
+FIFO<OGN_RxPacket<OGN_Packet>, 16> APRSrx_FIFO;
+FIFO<OGN_TxPacket<OGN_Packet>,  4> APRStx_FIFO;
+
+static Socket APRS_Socket;                                          // socket to talk to APRS server
 bool APRS_isConnected(void) { return APRS_Socket.isConnected(); }
 
 static const char *APRS_Host = "aprs.glidernet.org";                // server address
@@ -157,7 +161,9 @@ void vTaskAPRS(void* pvParameters)
         for(uint8_t Idx=0; Idx<10; Idx++)                     // wait to obtain local IP from DHCP
         { vTaskDelay(1000);
           if(WIFI_State.isConnected==1) break;
-          if(WIFI_getLocalIP()) break; }
+          if(WIFI_getLocalIP())
+          { if(WIFI_IP.ip.addr && WIFI_IP.gw.addr) break; }
+        }
 
 #ifdef DEBUG_PRINT
         xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -186,18 +192,52 @@ void vTaskAPRS(void* pvParameters)
           // APRS_Socket.setBlocking(0);
           int Write=APRS_Socket.Send(Line, LoginLen);            // send login to the APRS server
           int LinePtr=0;
-          for(int Idx=0; Idx<120; Idx++)                         // wait for some time and watch what the server sends to us
-          { int Left = MaxLineLen-LinePtr; if(Left<1) break;
-            int Read=APRS_Socket.Receive(Line+LinePtr, Left-1);
+          // for(int Idx=0; Idx<120; Idx++)                         // wait for some time and watch what the server sends to us
+          for( ; ; )
+          { int Left = MaxLineLen-LinePtr; if(Left<128) break;   // how much space left for receive data
+            int Read=APRS_Socket.Receive(Line+LinePtr, Left-1);  // read moredatafrom the socket
 #ifdef DEBUG_PRINT
-            xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-            Format_String(CONS_UART_Write, "APRS: ");
-            Format_SignDec(CONS_UART_Write, Read);
-            Format_String(CONS_UART_Write, "\n");
-            xSemaphoreGive(CONS_Mutex);
+            if(Read<0)
+            { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+              Format_String(CONS_UART_Write, "APRS: ");
+              Format_SignDec(CONS_UART_Write, Read);
+              Format_String(CONS_UART_Write, "\n");
+              xSemaphoreGive(CONS_Mutex); }
 #endif
             if(Read<0) break;                                    // if an error reading from the APRS server
-            if(Read==0) continue;                                // no more bytes: keep going
+            if(Read==0)                                          // no more data on the receive
+            { bool TimeValid = GPS_DateTime.isTimeValid() && GPS_DateTime.isDateValid();
+              uint32_t Time = GPS_DateTime.getUnixTime();
+              char *Msg = Line+LinePtr;
+              while(APRStx_FIFO.Full())
+              { OGN_TxPacket<OGN_Packet> *TxPacket=APRStx_FIFO.getRead();
+                if(TimeValid)
+                { uint8_t Len = TxPacket->Packet.WriteAPRS(Msg, Time); Msg[Len++]='\n'; Msg[Len]=0;
+#ifdef DEBUG_PRINT
+                  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+                  Format_String(CONS_UART_Write, "APRS <- ");
+                  Format_String(CONS_UART_Write, Msg);
+                  xSemaphoreGive(CONS_Mutex);
+#endif
+                  int Write = APRS_Socket.Send(Msg, Len); if(Write<0) break; }
+                APRStx_FIFO.Read(); }
+              while(APRSrx_FIFO.Full())
+              { OGN_RxPacket<OGN_Packet> *RxPacket=APRSrx_FIFO.getRead();
+                uint8_t RxErr = RxPacket->RxErr;
+                if(TimeValid && RxErr<=8)
+                { uint8_t Len = RxPacket->Packet.WriteAPRS(Msg, Time, "OGNTRK");
+                  if(RxErr)
+                  { Msg[Len++]=' '; Msg[Len++]='0'+RxErr; Msg[Len++]='e'; }
+                  Msg[Len++]='\n'; Msg[Len]=0;
+#ifdef DEBUG_PRINT
+                  xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+                  Format_String(CONS_UART_Write, "APRS <- ");
+                  Format_String(CONS_UART_Write, Msg);
+                  xSemaphoreGive(CONS_Mutex);
+#endif
+                  int Write = APRS_Socket.Send(Msg, Len); if(Write<0) break; }
+                APRSrx_FIFO.Read(); }
+              continue; }
             int LineLen = LinePtr+Read;
             int MsgPtr = 0;
             Line[LineLen]=0;

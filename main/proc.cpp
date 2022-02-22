@@ -19,6 +19,9 @@
 #ifdef WITH_SDLOG
 #include "sdlog.h"
 #endif
+#ifdef WITH_APRS
+#include "aprs.h"
+#endif
 
 #ifdef WITH_SOUND
 #include "sound.h"
@@ -87,8 +90,8 @@ static LDPC_Decoder     Decoder;      // decoder and error corrector for the OGN
 
 static int FlashLog(OGN_RxPacket<OGN_Packet> *Packet, uint32_t Time)
 { OGN_LogPacket<OGN_Packet> *LogPacket = FlashLog_FIFO.getWrite(); if(LogPacket==0) return -1; // allocate new packet in the LOG_FIFO
-  LogPacket->Packet = Packet->Packet;                                                     // copy the packet
-  LogPacket->Flags=0x80;
+  LogPacket->Packet = Packet->Packet;                                                          // copy the packet
+  LogPacket->Flags=0x80;                                                                       // set Rx flag
   LogPacket->setTime(Time);
   LogPacket->setCheck();
   FlashLog_FIFO.Write();                                                                       // finalize the write
@@ -97,7 +100,8 @@ static int FlashLog(OGN_RxPacket<OGN_Packet> *Packet, uint32_t Time)
 static int FlashLog(OGN_TxPacket<OGN_Packet> *Packet, uint32_t Time)
 { OGN_LogPacket<OGN_Packet> *LogPacket = FlashLog_FIFO.getWrite(); if(LogPacket==0) return -1;
   LogPacket->Packet = Packet->Packet;
-  LogPacket->Flags=0x00;
+  LogPacket->Flags=0x00;                                                                       // clear Rx flag
+  // LogPacket->SNR = ;
   LogPacket->setTime(Time);
   LogPacket->setCheck();
   FlashLog_FIFO.Write();
@@ -383,9 +387,12 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
     if(KNOB_Tick>12) Play(Play_Vol_1 | Play_Oct_2 | 7, 3);                            // if Knob>12 => make a beep for every received packet
 #endif
 #endif // WITH_LOOKOUT
-#ifdef WITH_LOG
      bool Signif = PrevRxPacket!=0;
      if(!Signif) Signif=OGN_isSignif(&(RxPacket->Packet), &(PrevRxPacket->Packet));
+#ifdef WITH_APRS
+     if(Signif) APRSrx_FIFO.Write(*RxPacket);
+#endif
+#ifdef WITH_LOG
      if(Signif) FlashLog(RxPacket, RxTime);                                          // log only significant packets
 #endif
 #ifdef WITH_PFLAA
@@ -717,12 +724,17 @@ void vTaskPROC(void* pvParameters)
       //   xSemaphoreGive(CONS_Mutex);
       // }
 #endif // WITH_FLASHLOG
-#ifdef WITH_LOG
       bool isSignif = OGN_isSignif(&(PosPacket.Packet), &PrevLoggedPacket);
       if(isSignif)
-      { FlashLog(&PosPacket, PosTime);
-        PrevLoggedPacket = PosPacket.Packet; }
+      {
+#ifdef WITH_APRS
+        APRStx_FIFO.Write(PosPacket);
 #endif
+#ifdef WITH_LOG
+        FlashLog(&PosPacket, PosTime);
+#endif
+        PrevLoggedPacket = PosPacket.Packet;
+      }
     } else // if GPS position is not complete, contains no valid position, etc.
     { if((SlotTime-PosTime)>=30) { PosPacket.Packet.Position.Time=0x3F; } // if no valid position for more than 30 seconds then set the time as unknown for the transmitted packet
       OGN_TxPacket<OGN_Packet> *TxPacket = RF_TxFIFO.getWrite();
@@ -777,6 +789,9 @@ void vTaskPROC(void* pvParameters)
       { doTx=ReadInfo(StatPacket.Packet); }                      // and overwrite the StatPacket with the Info data
       if(doTx)
       { StatTxBackOff=16+(RX_Random%15);
+#ifdef WITH_APRS
+        APRStx_FIFO.Write(StatPacket);
+#endif
 #ifdef WITH_LOG
         FlashLog(&StatPacket, PosTime);                         // log the status packet
 #endif
