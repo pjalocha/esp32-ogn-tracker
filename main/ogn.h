@@ -672,6 +672,26 @@ class GPS_Time
    void setDefaultDate() { Year=00; Month=1; Day=1; } // default Date is 01-JAN-2000
    void setDefaultTime() { Hour=0;  Min=0;   Sec=0; mSec=0; } // default Time is 00:00:00.00
 
+   uint8_t FormatDate(char *Out, char Sep='.') const
+   { uint8_t Len=0;
+     Len+=Format_UnsDec(Out+Len, Day, 2);
+     Out[Len++]=Sep;
+     Len+=Format_UnsDec(Out+Len, Month, 2);
+     Out[Len++]=Sep;
+     Len+=Format_UnsDec(Out+Len, Year, 2);
+     Out[Len]=0; return Len; }
+
+   uint8_t FormatTime(char *Out, char Sep=':') const
+   { uint8_t Len=0;
+     Len+=Format_UnsDec(Out+Len, Hour, 2);
+     Out[Len++]=Sep;
+     Len+=Format_UnsDec(Out+Len, Min, 2);
+     Out[Len++]=Sep;
+     Len+=Format_UnsDec(Out+Len, Sec, 2);
+     Out[Len++]='.';
+     Len+=Format_UnsDec(Out+Len, mSec, 3);
+     Out[Len]=0; return Len; }
+
    bool isTimeValid(void) const                      // is the GPS time-of-day valid
    { return (Hour>=0) && (Min>=0) && (Sec>=0); }     // all data must have been correctly read: negative means not correctly read)
 
@@ -870,13 +890,14 @@ class GPS_Position: public GPS_Time
     { bool hasGPS   :1;         // all required GPS information has been supplied (but this is not the GPS lock status)
       bool hasBaro  :1;         // pressure sensor information: pressure, standard pressure altitude, temperature, humidity
       bool hasHum   :1;         //
-      bool isReady  :1;         // is ready for the following treaement
-      bool Sent     :1;         // has been transmitted
       bool hasTime  :1;         // Time has been supplied
+      bool hasDate  :1;         // Time has been supplied
       bool hasRMC   :1;         // GxRMC has been supplied
       bool hasGGA   :1;         // GxGGA has been supplied
       bool hasGSA   :1;         // GxGSA has been supplied
       bool hasGSV   :1;
+      bool isReady  :1;         // is ready for the following treaement
+      bool Sent     :1;         // has been transmitted
     } ;
   } ;
 

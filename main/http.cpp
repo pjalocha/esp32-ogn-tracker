@@ -191,7 +191,7 @@ static void ParmForm_GPS(httpd_req_t *Req)  // produce HTML form for GPS paramet
   httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Apply\"></div>\n");
   httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 
-static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for aircraft parameters
+static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for parameters not included in other forms
 { char Line[16]; int Len;
 
   httpd_resp_sendstr_chunk(Req, "<h2>Other</h2>");
