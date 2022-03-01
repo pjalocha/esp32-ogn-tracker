@@ -630,6 +630,9 @@ uint16_t StratuxPort;
     if(strcmp(Name, "AddrType")==0)
     { uint32_t Type=0; if(Read_Int(Type, Value)<=0) return 0;
       AddrType=Type; return 1; }
+    if(strcmp(Name, "Stealth")==0)
+    { uint32_t Type=0; if(Read_Int(Type, Value)<=0) return 0;
+      Stealth=Type; return 1; }
     if(strcmp(Name, "AcftType")==0)
     { uint32_t Type=0; if(Read_Int(Type, Value)<=0) return 0;
       AcftType=Type; return 1; }
@@ -839,8 +842,9 @@ uint16_t StratuxPort;
   int WriteToFile(FILE *File)
   { char Line[80];
     Write_Hex    (Line, "Address"   ,          Address ,       6); strcat(Line, " # [24-bit]\n"); if(fputs(Line, File)==EOF) return EOF;
-    Write_Hex    (Line, "AddrType"  ,          AddrType,       1); strcat(Line, " #  [2-bit]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Hex    (Line, "AcftType"  ,          AcftType,       1); strcat(Line, " #  [4-bit]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_Hex    (Line, "AddrType"  ,          AddrType,       1); strcat(Line, " #  [2-bit]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_Hex    (Line, "Stealth"   ,          Stealth,        1); strcat(Line, " #  [ bool]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_UnsDec (Line, "CONbaud"   ,          CONbaud          ); strcat(Line, " #  [  bps]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Hex    (Line, "CONprot"   ,          CONprot,        1); strcat(Line, " #  [ mask]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_SignDec(Line, "TxPower"   ,          TxPower          ); strcat(Line, " #  [  dBm]\n"); if(fputs(Line, File)==EOF) return EOF;
@@ -906,8 +910,9 @@ uint16_t StratuxPort;
   void Write(void (*Output)(char))
   { char Line[80];
     Write_Hex    (Line, "Address"   ,          Address ,       6); strcat(Line, " # [24-bit]\n"); Format_String(Output, Line);
-    Write_Hex    (Line, "AddrType"  ,          AddrType,       1); strcat(Line, " #  [2-bit]\n"); Format_String(Output, Line);
     Write_Hex    (Line, "AcftType"  ,          AcftType,       1); strcat(Line, " #  [4-bit]\n"); Format_String(Output, Line);
+    Write_Hex    (Line, "AddrType"  ,          AddrType,       1); strcat(Line, " #  [2-bit]\n"); Format_String(Output, Line);
+    Write_Hex    (Line, "Stealth"   ,          Stealth,        1); strcat(Line, " #  [ bool]\n"); Format_String(Output, Line);
     Write_UnsDec (Line, "CONbaud"   ,          CONbaud          ); strcat(Line, " #  [  bps]\n"); Format_String(Output, Line);
     Write_Hex    (Line, "CONprot"   ,          CONprot,        1); strcat(Line, " #  [ mask]\n"); Format_String(Output, Line);
     Write_SignDec(Line, "TxPower"   ,          TxPower          ); strcat(Line, " #  [  dBm]\n"); Format_String(Output, Line);
