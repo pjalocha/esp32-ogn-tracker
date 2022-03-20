@@ -345,12 +345,12 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
   if(MyOwnPacket) return;                                                             // don't process my own (relayed) packets
   if(RxPacket->Packet.Header.Encrypted && RxPacket->RxErr<10)                         // here we attempt to relay encrypted packets
   { RxPacket->calcRelayRank(GPS_Altitude/10);
-    OGN_RxPacket<OGN_Packet> *PrevRxPacket = RelayQueue.addNew(RxPacketIdx);
+    OGN_RxPacket<OGN_Packet> *PrevRxPacket = RelayQueue.addNew(RxPacketIdx);          // add to the relay queue and get the previous packet of same ID
     return; }
   bool DistOK = RxPacket->Packet.calcDistanceVector(LatDist, LonDist, GPS_Latitude, GPS_Longitude, GPS_LatCosine)>=0;
   if(DistOK)
   { RxPacket->calcRelayRank(GPS_Altitude/10);                                         // calculate the relay-rank (priority for relay)
-    OGN_RxPacket<OGN_Packet> *PrevRxPacket = RelayQueue.addNew(RxPacketIdx);
+    OGN_RxPacket<OGN_Packet> *PrevRxPacket = RelayQueue.addNew(RxPacketIdx);          // add to the relay queue and get the previous packet of same ID
 #ifdef WITH_POGNT
     { uint8_t Len=RxPacket->WritePOGNT(Line);                                           // print on the console as $POGNT
       if(Parameters.Verbose)
@@ -388,15 +388,15 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
 #endif
 #endif // WITH_LOOKOUT
      bool Signif = PrevRxPacket!=0;
-     if(!Signif) Signif=OGN_isSignif(&(RxPacket->Packet), &(PrevRxPacket->Packet));
+     if(!Signif) Signif=OGN_isSignif(&(RxPacket->Packet), &(PrevRxPacket->Packet));  // compare against previous packet of same ID from the relay queue
 #ifdef WITH_APRS
-     if(Signif) APRSrx_FIFO.Write(*RxPacket);
+     if(Signif) APRSrx_FIFO.Write(*RxPacket);                                        // APRS queue for received packets
 #endif
 #ifdef WITH_LOG
      if(Signif) FlashLog(RxPacket, RxTime);                                          // log only significant packets
 #endif
 #ifdef WITH_PFLAA
-    if( Parameters.Verbose    // print PFLAA on the console for received packets
+    if( Parameters.Verbose                                                           // print PFLAA on the console for received packets
 #ifdef WITH_LOOKOUT
     && (!Tgt)
 #endif

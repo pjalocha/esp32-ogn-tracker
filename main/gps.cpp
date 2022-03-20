@@ -15,6 +15,7 @@
 #include "sdlog.h"
 #endif
 
+#include "rf.h"
 #include "ogn.h"
 
 // #include "ctrl.h"
@@ -108,7 +109,24 @@ uint8_t  MAVLINK_BattCap  = 0;   // [%]
 
 EventGroupHandle_t GPS_Event = 0;
 
+// ----------------------------------------------------------------------------
+
 FlightMonitor Flight;
+static uint32_t RndID_TimeToChange = 0;
+
+void FlightProcess(void)
+{ bool PrevInFlight=Flight.inFlight();
+  Flight.Process(GPS_Pos[GPS_PosIdx]);
+  bool InFlight=Flight.inFlight();
+  if(Parameters.AddrType!=0) return;
+  if(RndID_TimeToChange==0)
+  { if(Parameters.Stealth) RndID_TimeToChange=60; }
+  else
+  { if(RndID_TimeToChange==1)
+    { Parameters.Address = GPS_Random^RX_Random; }
+    RndID_TimeToChange--; }
+  if(PrevInFlight==1 && InFlight==0) RndID_TimeToChange+=20;
+}
 
 // ----------------------------------------------------------------------------
 
@@ -563,7 +581,8 @@ static void GPS_BurstComplete(void)                                        // wh
   GPS_Pos[NextPosIdx].copyTime(GPS_Pos[GPS_PosIdx]);                        // copy time from current position
   GPS_Pos[NextPosIdx].incrTimeFrac(GPS_PosPeriod);                          // increment time by the expected period
   GPS_Pos[NextPosIdx].copyBaro(GPS_Pos[GPS_PosIdx], (int16_t)GPS_PosPeriod);
-  Flight.Process(GPS_Pos[GPS_PosIdx]);
+  if(GPS_Pos[GPS_PosIdx].Sec!=GPS_Pos[NextPosIdx].Sec) FlightProcess();
+  // Flight.Process(GPS_Pos[GPS_PosIdx]);
   // GPS_Pos[NextPosIdx].copyDate(GPS_Pos[GPS_PosIdx]);
 #ifdef DEBUG_PRINT
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);

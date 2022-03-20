@@ -103,6 +103,7 @@ const uint32_t IGC_SavePeriod = 20;
 static FILE  *IGC_File=0;                                         //
 static uint32_t IGC_SaveTime=0;
        uint16_t IGC_FlightNum=0;                                  // flight counter
+static uint32_t IGC_AcftID=0;                                     // to keep trackof possibly changing aircraft radio ID
 
 static SHA256 IGC_SHA256;                                         //
 const int IGC_Digest_Size = 32;
@@ -233,33 +234,34 @@ static int IGC_Header(const GPS_Position &Pos)                      // write the
 #endif
   return 0; }
 
-int IGC_ID(void)
+void IGC_ID(void)
 { uint32_t Time = TimeSync_Time();
   int Len=Format_String(Line, "LOGN");
   Len+=Format_HHMMSS(Line+Len, Time);
   Len+=Format_String(Line+Len, "ID ");
-  Len+=Format_Hex(Line+Len, Parameters.AcftID);
+  Len+=Format_Hex(Line+Len, Parameters.AcftID);                    // Radio ID
   Line[Len++]='\n'; Line[Len]=0;
-  IGC_LogLine(Line, Len);
+  IGC_LogLine(Line, Len); }
+
+void IGC_MAC(void)
   uint64_t MAC = getUniqueID();
   Len=4+6;
   Len+=Format_String(Line+Len, "MAC ");
   Len+=Format_Hex(Line+Len, (uint16_t)(MAC>>32));                  // ESP32 48-bit ID
   Len+=Format_Hex(Line+Len, (uint32_t) MAC     );
   Line[Len++]='\n'; Line[Len]=0;
-  IGC_LogLine(Line, Len);
-  return 0; }
+  IGC_LogLine(Line, Len); }
 
 static int IGC_Log(const GPS_Position &Pos)                         // log GPS position as B-record
-{ int Len=Pos.WriteIGC(Line);
+{ int Len=Pos.WriteIGC(Line);                                       // write GPS position in the IGC format
 #ifdef DEBUG_PRINT
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   Format_String(CONS_UART_Write, Line);
   xSemaphoreGive(CONS_Mutex);
 #endif
-  int Written=IGC_LogLine(Line, Len);
-  if(Written!=Len) IGC_Close();
-  return Written; }
+  int Written=IGC_LogLine(Line, Len);                               // write Line to the IGC log
+  if(Written!=Len) IGC_Close();                                     // if not all data written then close the log
+  return Written; }                                                 // return number of bytes written or (negative) error
 
 static void IGC_Check(void)                                          // check if new GPS position
 { static uint8_t PrevPosIdx=0;
@@ -279,10 +281,11 @@ static void IGC_Check(void)                                          // check if
   xSemaphoreGive(CONS_Mutex);
 #endif
   if(IGC_File)                                                       // if IGC file already open
-  { IGC_Log(GPS_Pos[PosIdx]);                                        // log position
+  { if(Parameters.AcftID!=IGC_AcftID) { IGC_ID(); IGC_AcftID=Parameters.AcftID; }
+    IGC_Log(GPS_Pos[PosIdx]);                                        // log position
     if(!inFlight)                                                    // if no longer in flight
-    { IGC_SHA256.Finish(IGC_Digest);
-      uint8_t *Sig = (uint8_t *)Line+256;
+    { IGC_SHA256.Finish(IGC_Digest);                                 // complete SHA256 digest
+      uint8_t *Sig = (uint8_t *)Line+256;                            // space to write the SHA and signature
       int SigLen = IGC_SignKey.Sign_MD5_SHA256(Sig, IGC_Digest, IGC_Digest_Size);
       int Len=0;
       Line[Len++]='G';                                               // produce G-record with SH256
@@ -296,10 +299,10 @@ static void IGC_Check(void)                                          // check if
       Line[Len++]='\n'; Line[Len]=0;                                 // end-of-line, end-of-string
       IGC_LogLine(Line, Len);                                        // write to IGC
       IGC_Close(); IGC_TimeStamp(); }                                // then close the IGC file
-    else
-    { uint32_t Time=TimeSync_Time();
-      if(Time-IGC_SaveTime>=IGC_SavePeriod)
-      { IGC_Reopen(); }
+    else                                                             // if (still) in flight
+    { uint32_t Time=TimeSync_Time();                                 // 
+      if(Time-IGC_SaveTime>=IGC_SavePeriod)                          //
+      { IGC_Reopen(); }                                              // re-open IGC thus close it and open it back to save the current data
     }
   }
   else                                                               // if IGC file is not open
@@ -309,7 +312,8 @@ static void IGC_Check(void)                                          // check if
       if(IGC_File)                                                   // if open succesfully
       { IGC_SHA256.Start();                                          // start the SHA256 calculation
         IGC_Header(GPS_Pos[PosIdx]);                                 // then write header
-        IGC_ID();
+        IGC_ID(); IGC_AcftID=Parameters.AcftID;
+        IGC_MAC();
         IGC_Log(GPS_Pos[PosIdx]); }                                  // log first B-record
     }
   }
@@ -371,8 +375,8 @@ extern "C"
   Format_String(CONS_UART_Write, "\n");
   xSemaphoreGive(CONS_Mutex);
 */
-  uint32_t ID = getUniqueAddress();
-  IGC_Serial[2] = Flight.Code36(ID%36); ID/=36;
+  uint32_t ID = getUniqueAddress();                                         // ID of the tracker (from CPU serial)
+  IGC_Serial[2] = Flight.Code36(ID%36); ID/=36;                             // produce 3-char IGC serial for this tracker
   IGC_Serial[1] = Flight.Code36(ID%36); ID/=36;
   IGC_Serial[0] = Flight.Code36(ID%36);
 

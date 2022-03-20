@@ -508,6 +508,8 @@ uint16_t StratuxPort;
     Len+=Format_Hex(Line+Len, Address, 6);
     Len+=Format_String(Line+Len, ",AddrType=");
     Line[Len++]='0'+AddrType;
+    Len+=Format_String(Line+Len, ",Stealth=");
+    Line[Len++]='0'+Stealth;
     Len+=Format_String(Line+Len, ",AcftType=0x");
     Line[Len++]=HexDigit(AcftType);
     Len+=Format_String(Line+Len, ",FreqPlan=");
