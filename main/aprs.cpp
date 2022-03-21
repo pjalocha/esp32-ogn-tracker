@@ -80,7 +80,7 @@ static int APRS_RxMsg(const char *Msg)     // Handle messages received from APRS
   return 0; }
 
 static int APRS_Dialog(void)               // connect to APRS and talk to the server exchaging data
-{
+{ uint32_t AcftID = Parameters.AcftID;                     // remember ID in case it changes
   int ConnErr=APRS_Socket.Connect(APRS_Host, APRS_Port);   // connect to the APRS server
   if(ConnErr>=0)                                           // if connection succesfull
   { uint8_t LoginLen = LoginLine(Line, 5);
@@ -97,8 +97,9 @@ static int APRS_Dialog(void)               // connect to APRS and talk to the se
     // APRS_Socket.setBlocking(0);
     int Write=APRS_Socket.Send(Line, LoginLen);            // send login to the APRS server
     int LinePtr=0;
-    for( ; ; )
-    { int Left = MaxLineLen-LinePtr; if(Left<128) break;   // how much space left for receive data
+    for( ; ; )                                             // the dialog loop
+    { if(AcftID!=Parameters.AcftID) break;                 // stop when aircraft ID changes: we need to relogin
+      int Left = MaxLineLen-LinePtr; if(Left<128) break;   // how much space left for receive data
       int Read=APRS_Socket.Receive(Line+LinePtr, Left-1);  // read more data from the socket
 #ifdef DEBUG_PRINT
       if(Read<0)                                                         // if error then print it
@@ -251,7 +252,7 @@ void vTaskAPRS(void* pvParameters)
         WIFI_IP.ip.addr = 0; WIFI_IP.gw.addr=0;
         for(uint8_t Idx=0; Idx<10; Idx++)                     // wait to obtain local IP from DHCP
         { vTaskDelay(1000);
-          if(WIFI_State.isConnected==1) break;
+          // if(WIFI_State.isConnected==1) break;
           if(WIFI_getLocalIP())
           { if(WIFI_IP.ip.addr && WIFI_IP.gw.addr) break; }
         }
