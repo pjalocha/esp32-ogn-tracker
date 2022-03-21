@@ -785,7 +785,7 @@ void vTaskPROC(void* pvParameters)
     if( StatTxBackOff==0 && RF_TxFIFO.Full()<2 )                 // decide whether to transmit the status/info packet
     { OGN_TxPacket<OGN_Packet> *StatusPacket = RF_TxFIFO.getWrite(); // ask for space in the Tx queue
       uint8_t doTx=1;
-      if(RX_Random&0x10)                                         // decide to transmit info or status packet ?
+      if(Parameters.AddrType && RX_Random&0x10)                  // decide to transmit info or status packet ?
       { doTx=ReadInfo(StatPacket.Packet); }                      // and overwrite the StatPacket with the Info data
       if(doTx)
       { StatTxBackOff=16+(RX_Random%15);
