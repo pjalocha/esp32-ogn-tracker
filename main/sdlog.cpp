@@ -244,8 +244,8 @@ void IGC_ID(void)
   IGC_LogLine(Line, Len); }
 
 void IGC_MAC(void)
-  uint64_t MAC = getUniqueID();
-  Len=4+6;
+{ uint64_t MAC = getUniqueID();
+  int Len=4+6;
   Len+=Format_String(Line+Len, "MAC ");
   Len+=Format_Hex(Line+Len, (uint16_t)(MAC>>32));                  // ESP32 48-bit ID
   Len+=Format_Hex(Line+Len, (uint32_t) MAC     );
