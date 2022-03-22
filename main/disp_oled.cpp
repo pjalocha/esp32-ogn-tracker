@@ -36,6 +36,15 @@
 // #include "timesync.h"
 #include "format.h"
 
+#include "config.h"
+
+#define QUOTE(name) #name
+#define STR(macro) QUOTE(macro)
+
+#ifndef VERSION
+#define VERSION 0.0.0
+#endif
+
 static char Line[128];
 
 // ========================================================================================================================
@@ -756,7 +765,7 @@ void OLED_DrawID(u8g2_t *OLED, GPS_Position *GPS)
 #endif
   }
   u8g2_SetFont(OLED, u8g2_font_5x8_tr);
-  u8g2_DrawStr(OLED, 96, 62, "v0.1.2");
+  u8g2_DrawStr(OLED, 96, 62, "v" STR(VERSION));
 }
 
 void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
