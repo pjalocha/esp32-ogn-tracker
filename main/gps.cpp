@@ -123,7 +123,17 @@ void FlightProcess(void)
   { if(Parameters.Stealth) RndID_TimeToChange=60; }
   else
   { if(RndID_TimeToChange==1)
-    { Parameters.Address = GPS_Random^RX_Random; }
+    { Parameters.Address = (GPS_Random^RX_Random)&0xFFFFFF;
+      Parameters.WritePOGNS(Line);
+      xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+      Format_String(CONS_UART_Write, Line);
+      // Format_String(CONS_UART_Write, "$POGNS,Address=0x");
+      // Format_Hex(CONS_UART_Write, (uint8_t)(Parameters.Address>>16));
+      // Format_Hex(CONS_UART_Write, (uint16_t)(Parameters.Address));
+      // Format_String(CONS_UART_Write, ",AddrType=");
+      // CONS_UART_Write('0'+Parameters.AddrType);
+      // Format_String(CONS_UART_Write, "\n");
+      xSemaphoreGive(CONS_Mutex); }
     RndID_TimeToChange--; }
   if(PrevInFlight==1 && InFlight==0) RndID_TimeToChange+=20;
 }
