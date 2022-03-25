@@ -656,7 +656,7 @@ extern "C"
 #ifdef WITH_LORAWAN
    if(!WANtx && TxPkt0 && WANdev.State!=1 && WANdev.State!=3)         // if no WAN transmission/reception scheduled
 #else
-   if(TxPkt0 && TxPkt0->Header.AddrType)
+   if(TxPkt0 && TxPkt0->AddrType)
 #endif
    { PAW_Packet Packet; Packet.Clear();
      OGN1_Packet TxPkt = TxPkt0->Packet;
