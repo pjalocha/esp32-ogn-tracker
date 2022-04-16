@@ -119,11 +119,12 @@ void FlightProcess(void)
   Flight.Process(GPS_Pos[GPS_PosIdx]);
   bool InFlight=Flight.inFlight();
   if(Parameters.AddrType!=0) return;
+  uint32_t Random = GPS_Random^RX_Random;
   if(RndID_TimeToChange==0)
-  { if(Parameters.Stealth) RndID_TimeToChange=60; }
+  { if(Parameters.Stealth) RndID_TimeToChange = 57+Random%5; }
   else
   { if(RndID_TimeToChange==1)
-    { Parameters.Address = (GPS_Random^RX_Random)&0xFFFFFF;
+    { Parameters.Address = (Random%0xFFFFFE)+1;
       Parameters.WritePOGNS(Line);
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_String(CONS_UART_Write, Line);

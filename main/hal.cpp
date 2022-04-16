@@ -304,6 +304,15 @@ GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    Foll
 #define PIN_RFM_RST  GPIO_NUM_4   // RFM RESET
 #endif
 
+#ifdef WITH_CUBE_BOARD
+#define PIN_RFM_IRQ  GPIO_NUM_34  // packet done on receive or transmit
+#define PIN_RFM_SS   GPIO_NUM_15  // SPI chip-select
+#define PIN_RFM_SCK  GPIO_NUM_14  // SPI clock
+#define PIN_RFM_MISO GPIO_NUM_12  // SPI MISO
+#define PIN_RFM_MOSI GPIO_NUM_13  // SPI MOSI
+// #define PIN_RFM_RST  GPIO_NUM_4   // RFM RESET
+#endif
+
 #define RFM_SPI_HOST  VSPI_HOST   // or H or VSPI_HOST ?
 #define RFM_SPI_DMA   1           // DMA channel
 #define RFM_SPI_SPEED 4000000     // [Hz] 2MHz SPI clock rate for RF chip
@@ -397,6 +406,11 @@ GPIO   HELTEC      TTGO       JACEK     M5_JACEK    T-Beam     T-Beamv10    Foll
 #define PIN_GPS_PPS  GPIO_NUM_32  // high active
 #endif
 
+#ifdef WITH_CUBE_BOARD
+#define PIN_GPS_TXD  GPIO_NUM_32
+#define PIN_GPS_RXD  GPIO_NUM_35
+#endif
+
 #define CONS_UART UART_NUM_0      // UART0 for the console (the system does this for us)
 #define GPS_UART  UART_NUM_1      // UART1 for GPS data read and dialog
 
@@ -415,7 +429,7 @@ uint8_t BARO_I2C = (uint8_t)I2C_BUS;
 #define PIN_I2C_SDA GPIO_NUM_27   // SDA pin
 #endif // JACEK
 
-#if defined(WITH_M5_JACEK) || defined(WITH_OGN_AKR)
+#if defined(WITH_M5_JACEK) || defined(WITH_OGN_AKR) || defined(WITH_CUBE_BOARD)
 #define PIN_I2C_SCL GPIO_NUM_22   // SCL pin
 #define PIN_I2C_SDA GPIO_NUM_21   // SDA pin
 #endif // M5_JACEK || WITH_OGN_AKR

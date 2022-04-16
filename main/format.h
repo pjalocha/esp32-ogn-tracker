@@ -16,6 +16,7 @@ void Format_String( void (*Output)(char), const    char *String, uint8_t MinLen,
 void Format_Hex( void (*Output)(char), uint8_t  Byte );
 void Format_Hex( void (*Output)(char), uint16_t Word );
 void Format_Hex( void (*Output)(char), uint32_t Word );
+// void Format_Hex( void (*Output)(char), uint32_t Word, uint8_t Digits);
 void Format_MAC( void (*Output)(char), const uint8_t *MAC, uint8_t Len=6);
 
 void Format_HexBytes( void (*Output)(char), const uint8_t *Byte, uint8_t Bytes);
