@@ -980,13 +980,13 @@ class GPS_Position: public GPS_Time
    int PrintTime(char *Out)     const { return sprintf(Out, "%02d:%02d:%02d.%03d", Hour, Min, Sec, mSec ); }
 
    void Print(void) const
-   { printf("Time/Date = "); PrintDateTime(); printf(" "); // printf(" = %10ld.%03dsec\n", (long int)UnixTime, mSec);
-     printf("FixQuality/Mode=%d/%d: %d satellites DOP/H/V=%3.1f/%3.1f/%3.1f ", FixQuality, FixMode, Satellites, 0.1*PDOP, 0.1*HDOP, 0.1*VDOP);
-     printf("FixQuality=%d: %d satellites HDOP=%3.1f ", FixQuality, Satellites, 0.1*HDOP);
-     printf("Lat/Lon/Alt = [%+10.6f,%+10.6f]deg %+3.1f(%+3.1f)m LatCosine=%+6.3f ", 0.0001/60*Latitude, 0.0001/60*Longitude, 0.1*Altitude, 0.1*GeoidSeparation, 1.0/(1<<12)*LatitudeCosine);
-     printf("Speed/Heading = %3.1fm/s %05.1fdeg ", 0.1*Speed, 0.1*Heading);
-     printf("Climb = %+5.1fm/s Turn = %+5.1fdeg/sec\n", 0.1*ClimbRate, 0.1*TurnRate);
-   }
+   { printf("Time/Date: "); PrintDateTime();
+     printf(" FixQual/Mode=%d/%d: %d sats DOP/H/V=%3.1f/%3.1f/%3.1f", FixQuality, FixMode, Satellites, 0.1*PDOP, 0.1*HDOP, 0.1*VDOP);
+     printf(" Lat/Lon/Alt = [%+10.6f,%+10.6f]deg %+3.1f(%+3.1f)m LatCos=%+6.3f", 0.0001/60*Latitude, 0.0001/60*Longitude, 0.1*Altitude, 0.1*GeoidSeparation, 1.0/(1<<12)*LatitudeCosine);
+     printf(" Speed/Heading = %3.1fm/s %05.1fdeg", 0.1*Speed, 0.1*Heading);
+     printf(" Climb = %+5.1fm/s", 0.1*ClimbRate);
+     printf(" Turn = %+5.1fdeg/s", 0.1*TurnRate);
+     printf("\n"); }
 
    int Print(char *Out) const
    { int Len=0;
