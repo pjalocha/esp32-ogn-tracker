@@ -207,6 +207,12 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
        if(Data[4]!='S') return 0;
        return Data[5]=='V'; }
 
+   uint8_t isBDGSV(void) const                   // BEIDOU satellite data
+     { if(!isBD()) return 0;
+       if(Data[3]!='G') return 0;
+       if(Data[4]!='S') return 0;
+       return Data[5]=='V'; }
+
    uint8_t isGPTXT(void) const                   // GPS test message
      { if(!isGP()) return 0;
        if(Data[3]!='T') return 0;

@@ -173,6 +173,7 @@ static void ProcessGSV(NMEA_RxMsg &GSV)              // process GxGSV to extract
        if(GSV.isGPGSV()) { SatSys=0; }
   else if(GSV.isGLGSV()) { SatSys=1; }
   else if(GSV.isGAGSV()) { SatSys=2; }
+  else if(GSV.isBDGSV()) { SatSys=3; }
   else return;
   if(GSV.Parms<3) return;
   int8_t Pkts=Read_Dec1((const char *)GSV.ParmPtr(0)); if(Pkts<0) return;            // how many packets to pass all sats
