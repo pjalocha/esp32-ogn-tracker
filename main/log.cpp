@@ -30,13 +30,13 @@ static const uint32_t FlashLog_MaxTime = 3600;    // 1 hour max. per single log 
 static const uint32_t FlashLog_MaxSize = 0x10000; // 64KB max. per single log file
 #ifdef WITH_SPIFFS_FAT
 static const uint32_t FlashLog_SavePeriod = 30;   // [sec] reopen the file every 30sec
-static const uint32_t FlashLog_SaveSize = 4096;  // [bytes] reopen the file every 4KB
+static const uint32_t FlashLog_SaveSize = 4096;   // [bytes] reopen the file every 4KB
 #endif
 
-bool FlashLog_SaveReq=0;                          // request to save the log right away, like after landing or before shutdown
-uint32_t FlashLog_FileTime=0;                     // [sec] UTC time corresponding to the log file
-char FlashLog_FileName[32];                       // current log file name if open
-static FILE *FlashLog_File=0;                     // current log file if open
+       bool     FlashLog_SaveReq=0;               // request to save the log right away, like after landing or before shutdown
+       uint32_t FlashLog_FileTime=0;              // [sec] UTC time corresponding to the log file
+       char     FlashLog_FileName[32];            // current log file name if open
+static FILE *   FlashLog_File=0;                  // current log file if open
 static uint32_t FlashLog_FileFlush=0;             // track where the log file has been forced to be written to flash
 
 FIFO<OGN_LogPacket<OGN_Packet>, 32> FlashLog_FIFO;
@@ -292,12 +292,12 @@ static int FlashLog_Open(uint32_t Time)                            // open a new
   if(FlashLog_File==0) FlashLog_Clean(0, 4);                       // if the file cannot be open clean again
   return FlashLog_File!=0; }                                        // 1=success, 0=failure: new log file could not be open
 
-static void FlashLog_Reopen(void)
-{ if(FlashLog_File)
-  { fclose(FlashLog_File);
-    FlashLog_File = fopen(FlashLog_FileName, "ab");
-    FlashLog_FileFlush = ftell(FlashLog_File); }
-  FlashLog_SaveReq=0; }
+static void FlashLog_Reopen(void)                                   // force close and re-open the current log file
+{ if(FlashLog_File)                                                 // if log File is open
+  { fclose(FlashLog_File);                                          // close it
+    FlashLog_File = fopen(FlashLog_FileName, "ab");                 // open it again for append with same filename
+    FlashLog_FileFlush = ftell(FlashLog_File); }                    // track how much has been pysically written
+  FlashLog_SaveReq=0; }                                             // clear q possible request to save the file
 
 static int FlashLog_Record(OGN_LogPacket<OGN_Packet> *Packet, int Packets, uint32_t Time)      // log a batch of OGN packets
 { if(FlashLog_File)                                                          // if log file already open
@@ -381,27 +381,23 @@ void vTaskLOG(void* pvParameters)
 #endif
 #endif
 
-  TickType_t PrevTick = 0;
+  TickType_t PrevTick = 0;                                        // [ms] Time when packets stored the last time
   for( ; ; )
-  { // vTaskDelay(200);                                           // wait idle 0.2sec
-    if(FlashLog_SaveReq) FlashLog_Reopen();                       // if requested then save the current log (close + reopen)
-    TickType_t Tick=xTaskGetTickCount();                          // system tick count now
+  { vTaskDelay(1);
+    bool Flying = Flight.inFlight();                              // if the aircraft flying ?
     size_t Packets = FlashLog_FIFO.Full();                        // how many packets in the queue ?
-// #ifdef DEBUG_PRINT
-//     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-//     Format_String(CONS_UART_Write, "TaskLOG() ");
-//     Format_UnsDec(CONS_UART_Write, Tick, 4, 3);
-//     Format_String(CONS_UART_Write, "(");
-//     Format_UnsDec(CONS_UART_Write, PrevTick, 4, 3);
-//     Format_String(CONS_UART_Write, ")s: ");
-//     Format_UnsDec(CONS_UART_Write, Packets);
-//     Format_String(CONS_UART_Write, " packets\n");
-//     xSemaphoreGive(CONS_Mutex);
-// #endif
-    if(Packets==0) { PrevTick=Tick; vTaskDelay(100); continue; } // if none: then give up
-    if(Packets>=8) { Copy(); PrevTick=Tick; continue; }          // if 8 or more packets then copy them to the log file
-    TickType_t Diff = Tick-PrevTick;                             // time since last log action
-    if(Diff>=8000) { Copy(); PrevTick=Tick; continue; }          // if more than 8.0sec than copy the packets
+    if(Flying)                                                    // when flying
+    { if(FlashLog_SaveReq) FlashLog_Reopen();                       // if requested then save the current log (close + reopen)
+      TickType_t Tick=xTaskGetTickCount();                          // system tick count now
+      if(Packets==0) { PrevTick=Tick; vTaskDelay(100); continue; }  // if none: then give up
+      if(Packets>=8) { Copy(); PrevTick=Tick; continue; }           // if 8 or more packets then copy them to the log file
+      TickType_t Diff = Tick-PrevTick;                              // time since last log action
+      if(Diff>=8000) { Copy(); PrevTick=Tick; continue; }           // if more than 8.0sec than copy the packets
+    } else                                                          // when not flying
+    { if(FlashLog_File) { fclose(FlashLog_File); FlashLog_File=0; } // if file open then close it
+      while(FlashLog_FIFO.Full()>=FlashLog_FIFO.Len/2)              // flush the packet queue but keep it half-full
+      { FlashLog_FIFO.Read(); vTaskDelay(1); }
+    }
     vTaskDelay(100); }
 
 }
