@@ -489,7 +489,7 @@ extern "C"
         xSemaphoreGive(CONS_Mutex); }
     }
     else                                                     // if no WAN reception expected or possible
-#else // WITH_LORAWAN
+#endif // WITH_LORAWAN
     // if(TimeSync_msTime()<260);
     { uint32_t RxRssiSum=0; uint16_t RxRssiCount=0;          // measure the average RSSI for lower frequency
       do
@@ -513,7 +513,7 @@ extern "C"
       xSemaphoreGive(CONS_Mutex);
 #endif
     }
-#endif
+// #endif // WITH_LORAWAN
 
     TRX.setModeStandby();                                                      // switch to standy
     vTaskDelay(1);
