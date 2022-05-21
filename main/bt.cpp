@@ -192,6 +192,7 @@ int BT_SPP_Init(void)
   Err = esp_bt_controller_init(&BTconf); if(Err!=ESP_OK) return Err;
   Err = esp_bt_controller_enable((esp_bt_mode_t)BTconf.mode); if(Err!=ESP_OK) return Err;   // mode must be same as in BTconf
   // Err = esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT); if(Err!=ESP_OK) return Err;
+  Err = esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);                                    // this is supposed to release 30kB of RAM
   Err = esp_bluedroid_init(); if(Err!=ESP_OK) return Err;                                   // init the BT stack
   Err = esp_bluedroid_enable(); if(Err!=ESP_OK) return Err;                                 // enable the BT stack
   Err = esp_bt_gap_register_callback(esp_bt_gap_cb); if(Err!=ESP_OK) return Err;

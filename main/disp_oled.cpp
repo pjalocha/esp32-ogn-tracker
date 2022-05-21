@@ -365,6 +365,7 @@ void OLED_DrawRelay(u8g2_t *OLED, GPS_Position *GPS)
   }
 }
 
+#ifdef WITH_LOOKOUT
 void OLED_DrawLookout(u8g2_t *OLED, GPS_Position *GPS)
 { u8g2_SetFont(OLED, u8g2_font_amstrad_cpc_extended_8r);
   uint8_t Len=Format_String(Line, "=> ");
@@ -429,6 +430,7 @@ void OLED_DrawTrafWarn(u8g2_t *OLED, GPS_Position *GPS)
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 60, Line);
 }
+#endif // WITH_LOOKOUT
 
 void OLED_DrawBaro(u8g2_t *OLED, GPS_Position *GPS)
 { u8g2_SetFont(OLED, u8g2_font_7x13_tf);              // 5 lines, 12 pixels/line

@@ -234,7 +234,7 @@ class LookOut
      NMEA[Len++]=',';
      if(Tgt)                                               // ID
 #ifdef WITH_SKYDEMON
-     { Len+=Format_Hex(NMEA+Len, Tgt->ID & 0x00FFFFFF); }
+     { Len+=Format_Hex(NMEA+Len, Tgt->ID & 0x00FFFFFF); }  // maybe just 6 digits should be produced ?
 #else
      { Len+=Format_Hex(NMEA+Len, Tgt->ID); }
 #endif

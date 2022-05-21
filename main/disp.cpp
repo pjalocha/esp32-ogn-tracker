@@ -190,10 +190,12 @@ void vTaskDISP(void* pvParameters)
           case 5: OLED_DrawBattery          (&U8G2_OLED, GPS); break;
           case 6: OLED_DrawAltitudeAndSpeed (&U8G2_OLED, GPS); break;
           case 7: OLED_DrawRelay            (&U8G2_OLED, GPS); break;
-          case 8: OLED_DrawLookout          (&U8G2_OLED, GPS); break;
-          case 9: OLED_DrawTrafWarn         (&U8G2_OLED, GPS); break;
-         case 10: OLED_DrawFlight           (&U8G2_OLED, GPS); break;
-         case 11: OLED_DrawLoRaWAN          (&U8G2_OLED, GPS); break;
+          case 8: OLED_DrawFlight           (&U8G2_OLED, GPS); break;
+          case 9: OLED_DrawLoRaWAN          (&U8G2_OLED, GPS); break;
+#ifdef WITH_LOOKOUT
+         case 10: OLED_DrawLookout          (&U8G2_OLED, GPS); break;
+         case 11: OLED_DrawTrafWarn         (&U8G2_OLED, GPS); break;
+#endif
         }
       }
       //if ( DISP_Page != 6 )
