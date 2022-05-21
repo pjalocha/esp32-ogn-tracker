@@ -898,6 +898,7 @@ class GPS_Position: public GPS_Time
       bool hasGSV   :1;
       bool isReady  :1;         // is ready for the following treaement
       bool Sent     :1;         // has been transmitted
+      bool InFlight :1;         // take-off and landing detection
     } ;
   } ;
 

@@ -117,7 +117,7 @@ static uint32_t RndID_TimeToChange = 0;
 void FlightProcess(void)
 { bool PrevInFlight=Flight.inFlight();
   Flight.Process(GPS_Pos[GPS_PosIdx]);
-  bool InFlight=Flight.inFlight();
+  GPS.InFlight=Flight.inFlight();
   if(Parameters.AddrType!=0) return;
   uint32_t Random = GPS_Random^RX_Random;
   if(RndID_TimeToChange==0)
@@ -136,7 +136,7 @@ void FlightProcess(void)
       // Format_String(CONS_UART_Write, "\n");
       xSemaphoreGive(CONS_Mutex); }
     RndID_TimeToChange--; }
-  if(PrevInFlight==1 && InFlight==0) RndID_TimeToChange+=20;
+  if(PrevInFlight==1 && GPS.InFlight==0) RndID_TimeToChange+=20;
 }
 
 // ----------------------------------------------------------------------------
