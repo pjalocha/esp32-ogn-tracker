@@ -116,6 +116,7 @@ static uint32_t RndID_TimeToChange = 0;
 
 void FlightProcess(void)
 { bool PrevInFlight=Flight.inFlight();
+  GPS_Position &GPS = GPS_Pos[GPS_PosIdx];
   Flight.Process(GPS_Pos[GPS_PosIdx]);
   GPS.InFlight=Flight.inFlight();
   if(Parameters.AddrType!=0) return;
