@@ -12,6 +12,8 @@
 #include "fifo.h"
 
 #include "ctrl.h"
+#include "proc.h"
+#include "rf.h"
 
 // ============================================================================================
 
@@ -33,11 +35,7 @@ void Log_Write(char Byte)                                         // write a byt
 int Log_Free(void) { return Log_FIFO.Free(); }                    // how much space left in the buffer
 
 static int Log_Open(void)
-{ // LogDate=GPS_DateTime.getFatDate();                              // get the FAT-time date part
-  // int32_t Day   =  LogDate    &0x1F;                              // get day, month, year
-  // int32_t Month = (LogDate>>5)&0x0F;
-  // int32_t Year  = (LogDate>>9)-20;
-  int32_t Day   =  GPS_DateTime.Day;                                 // get day, month, year
+{ int32_t Day   =  GPS_DateTime.Day;                                 // get day, month, year
   int32_t Month =  GPS_DateTime.Month;
   int32_t Year  =  GPS_DateTime.Year;
   uint32_t Date = 0;
@@ -94,14 +92,14 @@ static int WriteLog(size_t MaxBlock=FIFOsize/2)                    // process th
 
 #ifdef WITH_SDLOG
 
-const char   *IGC_Path = "/sdcard/IGC";
+const char   *IGC_Path = "/sdcard/IGC";                           //
 const int     IGC_PathLen = 11;
-const uint32_t IGC_SavePeriod = 20;
 // constexpr int IGC_PathLen = strlen(IGC_Path);
+const uint32_t IGC_SavePeriod = 60;                               // [sec]
       char    IGC_Serial[4] = { 0, 0, 0, 0 };
       char    IGC_FileName[32];
 static FILE  *IGC_File=0;                                         //
-static uint32_t IGC_SaveTime=0;
+static uint32_t IGC_SaveTime=0;                                   // [sec]
        uint16_t IGC_FlightNum=0;                                  // flight counter
 static uint32_t IGC_AcftID=0;                                     // to keep trackof possibly changing aircraft radio ID
 
@@ -263,7 +261,7 @@ static int IGC_Log(const GPS_Position &Pos)                         // log GPS p
   if(Written!=Len) IGC_Close();                                     // if not all data written then close the log
   return Written; }                                                 // return number of bytes written or (negative) error
 
-static void IGC_Sig(const uint8_t *Dig, int DigLen, const uint8_t *Sig, int SigLen, bool Partial=0)
+static void IGC_LogSig(const uint8_t *Dig, int DigLen, const uint8_t *Sig, int SigLen, bool Partial=0) // write SHA and Signature to the IGC log
 { int Len=0;
   if(Partial) Line[Len++]='L';
   Line[Len++]='G';                                               // produce G-record with SH256
@@ -277,10 +275,64 @@ static void IGC_Sig(const uint8_t *Dig, int DigLen, const uint8_t *Sig, int SigL
   for(int Idx=0; Idx<SigLen; Idx++)                              // signature bytes
     Len+=Format_Hex(Line+Len, Sig[Idx]);                         // printed as hex
   Line[Len++]='\n'; Line[Len]=0;                                 // end-of-line, end-of-string
-  IGC_LogLine(Line, Len);                                        // write the signature
-}
+  IGC_LogLine(Line, Len); }                                      // write the signature
 
-static void IGC_Check(void)                                          // check if new GPS position
+static void IGC_LogBATstatus(const GPS_Position &GPS)
+{ int Len=Format_String(Line, "LBAT");
+  if(GPS.isTimeValid()) Len+=GPS.WriteHHMMSS(Line+Len);
+  Line[Len++]=' ';
+  Len+=Format_UnsDec(Line+Len, BatteryVoltage>>8, 4, 3);        // print the battery voltage readout
+  Len+=Format_String(Line+Len, "V ");
+  Len+=Format_SignDec(Line+Len, (600*BatteryVoltageRate+128)>>8, 3, 1);
+  Len+=Format_String(Line+Len, "mV/min");
+  Line[Len++]='\n'; Line[Len]=0;                                 // end-of-line, end-of-string
+  IGC_LogLine(Line, Len); }
+
+static void IGC_LogRFMstatus(const GPS_Position &GPS)
+{ int Len=Format_String(Line, "LRFM");
+  if(GPS.isTimeValid()) Len+=GPS.WriteHHMMSS(Line+Len);
+  Len+=Format_String(Line+Len, " Tx:");                                     //
+  Len+=Format_SignDec(Line+Len, (int16_t)Parameters.TxPower);              // Tx power
+  Len+=Format_String(Line+Len, "dBm ");
+  Len+=Format_SignDec(Line+Len, (int16_t)TRX.chipTemp);                    // RF chip internal temperature (not calibrated)
+  Len+=Format_String(Line+Len, "degC Rx:");                                     //
+  Len+=Format_SignDec(Line+Len, -5*TRX.averRSSI, 2, 1);                    // noise level seen by the receiver
+  Len+=Format_String(Line+Len, "dBm ");
+  Len+=Format_UnsDec(Line+Len, RX_OGN_Count64);                            // received packet/min
+  Len+=Format_String(Line+Len, "/min RxFIFO:");
+  Len+=Format_UnsDec(Line+Len, RF_RxFIFO.Full());                          // how many packets wait in the RX queue
+  Len+=Format_String(Line+Len, " Plan:");
+  Len+=Format_String(Line+Len, RF_FreqPlan.getPlanName());                 // name of the frequency plan
+  Len+=Format_String(Line+Len, " ");
+  Len+=Format_UnsDec(Line+Len, (uint16_t)(RF_FreqPlan.getCenterFreq()/100000), 3, 1); // center frequency
+  Len+=Format_String(Line+Len, "MHz");
+  Line[Len++]='\n'; Line[Len]=0;                                 // end-of-line, end-of-string
+  IGC_LogLine(Line, Len); }
+
+static void IGC_LogGPSstatus(const GPS_Position &GPS)
+{ int Len=Format_String(Line, "LGPS");
+  if(GPS.isTimeValid()) Len+=GPS.WriteHHMMSS(Line+Len);
+  Line[Len++]=' ';
+  if(GPS.isValid())
+    Len+=Format_UnsDec(Line+Len, GPS.Satellites);
+  else
+    Len+=Format_UnsDec(Line+Len, GPS_SatCnt);
+  Len+=Format_String(Line+Len, "sat/");
+  Line[Len++]='0'+GPS.FixQuality;
+  Line[Len++]='/';
+  Len+=Format_UnsDec(Line+Len, (GPS_SatSNR+2)>>2);
+  Len+=Format_String(Line+Len, "dB");
+  if(GPS.isValid())
+  { Len+=Format_String(Line+Len, " DOP:"); ;
+    Len+=Format_UnsDec(Line+Len, GPS.PDOP, 1, 1);
+    Line[Len++]='/';
+    Len+=Format_UnsDec(Line+Len, GPS.HDOP, 1, 1);
+    Line[Len++]='/';
+    Len+=Format_UnsDec(Line+Len, GPS.VDOP, 1, 1); }
+  Line[Len++]='\n'; Line[Len]=0;                                 // end-of-line, end-of-string
+  IGC_LogLine(Line, Len); }
+
+static void IGC_CheckGPS(void)                                   // check if new GPS position
 { static uint8_t PrevPosIdx=0;
   if(GPS_PosIdx==PrevPosIdx) return;
   PrevPosIdx=GPS_PosIdx;
@@ -307,16 +359,19 @@ static void IGC_Check(void)                                          // check if
     { IGC_SHA256.Finish(IGC_Digest);                                 // complete SHA256 digest
       uint8_t *Sig = (uint8_t *)Line+256;                            // space to write the SHA and signature
       int SigLen = IGC_SignKey.Sign_MD5_SHA256(Sig, IGC_Digest, IGC_Digest_Size); // produce signature
-      IGC_Sig(IGC_Digest, IGC_Digest_Size, Sig, SigLen, 0);
+      IGC_LogSig(IGC_Digest, IGC_Digest_Size, Sig, SigLen, 0);
       IGC_Close(); IGC_TimeStamp(); }                                // then close the IGC file
     else                                                             // if (still) in flight
     { uint32_t Time=TimeSync_Time();                                 //
       if(Time-IGC_SaveTime>=IGC_SavePeriod)                          //
-      { IGC_SHA256_bck.Clone(IGC_SHA256);
+      { IGC_LogBATstatus(GPS_Pos[PosIdx]);
+        IGC_LogGPSstatus(GPS_Pos[PosIdx]);
+        IGC_LogRFMstatus(GPS_Pos[PosIdx]);
+        IGC_SHA256_bck.Clone(IGC_SHA256);
         IGC_SHA256_bck.Finish(IGC_Digest);                           // complete SHA256 digest
         uint8_t *Sig = (uint8_t *)Line+256;                          // space to write the SHA and signature
         int SigLen = IGC_SignKey.Sign_MD5_SHA256(Sig, IGC_Digest, IGC_Digest_Size); // produce signature
-        IGC_Sig(IGC_Digest, IGC_Digest_Size, Sig, SigLen, 1);
+        IGC_LogSig(IGC_Digest, IGC_Digest_Size, Sig, SigLen, 1);
         IGC_Reopen(); }                                              // re-open IGC thus close it and open it back to save the current data
     }
   }
@@ -408,7 +463,7 @@ extern "C"
 
   for( ; ; )
   { if(!SD_isMounted())                                              // if SD ia not mounted:
-    { vTaskDelay(5000); SD_Mount(); IGC_Check(); continue; }         // try to (Re)mount it after a delay of 5sec
+    { vTaskDelay(5000); SD_Mount(); IGC_CheckGPS(); continue; }      // try to (Re)mount it after a delay of 5sec
 
     // if(GPS_Event)
     // { EventBits_t GPSevt = xEventGroupWaitBits(GPS_Event, GPSevt_NewPos, pdTRUE, pdFALSE, 100);
@@ -416,28 +471,16 @@ extern "C"
 
     if(!LogFile)                                                     // when SD mounted and log file not open:
     { Log_Open();                                                    // try to (re)open it
-      if(!LogFile) { IGC_Check(); SD_Unmount(); vTaskDelay(1000); continue; }  // if can't be open then unmount the SD and retry at a delay of 1sec
+      if(!LogFile) { IGC_CheckGPS(); SD_Unmount(); vTaskDelay(1000); continue; }  // if can't be open then unmount the SD and retry at a delay of 1sec
     }
 
-    if(Log_FIFO.Full()<FIFOsize/4) { IGC_Check(); vTaskDelay(50); }  // if little data to copy, then wait 0.1sec for more data
+    if(Log_FIFO.Full()<FIFOsize/4) { IGC_CheckGPS(); vTaskDelay(50); }  // if little data to copy, then wait 0.1sec for more data
     int Write;
     do { Write=WriteLog(); } while(Write>0);                         // write the console output to the log file
     if(Write<0) { SD_Unmount(); vTaskDelay(1000); continue; }        // if write fails then unmount the SD card and (re)try after a delay of 1sec
     // if(Write==0) vTaskDelay(100);
-    IGC_Check();
+    IGC_CheckGPS();
     Log_Check(); }                                                   // make sure the log is well saved by regular close-reopen
 }
-
-/*
-extern "C"
- void vTaskIGC(void* pvParameters)
-{
-  for( ; ; )
-  { EventBits_t GPSevt = xEventGroupWaitBits(GPS_Event, GPSevt_NewPos, pdTRUE, pdFALSE, 2000);
-    if((GPSevt&GPSevt_NewPos)==0) continue;
-
-  }
-}
-*/
 
 #endif // WITH_SDLOG

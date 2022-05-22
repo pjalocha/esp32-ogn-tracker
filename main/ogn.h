@@ -1612,7 +1612,7 @@ class GPS_Position: public GPS_Time
      { Len+=WriteIGCcoord(Out+Len, Latitude, 2, "NS");            // DDMM.MMM latitude
        Len+=WriteIGCcoord(Out+Len, Longitude, 3, "EW");           // DDDMM.MMM longitude
        Out[Len++] = FixMode>2 ? 'A':'V'; }                        // fix mode
-     else Len+=Format_String(Out+Len, "                    ");    // is position not valid then leave empty
+     else Len+=Format_String(Out+Len, "                  ");      // is position not valid then leave empty
      if(hasBaro)                                                  // if pressure data is there
      { int32_t Alt = StdAltitude/10;                              // [m] pressure altitude
        if(Alt<0) { Alt = (-Alt); Out[Len++] = '-'; Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 4); } // -AAAA (when negative)
