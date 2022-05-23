@@ -35,8 +35,8 @@ class FlightMonitor
      if(Num<36) return 'A'+(Num-10);
      return '_'; }
 
-   int ShortName(char *Name, uint8_t TakeoffNum, const char *Serial) const // produce short IGC file name (a three-character Serial)
-   { return ShortName(Name, Takeoff, TakeoffNum, Serial); }
+   // int ShortName(char *Name, uint8_t TakeoffNum, const char *Serial) const // produce short IGC file name (a three-character Serial)
+   // { return ShortName(Name, Takeoff, TakeoffNum, Serial); }
 
    static int ShortName(char *Name, const GPS_Position &Takeoff, uint8_t TakeoffNum, const char *Serial)
    { int Len=0;

@@ -107,6 +107,8 @@ static SHA256 IGC_SHA256, IGC_SHA256_bck;                         //
 const int IGC_Digest_Size = 32;
 static uint8_t IGC_Digest[IGC_Digest_Size];                       //
 
+FIFO<OGN_RxPacket<OGN_Packet>, 32> IGClog_FIFO;
+
 static void IGC_TimeStamp(void)
 { struct stat FileStat;
   struct utimbuf FileTime;
@@ -137,12 +139,12 @@ static void IGC_Close(void)
 }
 */
 
-static int IGC_Open(void)
+static int IGC_Open(const GPS_Position &GPS)
 { IGC_Close();                                                      // close the previous file, if open
   if(!SD_isMounted()) return -1;                                    // -1 => SD not mounted
   memcpy(IGC_FileName, IGC_Path, IGC_PathLen);                      // copy path
   IGC_FileName[IGC_PathLen]='/';                                    // slash after the path
-  Flight.ShortName(IGC_FileName+IGC_PathLen+1, IGC_FlightNum, IGC_Serial); // full name
+  Flight.ShortName(IGC_FileName+IGC_PathLen+1, GPS, IGC_FlightNum, IGC_Serial); // full name
   IGC_File=fopen(IGC_FileName, "rt");                               // attempt to open for read, just to try if the file is already there
   if(IGC_File) { IGC_Close(); return -2; }                          // -2 => file already exists
   IGC_File=fopen(IGC_FileName, "wt");                               // open for write
@@ -176,16 +178,15 @@ static int IGC_LogLine(const char *Line)
 
 static char Line[512];
 
-static int IGC_HeadParm(const char *Name, const char *Parm1, const char *Parm2=0, const char *Parm3=0)
+static void IGC_LogHeadParm(const char *Name, const char *Parm1, const char *Parm2=0, const char *Parm3=0)
 { int Len=Format_String(Line, Name);
   Len+=Format_String(Line+Len, Parm1);
   if(Parm2 && Parm2[0]) { Line[Len++]=','; Len+=Format_String(Line+Len, Parm2); }
   if(Parm3 && Parm3[0]) { Line[Len++]=','; Len+=Format_String(Line+Len, Parm3); }
   Line[Len++]='\n'; Line[Len]=0;
-  IGC_LogLine(Line, Len);
-  return 0; }
+  IGC_LogLine(Line, Len); }
 
-static int IGC_Header(const GPS_Position &Pos)                      // write the top of the IGC file
+static void IGC_LogHeader(const GPS_Position &Pos)                      // write the top of the IGC file
 { IGC_LogLine("AGNE001Tracker\n");
   IGC_LogLine("HFFXA020\n");
   { int Len=Format_String(Line, "HFDTEDate:");                      // date
@@ -196,12 +197,12 @@ static int IGC_Header(const GPS_Position &Pos)                      // write the
     Len+=Format_UnsDec(Line+Len, (uint16_t)IGC_FlightNum, 2);       // flight number of the day
     Line[Len++]='\n'; Line[Len]=0;
     IGC_LogLine(Line, Len); }
-  IGC_HeadParm("HFPLTPilotincharge:", Parameters.Pilot);            // Pilot
-  IGC_HeadParm("HFGTYGliderType:",    Parameters.Type, Parameters.Manuf, Parameters.Model);             // aircraft type like ASK-21
-  IGC_HeadParm("HFGIDGliderID:",      Parameters.Reg);              // aircraft registration like D-8329
-  IGC_HeadParm("HFCM2Crew2:",         Parameters.Crew);             // Crew member
-  IGC_HeadParm("HFCCLCompetitionClass:", Parameters.Class);         // competition class
-  IGC_HeadParm("HFCIDCompetitionID:", Parameters.ID);               // competition ID
+  IGC_LogHeadParm("HFPLTPilotincharge:", Parameters.Pilot);            // Pilot
+  IGC_LogHeadParm("HFGTYGliderType:",    Parameters.Type, Parameters.Manuf, Parameters.Model);             // aircraft type like ASK-21
+  IGC_LogHeadParm("HFGIDGliderID:",      Parameters.Reg);              // aircraft registration like D-8329
+  IGC_LogHeadParm("HFCM2Crew2:",         Parameters.Crew);             // Crew member
+  IGC_LogHeadParm("HFCCLCompetitionClass:", Parameters.Class);         // competition class
+  IGC_LogHeadParm("HFCIDCompetitionID:", Parameters.ID);               // competition ID
   {
 #ifdef WITH_FollowMe
     int Len=Format_String(Line, "HFRHWHardwareVersion:FollowMe");
@@ -230,7 +231,7 @@ static int IGC_Header(const GPS_Position &Pos)                      // write the
 #ifdef WITH_BME280
   IGC_LogLine("HFPRSPressAltSensor:BME280/BMP280\n");              // pressure sensor
 #endif
-  return 0; }
+}
 
 void IGC_ID(void)
 { uint32_t Time = TimeSync_Time();
@@ -261,16 +262,22 @@ static int IGC_Log(const GPS_Position &Pos)                         // log GPS p
   if(Written!=Len) IGC_Close();                                     // if not all data written then close the log
   return Written; }                                                 // return number of bytes written or (negative) error
 
-static void IGC_LogSig(const uint8_t *Dig, int DigLen, const uint8_t *Sig, int SigLen, bool Partial=0) // write SHA and Signature to the IGC log
+static int IGC_FormatLOGN(char *Out, const char *Type, const GPS_Position &GPS)
+{ int Len=Format_String(Out, "LOGN");
+  if(GPS.isTimeValid()) Len+=GPS.WriteHHMMSS(Out+Len);
+                   else Len+=Format_String(Out+Len, "      ");
+  Len+=Format_String(Out+Len, Type); return Len; }
+
+static void IGC_LogSig(const uint8_t *Dig, int DigLen, const uint8_t *Sig, int SigLen, bool Part, const GPS_Position &GPS) // write SHA and Signature to the IGC log
 { int Len=0;
-  if(Partial) Line[Len++]='L';
+  if(Part) Len+=IGC_FormatLOGN(Line+Len, "DIG ", GPS);
   Line[Len++]='G';                                               // produce G-record with SH256
   for(int Idx=0; Idx<DigLen; Idx++)                              // 32 SHA256 bytes
     Len+=Format_Hex(Line+Len, Dig[Idx]);                         // printed as hex
   Line[Len++]='\n'; Line[Len]=0;                                 // end-of-line, end-of-string
   IGC_LogLine(Line, Len);                                        // write the SHA256
   Len=0;                                                         // 2nd G-record with the signature
-  if(Partial) Line[Len++]='L';
+  if(Part) Len+=IGC_FormatLOGN(Line+Len, "SIG ", GPS);
   Line[Len++]='G';                                               // produce G-record with SH256
   for(int Idx=0; Idx<SigLen; Idx++)                              // signature bytes
     Len+=Format_Hex(Line+Len, Sig[Idx]);                         // printed as hex
@@ -278,9 +285,10 @@ static void IGC_LogSig(const uint8_t *Dig, int DigLen, const uint8_t *Sig, int S
   IGC_LogLine(Line, Len); }                                      // write the signature
 
 static void IGC_LogBATstatus(const GPS_Position &GPS)
-{ int Len=Format_String(Line, "LBAT");
-  if(GPS.isTimeValid()) Len+=GPS.WriteHHMMSS(Line+Len);
-  Line[Len++]=' ';
+{ int Len=IGC_FormatLOGN(Line, "BAT ", GPS);
+  // int Len=Format_String(Line, "LOGNBAT");
+  // if(GPS.isTimeValid()) Len+=GPS.WriteHHMMSS(Line+Len);
+  // Line[Len++]=' ';
   Len+=Format_UnsDec(Line+Len, BatteryVoltage>>8, 4, 3);        // print the battery voltage readout
   Len+=Format_String(Line+Len, "V ");
   Len+=Format_SignDec(Line+Len, (600*BatteryVoltageRate+128)>>8, 3, 1);
@@ -289,9 +297,10 @@ static void IGC_LogBATstatus(const GPS_Position &GPS)
   IGC_LogLine(Line, Len); }
 
 static void IGC_LogRFMstatus(const GPS_Position &GPS)
-{ int Len=Format_String(Line, "LRFM");
-  if(GPS.isTimeValid()) Len+=GPS.WriteHHMMSS(Line+Len);
-  Len+=Format_String(Line+Len, " Tx:");                                     //
+{ int Len=IGC_FormatLOGN(Line, "RFM Tx:", GPS);
+  // int Len=Format_String(Line, "LOGNRFM");
+  // if(GPS.isTimeValid()) Len+=GPS.WriteHHMMSS(Line+Len);
+  // Len+=Format_String(Line+Len, "Tx:");                                     //
   Len+=Format_SignDec(Line+Len, (int16_t)Parameters.TxPower);              // Tx power
   Len+=Format_String(Line+Len, "dBm ");
   Len+=Format_SignDec(Line+Len, (int16_t)TRX.chipTemp);                    // RF chip internal temperature (not calibrated)
@@ -309,10 +318,33 @@ static void IGC_LogRFMstatus(const GPS_Position &GPS)
   Line[Len++]='\n'; Line[Len]=0;                                 // end-of-line, end-of-string
   IGC_LogLine(Line, Len); }
 
+static void IGC_LogRX(const GPS_Position &GPS)
+{ uint32_t Time=0; if(GPS.isTimeValid()) Time=GPS.getUnixTime();
+  while(IGClog_FIFO.Full())
+  { int Len=IGC_FormatLOGN(Line, "RX ", GPS);
+    // int Len=Format_String(Line, "LOGNRX");
+    // if(GPS.isTimeValid()) Len+=GPS.WriteHHMMSS(Line+Len);
+    // Line[Len++]=' ';
+    OGN_RxPacket<OGN_Packet> *RxPacket=IGClog_FIFO.getRead();
+    uint8_t RxErr = RxPacket->RxErr;
+    if(RxErr<=8)
+    { Len+=RxPacket->Packet.WriteAPRS(Line+Len, Time, "OGNTRK");
+      if(RxErr) { Line[Len++]=' '; Line[Len++]='0'+RxErr; Line[Len++]='e'; }
+      Line[Len++]=' ';
+      Len+=Format_SignDec(Line+Len, -5*(int16_t)RxPacket->RxRSSI, 1, 1);
+      Len+=Format_String(Line+Len, "dBm");
+      Line[Len++]='\n'; Line[Len]=0;                                 // end-of-line, end-of-string
+      IGC_LogLine(Line, Len);
+    }
+    IGClog_FIFO.Read();
+  }
+}
+
 static void IGC_LogGPSstatus(const GPS_Position &GPS)
-{ int Len=Format_String(Line, "LGPS");
-  if(GPS.isTimeValid()) Len+=GPS.WriteHHMMSS(Line+Len);
-  Line[Len++]=' ';
+{ int Len=IGC_FormatLOGN(Line, "GPS ", GPS);
+  // int Len=Format_String(Line, "LOGNGPS");
+  // if(GPS.isTimeValid()) Len+=GPS.WriteHHMMSS(Line+Len);
+  // Line[Len++]=' ';
   if(GPS.isValid())
     Len+=Format_UnsDec(Line+Len, GPS.Satellites);
   else
@@ -339,11 +371,12 @@ static void IGC_CheckGPS(void)                                   // check if new
   const  uint8_t PosPipeIdxMask = GPS_PosPipeSize-1;                 // get the GPS position just before in the pipe
   uint8_t PosIdx = GPS_PosIdx-1; PosIdx&=PosPipeIdxMask;
   static bool PrevInFlight=0;
-  bool inFlight = GPS_Pos[PosIdx].InFlight; // Flight.inFlight();                                 // in-flight or on-the-ground ?
+  const GPS_Position &GPS = GPS_Pos[PosIdx];
+  bool inFlight = GPS.InFlight;                                      // in-flight or on-the-ground ?
   bool StopFile = PrevInFlight && !inFlight;
   PrevInFlight = inFlight;;
 #ifdef DEBUG_PRINT
-  GPS_Pos[PosIdx].PrintLine(Line);
+  GPS.PrintLine(Line);
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
   Format_String(CONS_UART_Write, "IGC_Check() [");
   CONS_UART_Write('0'+GPS_PosIdx);
@@ -354,36 +387,37 @@ static void IGC_CheckGPS(void)                                   // check if new
 #endif
   if(IGC_File)                                                       // if IGC file already open
   { if(Parameters.AcftID!=IGC_AcftID) { IGC_ID(); IGC_AcftID=Parameters.AcftID; }
-    IGC_Log(GPS_Pos[PosIdx]);                                        // log position
+    IGC_Log(GPS);                                                    // log position
+    IGC_LogRX(GPS);
     if(StopFile)                                                     // if no longer in flight
     { IGC_SHA256.Finish(IGC_Digest);                                 // complete SHA256 digest
       uint8_t *Sig = (uint8_t *)Line+256;                            // space to write the SHA and signature
       int SigLen = IGC_SignKey.Sign_MD5_SHA256(Sig, IGC_Digest, IGC_Digest_Size); // produce signature
-      IGC_LogSig(IGC_Digest, IGC_Digest_Size, Sig, SigLen, 0);
+      IGC_LogSig(IGC_Digest, IGC_Digest_Size, Sig, SigLen, 0, GPS);
       IGC_Close(); IGC_TimeStamp(); }                                // then close the IGC file
     else                                                             // if (still) in flight
     { uint32_t Time=TimeSync_Time();                                 //
       if(Time-IGC_SaveTime>=IGC_SavePeriod)                          //
-      { IGC_LogBATstatus(GPS_Pos[PosIdx]);
-        IGC_LogGPSstatus(GPS_Pos[PosIdx]);
-        IGC_LogRFMstatus(GPS_Pos[PosIdx]);
+      { IGC_LogBATstatus(GPS);
+        IGC_LogGPSstatus(GPS);
+        IGC_LogRFMstatus(GPS);
         IGC_SHA256_bck.Clone(IGC_SHA256);
         IGC_SHA256_bck.Finish(IGC_Digest);                           // complete SHA256 digest
         uint8_t *Sig = (uint8_t *)Line+256;                          // space to write the SHA and signature
         int SigLen = IGC_SignKey.Sign_MD5_SHA256(Sig, IGC_Digest, IGC_Digest_Size); // produce signature
-        IGC_LogSig(IGC_Digest, IGC_Digest_Size, Sig, SigLen, 1);
+        IGC_LogSig(IGC_Digest, IGC_Digest_Size, Sig, SigLen, 1, GPS);
         IGC_Reopen(); }                                              // re-open IGC thus close it and open it back to save the current data
     }
   }
-  else                                                               // if IGC file is not open
+  else if(GPS.isDateValid())                                         // if IGC file is not open
   { for(int Try=0; Try<8; Try++)
-    { int Err=IGC_Open(); if(Err!=(-2)) break; }                   // try to open a new IGC file but don't overwrite the old ones
-    if(IGC_File)                                                   // if open succesfully
-    { IGC_SHA256.Start();                                          // start the SHA256 calculation
-      IGC_Header(GPS_Pos[PosIdx]);                                 // then write header
+    { int Err=IGC_Open(GPS); if(Err!=(-2)) break; }                  // try to open a new IGC file but don't overwrite the old ones
+    if(IGC_File)                                                     // if open succesfully
+    { IGC_SHA256.Start();                                            // start the SHA256 calculation
+      IGC_LogHeader(GPS);                                            // then write header
       IGC_ID(); IGC_AcftID=Parameters.AcftID;
       IGC_MAC();
-      IGC_Log(GPS_Pos[PosIdx]); }                                  // log first B-record
+      IGC_Log(GPS); }                                                // log first B-record
   }
 }
 

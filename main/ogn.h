@@ -183,8 +183,8 @@ template <class OGNx_Packet=OGN1_Packet>
    { uint8_t State;       //
      struct
      { bool Saved   :1;   // has been already saved in internal storage
-       bool Ready   :1;   // is ready for transmission
-       bool Sent    :1;   // has already been transmitted out
+       bool Warn    :1;   // there is a warning associated with this packet
+       bool Spare   :1;
        bool Correct :1;   // correctly received or corrected by FEC
        uint8_t RxErr:4;   // number of bit errors corrected upon reception
      } ;
@@ -192,7 +192,7 @@ template <class OGNx_Packet=OGN1_Packet>
 
    uint8_t RxChan;        // RF channel where the packet was received
    uint8_t RxRSSI;        // [-0.5dBm]
-   uint8_t Rank;          // rank: low altitude and weak signal => high rank
+   uint8_t Rank;          // relay rank: low altitude and weak signal => high rank
 
   public:
 

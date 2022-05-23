@@ -146,7 +146,7 @@ static char GPS_Cmd[64];         // command to be send to the GPS
 
 // Satellite count and SNR per system, 0=GPS, 1=GLONASS, 2=GALILEO, 3=BEIDO
 static uint16_t SatSNRsum[4]   = { 0, 0, 0, 0 }; // sum up the satellite SNR's
-static uint8_t  SatSNRcount[4] = { 0, 0, 0, 0 }; // sum counter
+static uint8_t  SatSNRcount[4] = { 0, 0, 0, 0 }; // count entries to the sum
 
 struct GPS_Sat          // store GPS satellite data in single 32-bit word
 { union
@@ -191,6 +191,13 @@ static void ProcessGSV(NMEA_RxMsg &GSV)              // process GxGSV to extract
     SatSNRsum[SatSys]+=SNR; SatSNRcount[SatSys]++; }                                 // add up SNR
   if(Pkt==Pkts)                                                                      // if the last packet
   {
+    uint8_t Count=0; uint16_t Sum=0;
+    for(uint8_t Sys=0; Sys<4; Sys++)
+    { if(SatSNRcount[Sys]==0) continue;
+      Count+=SatSNRcount[Sys]; Sum+=SatSNRsum[Sys]; }
+    GPS_SatCnt = Count;
+    if(Count) GPS_SatSNR = (4*Sum+Count/2)/Count;
+        else  GPS_SatSNR = 0;
 #ifdef DEBUG_PRINT
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
     Format_String(CONS_UART_Write, "SatSNR[");
@@ -199,15 +206,13 @@ static void ProcessGSV(NMEA_RxMsg &GSV)              // process GxGSV to extract
     Format_UnsDec(CONS_UART_Write, SatSNRsum[SatSys]);
     CONS_UART_Write('/');
     Format_UnsDec(CONS_UART_Write, (uint16_t)SatSNRcount[SatSys]);
+    CONS_UART_Write(' ');
+    Format_UnsDec(CONS_UART_Write, (uint16_t)Sum);
+    CONS_UART_Write('/');
+    Format_UnsDec(CONS_UART_Write, (uint16_t)Count);
     Format_String(CONS_UART_Write, "\n");
     xSemaphoreGive(CONS_Mutex);
 #endif
-    uint8_t Count=0; uint16_t Sum=0;
-    for(uint8_t Sys=0; Sys<4; Sys++)
-    { Count+=SatSNRcount[Sys]; Sum+=SatSNRsum[Sys]; }
-    GPS_SatCnt = Count;
-    if(Count) GPS_SatSNR = (4*Sum+Count/2)/Count;
-        else  GPS_SatSNR = 0;
   }
 }
 

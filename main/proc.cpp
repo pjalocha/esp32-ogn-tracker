@@ -339,13 +339,21 @@ static uint8_t WritePFLAU(char *NMEA, uint8_t GPS=1)    // produce the (mostly d
 
 static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacketIdx, uint32_t RxTime)  // process every (correctly) received packet
 { int32_t LatDist=0, LonDist=0; uint8_t Warn=0;
-  if( RxPacket->Packet.Header.NonPos /* || RxPacket->Packet.Header.Encrypted */ ) return ;   // status packet or encrypted: ignore
+  if( RxPacket->Packet.Header.NonPos)                                                 // status or info packet
+  {
+#ifdef WITH_SDLOG
+    IGClog_FIFO.Write(*RxPacket);
+#endif
+    return ; }
   uint8_t MyOwnPacket = ( RxPacket->Packet.Header.Address  == Parameters.Address  )
                      && ( RxPacket->Packet.Header.AddrType == Parameters.AddrType );
   if(MyOwnPacket) return;                                                             // don't process my own (relayed) packets
   if(RxPacket->Packet.Header.Encrypted && RxPacket->RxErr<10)                         // here we attempt to relay encrypted packets
   { RxPacket->calcRelayRank(GPS_Altitude/10);
     OGN_RxPacket<OGN_Packet> *PrevRxPacket = RelayQueue.addNew(RxPacketIdx);          // add to the relay queue and get the previous packet of same ID
+#ifdef WITH_SDLOG
+    IGClog_FIFO.Write(*RxPacket);
+#endif
     return; }
   bool DistOK = RxPacket->Packet.calcDistanceVector(LatDist, LonDist, GPS_Latitude, GPS_Longitude, GPS_LatCosine)>=0;
   if(DistOK)
@@ -372,6 +380,7 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
 #ifdef WITH_LOOKOUT
     const LookOut_Target *Tgt=Look.ProcessTarget(RxPacket->Packet);                   // process the received target postion
     if(Tgt) Warn=Tgt->WarnLevel;                                                      // remember warning level of this target
+    RxPacket->Warn = Warn>0;
 #ifdef WITH_GDL90
     if(Tgt)
     { Look.Write(GDL_REPORT, Tgt);                                                    // produce GDL90 report for this target
@@ -394,6 +403,9 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
 #endif
 #ifdef WITH_LOG
      if(Signif) FlashLog(RxPacket, RxTime);                                          // log only significant packets
+#endif
+#ifdef WITH_SDLOG
+     if(Signif || Warn) IGClog_FIFO.Write(*RxPacket);
 #endif
 #ifdef WITH_PFLAA
     if( Parameters.Verbose                                                           // print PFLAA on the console for received packets
