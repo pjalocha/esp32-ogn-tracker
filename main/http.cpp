@@ -54,6 +54,27 @@ static void End_Control_Row(httpd_req_t *Req)
 {
   httpd_resp_sendstr_chunk(Req, "\n</div></div>\n");
 }
+static void Page_Control_Row(httpd_req_t *Req, const char *Name, const int Index, const char *IndexChar)
+{
+  Begin_Control_Row(Req, Name);
+  
+  httpd_resp_sendstr_chunk(Req, "<span class=\"page-checkbox\"><input type=\"checkbox\" onclick=\"pageCheckbox(this)\" class=\"page-checkbox-input\"");
+  if ( ((Parameters.PageMask>>Index)&1) != 0 ) {
+    httpd_resp_sendstr_chunk(Req, " checked");
+  }
+  httpd_resp_sendstr_chunk(Req, "/></span>\n\
+    <span><input type=\"radio\" name=\"InitialPage\" class=\"initialpage-radio-input\" value=\"");
+  httpd_resp_sendstr_chunk(Req, IndexChar);
+  httpd_resp_sendstr_chunk(Req, "\"");
+  if ( (uint8_t)Parameters.InitialPage == Index ) {
+    httpd_resp_sendstr_chunk(Req, " checked");
+  }
+  if ( ((Parameters.PageMask>>Index)&1) == 0 ) {
+    httpd_resp_sendstr_chunk(Req, " disabled");
+  }
+  httpd_resp_sendstr_chunk(Req, "/></span>\n");
+  End_Control_Row(Req);
+}
 
 // HTML form for the Info parameters
 static void ParmForm_Info(httpd_req_t *Req)
@@ -103,7 +124,7 @@ static void ParmForm_Info(httpd_req_t *Req)
   httpd_resp_sendstr_chunk(Req, "\">");
   End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Apply\"></div>\n");
+  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Save\"></div>\n");
   httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 
 // HTML form for the Aircraft identification: address, address-type, aircraft-type
@@ -131,7 +152,7 @@ static void ParmForm_Acft(httpd_req_t *Req)
   SelectList(Req, "AcftType", AcftTypeTable, 16, Parameters.AcftType);
   End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Apply\"></div>\n");
+  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Save\"></div>\n");
   httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 
 static void ParmForm_GPS(httpd_req_t *Req)  // produce HTML form for GPS parameters
@@ -188,7 +209,7 @@ static void ParmForm_GPS(httpd_req_t *Req)  // produce HTML form for GPS paramet
   httpd_resp_sendstr_chunk(Req, "\">");
   End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Apply\"></div>\n");
+  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Save\"></div>\n");
   httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 
 static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for parameters not included in other forms
@@ -224,27 +245,62 @@ static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for parameter
   End_Control_Row(Req);
 
   Begin_Control_Row(Req, "Verbose");
-  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"Verbose\" size=\"10\" value=\"");
-  Len=Format_UnsDec(Line, (uint16_t)Parameters.Verbose);
-  httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\">");
+  const char *VerboseTable[2] = { "0 (off)", "1 (on)" };
+  SelectList(Req, "Verbose", VerboseTable, 2, Parameters.Verbose);
   End_Control_Row(Req);
 
-  Begin_Control_Row(Req, "Page sel. mask");
-  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"PageMask\" size=\"10\" value=\"0x");
-  Len=Format_Hex(Line, Parameters.PageMask);
+  Begin_Control_Row(Req, "Pages");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"hidden\" name=\"PageMask\" value=\"");
+  Len=Format_UnsDec(Line, (uint8_t)Parameters.PageMask);
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "\">");
+  httpd_resp_sendstr_chunk(Req, "<span class=\"page-checkbox\">Show</span><span>Initial Page</span>");
   End_Control_Row(Req);
 
-  Begin_Control_Row(Req, "Initial Page");
-  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"InitialPage\" size=\"10\" value=\"");
-  Len=Format_UnsDec(Line, (uint8_t)Parameters.InitialPage);
-  httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\">");
-  End_Control_Row(Req);
+  Page_Control_Row(Req, "ID", 0, "0");
+  Page_Control_Row(Req, "GPS", 1, "1");
+  Page_Control_Row(Req, "RF", 2, "2");
+  Page_Control_Row(Req, "Baro", 3, "3");
+  Page_Control_Row(Req, "System", 4, "4");
+  Page_Control_Row(Req, "Battery", 5, "5");
+  Page_Control_Row(Req, "AltitudeAndSpeed", 6, "6");
+  Page_Control_Row(Req, "Relay", 7, "7");
+  Page_Control_Row(Req, "Lookout", 8, "8");
+  Page_Control_Row(Req, "TrafWarn", 9, "9");
+  Page_Control_Row(Req, "Flight", 10, "10");
+  Page_Control_Row(Req, "LoRaWAN", 11, "11");
 
-  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Apply\"></div>\n");
+
+  httpd_resp_sendstr_chunk(Req, "<script>\n\
+function pageCheckbox(checkbox) {\n\
+  // console.log(\"pageCheckbox\", checkbox.checked);\n\
+  var initalPageRadio = checkbox.parentNode.parentNode.querySelector(\"input.initialpage-radio-input\");\n\
+  initalPageRadio.disabled = (checkbox.checked != true)\n\
+  if ( initalPageRadio.disabled && initalPageRadio.checked ) {\n\
+    initalPageRadio.checked = false\n\
+    var firstEnabledPage = document.querySelector(\"input.initialpage-radio-input:not([disabled])\");\n\
+    if ( firstEnabledPage ) {\n\
+      firstEnabledPage.checked = true\n\
+    }\n\
+  }\n\
+  if ( document.querySelectorAll(\"input.initialpage-radio-input:not([disabled])\").length === 0 ) {\n\
+    document.querySelector(\"input.initialpage-radio-input\").checked = true\n\
+    document.querySelector(\"input.page-checkbox-input\").click()\n\
+  }\n\
+  var pagez = [];\n\
+  document.querySelectorAll(\"input.page-checkbox-input\").forEach(function(checkbox) {\n\
+    pagez.push( checkbox.checked ? \"1\" : \"0\" );\n\
+  });\n\
+  var binary = pagez.reverse().join(\"\")\n\
+  var hexa = \"0x0\" + parseInt(binary, 2).toString(16).toUpperCase();\n\
+\n\
+  document.querySelector(\"input[name=PageMask]\").value = hexa;\n\
+  // console.log(\"pagez\", pagez, binary, hexa)\n\
+}\n\
+</script>\n");
+
+
+  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Save\"></div>\n");
   httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 
 #ifdef WITH_STRATUX
@@ -293,7 +349,7 @@ static void ParmForm_Stratux(httpd_req_t *Req) // Connection to Stratux WiFi par
   httpd_resp_sendstr_chunk(Req, "\">");
   End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Apply\"></div>\n");
+  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Save\"></div>\n");
   httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 #endif
 
@@ -337,7 +393,7 @@ static void ParmForm_AP(httpd_req_t *Req) // Wi-Fi access point parameters { cha
   httpd_resp_sendstr_chunk(Req, "\">");
   End_Control_Row(Req);
 
-  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Apply\"></div>\n");
+  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Save\"></div>\n");
   httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 #endif
 
@@ -677,7 +733,8 @@ h2 {margin: 0.7em 0 0.3em 0;}\n\
 #top-menu > div > a,#top-menu > div > a:link {padding: 10px;display: block;color: #000000;}\n\
 #top-menu > div > a.active, #top-menu > div > a:hover {color: #f3f3f3;background: #2d2d2d;}\n\
 #content {padding-bottom: 30px;}\n\
-.table{border-collapse:collapse;border-spacing:0;empty-cells:show;border:1px solid #cbcbcb}.table td,.table th{border-left:1px solid #cbcbcb;border-bottom-width:0;border-right-width:0;border-top-width:0;font-size:inherit;margin:0;padding:6px;overflow:visible}.table thead{background-color:#e0e0e0;color:#000;text-align:left;vertical-align:bottom}.table td{background-color:transparent}.table-striped tr:nth-child(2n-1) td{background-color:#f2f2f2}.table-bordered td{border-bottom:1px solid #cbcbcb}.table-bordered tbody>tr:last-child>td{border-bottom-width:0}form{margin:0 0 20px 0}form .control-row{display:flex;margin:6px 0}form .control-row label{width:120px;text-align:right;margin-right:8px;display:block;font-weight:700}form .submit-row{padding-left:128px}\n\
+.table{border-collapse:collapse;border-spacing:0;empty-cells:show;border:1px solid #cbcbcb}.table td,.table th{border-left:1px solid #cbcbcb;border-bottom-width:0;border-right-width:0;border-top-width:0;font-size:inherit;margin:0;padding:6px;overflow:visible}.table thead{background-color:#e0e0e0;color:#000;text-align:left;vertical-align:bottom}.table td{background-color:transparent}.table-striped tr:nth-child(2n-1) td{background-color:#f2f2f2}.table-bordered td{border-bottom:1px solid #cbcbcb}.table-bordered tbody>tr:last-child>td{border-bottom-width:0}form{margin:0 0 20px 0;border-bottom: 1px solid;padding: 12px}form .control-row{display:flex;margin:6px 0}form .control-row label{width:120px;text-align:right;margin-right:8px;display:block;font-weight:700}form .submit-row{padding-left:128px}\n\
+.page-checkbox{width:50px;display:inline-block}\n\
 </style>\
 </head>\n\
 <body>\n\
