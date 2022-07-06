@@ -130,6 +130,9 @@ class FlashParameters
      struct
      { uint32_t PageMask:27;                          // enable/disable individual pages on the LCD or OLED screen
        uint8_t InitialPage:5;                         // the first page to show after boot
+       uint8_t AltitudeUnit:2;                        // 0=meter, 1=feet
+       uint8_t SpeedUnit:2;                           // 0=km/h, 1=knot
+       uint8_t VarioUnit:2;                           // 0=m/s, 1=feet/minute
      } ;
    } ;
 
@@ -269,6 +272,9 @@ uint16_t StratuxPort;
     PPSdelay       =    DEFAULT_PPSdelay; // [ms]
     PageMask       =    0xFF;
     InitialPage    =       0;
+    AltitudeUnit   =       0;  // meter
+    SpeedUnit      =       0;  // km/h
+    VarioUnit      =       0;  // m/s
     for(uint8_t Idx=0; Idx<InfoParmNum; Idx++)
       InfoParmValue(Idx)[0] = 0;
 #ifdef WITH_LORAWAN
@@ -686,6 +692,15 @@ uint16_t StratuxPort;
     if(strcmp(Name, "InitialPage")==0)
     { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
       InitialPage=Mode; return 1; }
+    if(strcmp(Name, "AltitudeUnit")==0)
+    { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
+      AltitudeUnit=Mode; return 1; }
+    if(strcmp(Name, "SpeedUnit")==0)
+    { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
+      SpeedUnit=Mode; return 1; }
+    if(strcmp(Name, "VarioUnit")==0)
+    { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
+      VarioUnit=Mode; return 1; }
     if(strcmp(Name, "Verbose")==0)
     { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
       Verbose=Mode; return 1; }
@@ -871,6 +886,9 @@ uint16_t StratuxPort;
     Write_Hex    (Line, "GNSS"  ,         (uint32_t)GNSS,      2); strcat(Line, " #  [ mask]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Hex    (Line, "PageMask" ,      (uint32_t)PageMask,  4); strcat(Line, " #  [ mask]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_UnsDec (Line, "InitialPage" ,   (uint32_t)InitialPage ); strcat(Line, " #  [     ]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_UnsDec (Line, "AltitudeUnit",   (uint32_t)AltitudeUnit); strcat(Line, " #  [     ]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_UnsDec (Line, "SpeedUnit",      (uint32_t)SpeedUnit);    strcat(Line, " #  [     ]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_UnsDec (Line, "VarioUnit",      (uint32_t)VarioUnit);    strcat(Line, " #  [     ]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_UnsDec (Line, "PPSdelay"  ,     (uint32_t)PPSdelay    ); strcat(Line, " #  [   ms]\n"); if(fputs(Line, File)==EOF) return EOF;
 #ifdef WITH_BT_PWR
     Write_UnsDec (Line, "Bluetooth" ,          BT_ON            ); strcat(Line, " #  [  1|0]\n"); if(fputs(Line, File)==EOF) return EOF;
@@ -939,6 +957,9 @@ uint16_t StratuxPort;
     Write_Hex    (Line, "GNSS"     ,      (uint32_t)GNSS    ,  2); strcat(Line, " #  [ mask]\n"); Format_String(Output, Line);
     Write_Hex    (Line, "PageMask" ,      (uint32_t)PageMask,  4); strcat(Line, " #  [ mask]\n"); Format_String(Output, Line);
     Write_UnsDec (Line, "InitialPage" ,   (uint32_t)InitialPage ); strcat(Line, " #  [     ]\n"); Format_String(Output, Line);
+    Write_UnsDec (Line, "AltitudeUnit" ,  (uint32_t)AltitudeUnit); strcat(Line, " #  [     ]\n"); Format_String(Output, Line);
+    Write_UnsDec (Line, "SpeedUnit" ,     (uint32_t)SpeedUnit);    strcat(Line, " #  [     ]\n"); Format_String(Output, Line);
+    Write_UnsDec (Line, "VarioUnit" ,     (uint32_t)VarioUnit);    strcat(Line, " #  [     ]\n"); Format_String(Output, Line);
     Write_UnsDec (Line, "PPSdelay" ,      (uint32_t)PPSdelay    ); strcat(Line, " #  [   ms]\n"); Format_String(Output, Line);
 #ifdef WITH_BT_PWR
     Write_UnsDec (Line, "Bluetooth" ,          BT_ON            ); strcat(Line, " #  [  1|0]\n"); Format_String(Output, Line);

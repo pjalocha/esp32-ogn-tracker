@@ -212,41 +212,25 @@ static void ParmForm_GPS(httpd_req_t *Req)  // produce HTML form for GPS paramet
   httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Save\"></div>\n");
   httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 
-static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for parameters not included in other forms
+static void ParmForm_Page(httpd_req_t *Req)  // produce HTML form for parameters not included in other forms
 { char Line[16]; int Len;
 
-  httpd_resp_sendstr_chunk(Req, "<h2>Other</h2>");
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"POST\" id=\"Other\">\n");
+  httpd_resp_sendstr_chunk(Req, "<h2>Pages</h2>");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"POST\" id=\"Pages\">\n");
 
-  Begin_Control_Row(Req, "Freq. plan");
-  const char *FreqPlanTable[6] = { "Auto", "Europe/Africa", "USA/Canada", "Australia/Chile", "New Zeeland", "Izrael" };
-  SelectList(Req, "FreqPlan", FreqPlanTable, 6, Parameters.FreqPlan);
+  Begin_Control_Row(Req, "Altitude Unit");
+  const char *AltitudeUnitTable[2] = { "meter", "feet" } ;
+  SelectList(Req, "AltitudeUnit", AltitudeUnitTable, 2, Parameters.AltitudeUnit);
   End_Control_Row(Req);
 
-  Begin_Control_Row(Req, "Tx power [dBm]");
-  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"TxPower\" size=\"10\" value=\"");
-  Len=Format_SignDec(Line, (int16_t)Parameters.TxPower, 1, 0, 1);
-  httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\">");
+  Begin_Control_Row(Req, "Speed Unit");
+  const char *SpeedUnitTable[2] = { "km/h", "knot" } ;
+  SelectList(Req, "SpeedUnit", SpeedUnitTable, 2, Parameters.SpeedUnit);
   End_Control_Row(Req);
 
-  Begin_Control_Row(Req, "Freq.corr. [ppm]");
-  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"RFchipFreqCorr\" size=\"10\" value=\"");
-  Len=Format_SignDec(Line, Parameters.RFchipFreqCorr, 2, 1, 1);
-  httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\">");
-  End_Control_Row(Req);
-
-  Begin_Control_Row(Req, "Console baud");
-  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"CONbaud\" size=\"10\" value=\"");
-  Len=Format_UnsDec(Line, Parameters.CONbaud);
-  httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\">");
-  End_Control_Row(Req);
-
-  Begin_Control_Row(Req, "Verbose");
-  const char *VerboseTable[2] = { "0 (off)", "1 (on)" };
-  SelectList(Req, "Verbose", VerboseTable, 2, Parameters.Verbose);
+  Begin_Control_Row(Req, "Vario Unit");
+  const char *VarioUnitTable[2] = { "m/s", "fpm" } ;
+  SelectList(Req, "VarioUnit", VarioUnitTable, 2, Parameters.VarioUnit);
   End_Control_Row(Req);
 
   Begin_Control_Row(Req, "Pages");
@@ -299,6 +283,45 @@ function pageCheckbox(checkbox) {\n\
 }\n\
 </script>\n");
 
+  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Save\"></div>\n");
+  httpd_resp_sendstr_chunk(Req, "</form>\n"); }
+
+static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for parameters not included in other forms
+{ char Line[16]; int Len;
+
+  httpd_resp_sendstr_chunk(Req, "<h2>Other</h2>");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"POST\" id=\"Other\">\n");
+
+  Begin_Control_Row(Req, "Freq. plan");
+  const char *FreqPlanTable[6] = { "Auto", "Europe/Africa", "USA/Canada", "Australia/Chile", "New Zeeland", "Izrael" };
+  SelectList(Req, "FreqPlan", FreqPlanTable, 6, Parameters.FreqPlan);
+  End_Control_Row(Req);
+
+  Begin_Control_Row(Req, "Tx power [dBm]");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"TxPower\" size=\"10\" value=\"");
+  Len=Format_SignDec(Line, (int16_t)Parameters.TxPower, 1, 0, 1);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
+
+  Begin_Control_Row(Req, "Freq.corr. [ppm]");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"RFchipFreqCorr\" size=\"10\" value=\"");
+  Len=Format_SignDec(Line, Parameters.RFchipFreqCorr, 2, 1, 1);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
+
+  Begin_Control_Row(Req, "Console baud");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"CONbaud\" size=\"10\" value=\"");
+  Len=Format_UnsDec(Line, Parameters.CONbaud);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
+
+  Begin_Control_Row(Req, "Verbose");
+  const char *VerboseTable[2] = { "0 (off)", "1 (on)" };
+  SelectList(Req, "Verbose", VerboseTable, 2, Parameters.Verbose);
+  End_Control_Row(Req);
 
   httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Save\"></div>\n");
   httpd_resp_sendstr_chunk(Req, "</form>\n"); }
@@ -842,6 +865,8 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
 #ifdef WITH_STRATUX
   ParmForm_Stratux(Req);
 #endif
+  ParmForm_Page(Req);
+
   ParmForm_Other(Req);
 
   ParmForm_Restart(Req);
