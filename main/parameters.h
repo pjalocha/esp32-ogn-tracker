@@ -128,7 +128,7 @@ class FlashParameters
    union
    { uint32_t Page;
      struct
-     { uint32_t PageMask:27;                          // enable/disable individual pages on the LCD or OLED screen
+     { uint32_t PageMask:21;                          // enable/disable individual pages on the LCD or OLED screen
        uint8_t InitialPage:5;                         // the first page to show after boot
        uint8_t AltitudeUnit:2;                        // 0=meter, 1=feet
        uint8_t SpeedUnit:2;                           // 0=km/h, 1=knot
