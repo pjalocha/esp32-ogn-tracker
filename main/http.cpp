@@ -420,7 +420,14 @@ static void ParmForm_AP(httpd_req_t *Req) // Wi-Fi access point parameters { cha
   httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 #endif
 
-
+static void ParmForm_Defaults(httpd_req_t *Req)
+{
+  httpd_resp_sendstr_chunk(Req, "\
+<form action=\"/parm.html\" method=\"POST\" onsubmit=\"return confirm('Are you sure to restore default configuration?')\">\n\
+<input type=\"submit\" value=\"Restore Default Configuration\">\n\
+<input type=\"hidden\" name=\"Defaults\" value=\"1\">\n\
+</form>\n");
+}
 
 static void ParmForm_Restart(httpd_req_t *Req)
 {
@@ -794,6 +801,7 @@ static void Html_End(httpd_req_t *Req)
 static esp_err_t parm_post_handler(httpd_req_t *Req)
 {
   bool Restart=0;
+  bool Defaults=0;
   /* Destination buffer for content of HTTP POST request.
    * httpd_req_recv() accepts char* only, but content could
    * as well be any binary data (needs type casting).
@@ -829,12 +837,16 @@ static esp_err_t parm_post_handler(httpd_req_t *Req)
 #endif
   char *Line=URL;
   Restart = strstr(Line,"Restart=1");
+  Defaults = strstr(Line,"Defaults=1");
   for( ; ; )
   { Parameters.ReadLine(Line);
     Line = strchr(Line, '&'); if(Line==0) break;
     Line++; }
   free(URL);
   Parameters.WriteToNVS();
+
+  if(Defaults)
+  { Parameters.setDefault(); }
 
   if(Restart)
   {
@@ -868,6 +880,8 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
   ParmForm_Page(Req);
 
   ParmForm_Other(Req);
+
+  ParmForm_Defaults(Req);
 
   ParmForm_Restart(Req);
 
