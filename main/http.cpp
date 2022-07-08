@@ -440,6 +440,184 @@ static void ParmForm_Restart(httpd_req_t *Req)
 
 // ============================================================================================================
 
+
+
+static void Table_System(httpd_req_t *Req)
+{ char Line[128]; int Len;
+  uint32_t Time=TimeSync_Time();
+  uint32_t Sec = (Time-1)%60;
+  GPS_Position *GPS = GPS_getPosition(Sec); if(GPS==0) return;
+
+  httpd_resp_sendstr_chunk(Req, "<h2>System</h2>");
+  httpd_resp_sendstr_chunk(Req, "<table class=\"table table-striped table-bordered\">\n");
+
+
+  Len =Format_String(Line, "<tr><td>Board</td><td align=\"right\">");
+#ifdef WITH_FollowMe
+  Len+=Format_String(Line+Len, "FollowMe");
+#endif
+#ifdef WITH_TTGO
+  Len+=Format_String(Line+Len, "TTGO");
+#endif
+#if defined(WITH_HELTEC) || defined(WITH_HELTEC_V2)
+  Len+=Format_String(Line+Len, "HELTEC");
+#endif
+#if defined(WITH_TBEAM) || defined(WITH_TBEAM_V10)
+  Len+=Format_String(Line+Len, "T-BEAM");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Display</td><td align=\"right\">");
+#ifdef WITH_ILI9341                        // 320x240 M5stack
+  Len+=Format_String(Line+Len, "ILI9341");
+#endif
+#ifdef WITH_ST7789                         // IPS 240x240 ST7789
+  Len+=Format_String(Line+Len, "ST7789");
+#endif
+#ifdef WITH_TFT_LCD                       // TFT LCD
+  Len+=Format_String(Line+Len, "TFT_LCD");
+#endif
+#ifdef WITH_OLED                          // OLED display on the I2C: some TTGO modules are without OLED display
+  Len+=Format_String(Line+Len, "OLED");
+#endif
+#ifdef WITH_OLED2                         // 2nd OLED display, I2C address next higher
+  Len+=Format_String(Line+Len, "<br>OLED2");
+#endif
+#ifdef WITH_U8G2_OLED                     // I2C OLED through the U8g2 library
+  Len+=Format_String(Line+Len, "U8G2_OLED");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+
+
+  Len =Format_String(Line, "<tr><td>GPS</td><td align=\"right\">");
+#ifdef WITH_GPS_MTK
+  Len+=Format_String(Line+Len, "MTK GPS");
+#endif
+#ifdef WITH_GPS_UBX
+  Len+=Format_String(Line+Len, "UBX GPS");
+#endif
+#ifdef WITH_GPS_SRF
+  Len+=Format_String(Line+Len, "SRF GPS");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Radio</td><td align=\"right\">");
+#ifdef WITH_RFM95
+  Len+=Format_String(Line+Len, "RFM95");
+#endif
+#ifdef WITH_RFM69
+  Len+=Format_String(Line+Len, "RFM69");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Baro</td><td align=\"right\">");
+#ifdef WITH_BMP180
+  Len+=Format_String(Line+Len, "BMP180");
+#endif
+#ifdef WITH_BMP280
+  Len+=Format_String(Line+Len, "BMP280");
+#endif
+#ifdef WITH_BME280
+  Len+=Format_String(Line+Len, "BME280");
+#endif
+#ifdef WITH_MS5607
+  Len+=Format_String(Line+Len, "MS5607");
+#endif
+#ifdef WITH_MS5611
+  Len+=Format_String(Line+Len, "MS5611");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Bluetooth serial port</td><td align=\"right\">");
+#ifdef WITH_BT_SPP
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>LoRaWAN</td><td align=\"right\">");
+#ifdef WITH_LORAWAN
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Digital Buzzer</td><td align=\"right\">");
+#ifdef WITH_BEEPER
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Analog Sound</td><td align=\"right\">");
+#ifdef WITH_SOUND
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>SD Card</td><td align=\"right\">");
+#ifdef WITH_SD
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>SPIFFS</td><td align=\"right\">");
+#ifdef WITH_SPIFFS
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>WiFi</td><td align=\"right\">");
+#ifdef WITH_WIFI
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Access Point (wifi)</td><td align=\"right\">");
+#ifdef WITH_AP
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Encrypt</td><td align=\"right\">");
+#ifdef WITH_ENCRYPT
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+
+  httpd_resp_sendstr_chunk(Req, "</table>\n"); }
+
 static void Table_GPS(httpd_req_t *Req)
 { char Line[128]; int Len;
   uint32_t Time=TimeSync_Time();
@@ -899,6 +1077,7 @@ static esp_err_t top_get_handler(httpd_req_t *Req)
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "</b><br />\n");
 
+  Table_System(Req);
   Table_GPS(Req);
   Table_RF(Req);
   Table_Batt(Req);
