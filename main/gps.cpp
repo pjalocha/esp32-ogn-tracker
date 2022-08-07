@@ -66,6 +66,8 @@ static   TickType_t Burst_Tick;            // [msec] System Tick when the data b
          uint16_t   GPS_SatSNR = 0;        // [0.25dB] average SNR from the GSV sentences
          uint8_t    GPS_SatCnt = 0;
 
+         uint8_t    GPS_Satellites = 0;    // number of satellites in the solution, zero when no lock
+
          Status     GPS_Status;            // GPS status flags
 
 static union
@@ -190,8 +192,7 @@ static void ProcessGSV(NMEA_RxMsg &GSV)              // process GxGSV to extract
     int8_t SNR =Read_Dec2((const char *)GSV.ParmPtr(Parm++)); if(SNR<=0) continue;   // [dB] SNR or absent when not tracked
     SatSNRsum[SatSys]+=SNR; SatSNRcount[SatSys]++; }                                 // add up SNR
   if(Pkt==Pkts)                                                                      // if the last packet
-  {
-    uint8_t Count=0; uint16_t Sum=0;
+  { uint8_t Count=0; uint16_t Sum=0;
     for(uint8_t Sys=0; Sys<4; Sys++)
     { if(SatSNRcount[Sys]==0) continue;
       Count+=SatSNRcount[Sys]; Sum+=SatSNRsum[Sys]; }
@@ -526,6 +527,7 @@ static void GPS_BurstComplete(void)                                        // wh
 #endif
       }
     }
+    GPS_Satellites=GPS_Pos[GPS_PosIdx].Satellites;
     if(GPS_Pos[GPS_PosIdx].isValid())                                         // position is complete and locked
     { if(Parameters.manGeoidSepar)                                            // if GeoidSepar is "manual" - this implies the GPS does not correct for it
       { GPS_Pos[GPS_PosIdx].GeoidSeparation = Parameters.GeoidSepar;          // copy the manually set GeoidSepar
