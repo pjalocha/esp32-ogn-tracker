@@ -378,7 +378,7 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
 //     Format_String(CONS_UART_Write, Line, 0, Len);
 //     xSemaphoreGive(CONS_Mutex);
 #ifdef WITH_LOOKOUT
-    const LookOut_Target *Tgt=Look.ProcessTarget(RxPacket->Packet);                   // process the received target postion
+    const LookOut_Target *Tgt=Look.ProcessTarget(RxPacket->Packet, RxTime);           // process the received target postion
     if(Tgt) Warn=Tgt->WarnLevel;                                                      // remember warning level of this target
     RxPacket->Warn = Warn>0;
 #ifdef WITH_GDL90
@@ -396,7 +396,7 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
     if(KNOB_Tick>12) Play(Play_Vol_1 | Play_Oct_2 | 7, 3);                            // if Knob>12 => make a beep for every received packet
 #endif
 #endif // WITH_LOOKOUT
-     bool Signif = PrevRxPacket!=0;
+     bool Signif = PrevRxPacket==0;
      if(!Signif) Signif=OGN_isSignif(&(RxPacket->Packet), &(PrevRxPacket->Packet));  // compare against previous packet of same ID from the relay queue
 #ifdef WITH_APRS
      if(Signif) APRSrx_FIFO.Write(*RxPacket);                                        // APRS queue for received packets
@@ -659,7 +659,7 @@ void vTaskPROC(void* pvParameters)
         FNTbackOff = 8+(RX_Random&0x1); }                                   // every 9 or 10sec
 #endif // WITH_FANET
 #ifdef WITH_LOOKOUT
-      const LookOut_Target *Tgt=Look.ProcessOwn(PosPacket.Packet);        // process own position, get the most dangerous target
+      const LookOut_Target *Tgt=Look.ProcessOwn(PosPacket.Packet, PosTime); // process own position, get the most dangerous target
 #ifdef WITH_PFLAA
       if(Parameters.Verbose)
       { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);

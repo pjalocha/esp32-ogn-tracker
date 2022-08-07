@@ -133,6 +133,13 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      unsigned int BaroAltDiff: 8; // [m]              // lower 8 bits of the altitude difference between baro and GPS
    } Wind;
 
+   struct
+   {      uint8_t Data[14];                           // up to 14 bytes od specific data
+     unsigned int DataLen   : 4;                      // 0..14 number of bytes in the message
+     unsigned int ReportType: 4;                      // 15 for the manufacturer specific mesage
+     unsigned int ManufID   : 8;                      // Manufacturer identification: 0 for Cube-Board
+   } ManufMsg;                                        // manufacturer-specific message
+
   } ;
 
    uint8_t  *Byte(void) const { return (uint8_t  *)&HeaderWord; } // packet as bytes
@@ -147,6 +154,14 @@ class OGN1_Packet          // Packet structure for the OGN tracker
                                                   return Idx<InfoParmNum ? Name[Idx]:0; }
 
 #ifndef __AVR__
+
+   uint32_t getTime(uint32_t RefTime, int FwdMargin=5) const
+   { if(Position.Time>=60) return 0;
+     int Sec=RefTime%60;
+     int DiffSec=Position.Time-Sec;
+     if(DiffSec>FwdMargin) DiffSec-=60;  // difference should always be zero or negative, but can be small positive for predicted positions
+     else if(DiffSec<=(-60+FwdMargin)) DiffSec+=60;
+     return RefTime+DiffSec; }           // get out the correct position time
 
    void Dump(void) const
    { printf("%08lX: %08lX %08lX %08lX %08lX\n",
@@ -237,10 +252,18 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      Idx+=Chars; }
      Out[Len]=0; return Len; }
 */
+   void setStatus  (void) { Status.ReportType=0; }
+   void setInfo    (void) { Status.ReportType=1; }
+   void setManufMsg(void) { Status.ReportType=15; }
+
+   bool isStatus  (void) const { return Status.ReportType==0; }
+   bool isInfo    (void) const { return Status.ReportType==1; }
+   bool isManufMsg(void) const { return Status.ReportType==15; }
+
    void Print(void) const
    { if(!Header.NonPos) { PrintPosition(); return; }
-     if(Status.ReportType==0) { PrintDeviceStatus(); return; }
-     if(Status.ReportType==1) { PrintDeviceInfo(); return; }
+     if(isStatus()) { PrintDeviceStatus(); return; }
+     if(isInfo  ()) { PrintDeviceInfo(); return; }
    }
 
    void PrintDeviceInfo(void) const
@@ -286,6 +309,13 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      printf("\n");
    }
 
+   int DecodePosition(float &Lat, float &Lon, int &Alt)
+   { if(Header.NonPos) return 0;
+     Lat = (0.0001f/60)*DecodeLatitude();
+     Lon = (0.0001f/60)*DecodeLongitude();
+     Alt = DecodeAltitude();
+     return 3; }
+
    int WriteStxJSON(char *JSON) const                              // Stratux JSON message
    { int Len=0;
      Len+=Format_String(JSON+Len, "\"addr\":\"");
@@ -329,10 +359,10 @@ class OGN1_Packet          // Packet structure for the OGN tracker
          Len+=Format_SignDec(JSON+Len, DecodeTurnRate(), 2, 1, 1); }
        Len+=Format_String(JSON+Len, ",\"DOP\":");
        Len+=Format_UnsDec(JSON+Len, 10+DecodeDOP(), 2, 1); }
-     if(!Header.Encrypted && Header.NonPos)                         // non-encrypted status and info
-     { if(Status.ReportType==0)                                     // status
+     else if(!Header.Encrypted && Header.NonPos)                         // non-encrypted status and info
+     { if(isStatus())                                                    // status
        { }
-       if(Status.ReportType==1)                                     // info
+       else if(isInfo())                                                 // info
        { char Value[16];
          uint8_t InfoType;
          uint8_t Idx=0;
@@ -407,7 +437,7 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      return AcftType<16 ? AprsIcon[AcftType]:0;
    }
 
-   int8_t ReadAPRS(const char *Msg)                                                 // read an APRS position message
+   int ReadAPRS(const char *Msg)                                                 // read an APRS position message
    { Clear();
 
      const char *Data  = strchr(Msg, ':'); if(Data==0) return -1; // where the time/position data starts
@@ -435,14 +465,21 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      }
 
      if(Data[0]!='/') return -1;
-     int8_t Time;
+     int Sec, Min, Hour;
      if(Data[7]=='h')                                            // HHMMSS UTC time
-     { Time=Read_Dec2(Data+5); if(Time<0) return -1; }
+     { Sec =Read_Dec2(Data+5); if(Sec<0)  return -1;
+       Min =Read_Dec2(Data+3); if(Min<0)  return -1;
+       Hour=Read_Dec2(Data+1); if(Hour<0) return -1;
+     }
      else if(Data[7]=='z')                                       // DDHHMM UTC time
-     { Time=0; }
+     { Sec =0;
+       Min =Read_Dec2(Data+5); if(Min<0)  return -1;
+       Hour=Read_Dec2(Data+3); if(Hour<0) return -1;
+     }
      else return -1;
 
-     Position.Time=Time;
+     int Time = Sec + Min*60 + Hour*3600;
+     Position.Time=Sec;
      Data+=8;
 
      Position.FixMode=1;
@@ -528,7 +565,7 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      if(LonSign=='W') Longitude=(-Longitude); else if(LonSign!='E') return -1;
      EncodeLongitude(Longitude);
 
-     return 0; }
+     return Time; }                                  // [sec] return Time-of-Day
 
    uint8_t WriteAPRS(char *Msg, uint32_t Time, const char *ProtName="APRS")    // write an APRS position message
    { uint8_t Len=0;
@@ -546,16 +583,17 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      if(Header.NonPos && Status.ReportType>1) { Msg[Len]=0; return 0; } // give up if neither position nor status nor info
 
      if(Position.Time<60)
-     { uint32_t DayTime=Time%86400; int Sec=DayTime%60;           // second of the time the packet was recevied
-       int DiffSec=Position.Time-Sec; if(DiffSec>4) DiffSec-=60;  // difference should always be zero or negative, but can be small positive for predicted positions
-       Time+=DiffSec; }                                           // get out the correct position time
+     // { uint32_t DayTime=Time%86400; int Sec=DayTime%60;           // second of the time the packet was recevied
+     //   int DiffSec=Position.Time-Sec; if(DiffSec>4) DiffSec-=60;  // difference should always be zero or negative, but can be small positive for predicted positions
+     //   Time+=DiffSec; }                                           // get out the correct position time
+       Time = getTime(Time, 5);
      Msg[Len++] = Header.NonPos || Header.Encrypted?'>':'/';
      Len+=Format_HHMMSS(Msg+Len, Time);
      Msg[Len++] = 'h';
 
      if(Header.NonPos)                                            // status and info packets
-     { if(Status.ReportType==0) Len+=WriteStatus(Msg+Len);
-                           else Len+=WriteDeviceInfo(Msg+Len);
+     {      if(isStatus()) Len+=WriteStatus(Msg+Len);
+       else if(isInfo()  ) Len+=WriteDeviceInfo(Msg+Len);
        /* Msg[Len++]='\n'; */ Msg[Len]=0; return Len; }
 
      if(Header.Encrypted)                                         // encrypted packets

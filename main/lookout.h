@@ -11,34 +11,46 @@
 
 // #define DEBUG_PRINT
 
+#include "gdl90.h"
 #include "relpos.h"
 
 // =======================================================================================================
 
-class LookOut_Target
+class LookOut_Target           // describes a flying aircrafts
 { public:
-  uint32_t        ID;          //          ID of the target = aircraft ID
-   Acft_RelPos   Pos;          //          Position relative to the reference Lat/Lon/Alt
-    int8_t      Pred;          // [0.5sec] amount of time by which this position has been predicted/extrapolated
-   uint8_t   GpsPrec;          // GPS position error including prediction
+    union
+    { uint32_t        ID;      //          ID of the target = aircraft ID
+      struct
+      { uint32_t  Address:24;  //
+        uint8_t  AddrType: 2;  //
+        uint8_t  AcftType: 4;  //
+      } ;
+    } ;
+   Acft_RelPos   Pos;          // Position relative to the reference Lat/Lon/Alt
+    int8_t      Pred;          // [0.5sec] amount of time by which own position has been predicted/extrapolated
+   uint8_t   GpsPrec;          // GPS position error (includes prediction errors)
 
    union
    { uint8_t Flags;            // flags
      struct
-     { bool   isMoving   :1;   // is a moving target
+     { // bool   isMoving   :1;   // is a moving target
+       bool   isTracked  :1;   // is being tracked or only stored
+       // bool   isHidden   :1;   // hidden track, should normally not be revealed
+       // bool   hasStdAlt  :1;   // has pressure StdAlt
+       bool   Reported   :1;   // this target has already been reported with $PFLAA or GDL90
+       uint8_t Sys       :3;   // 0=FLR, 1=OGN, 2=PilotAware, 3=FANET, 4=ADS-B
        bool   Alloc      :1;   // is allocated or not (a free slot, where a new target can go into)
-       // bool   Reported   :1;   // this target has already been reported with $PFLAA
      } ;
    } ;
 
-  union
-  { uint32_t    Rank;          //          rank: lowest means shorter time margin, shorter distance margin thus bigger thread
-    struct
-    { uint16_t DistMargin;     // [0.5m]   remaining safety margin: if positive, then considered no thread at all
-      uint8_t  TimeMargin;     // [0.5s]   time to target (if no distance margin left)
-      uint8_t  WarnLevel;      // assigned warning level: 0, 1, 2 or 3
-    } ;
-  } ;
+   union
+   { uint32_t    Rank;          //        rank: lowest means shorter time margin, shorter distance margin thus bigger thread
+     struct
+     { uint16_t DistMargin;     // [0.5m] remaining safety margin: if positive, then considered no thread at all
+       uint8_t  TimeMargin;     // [0.5s] time to target (if no distance margin left)
+       uint8_t  WarnLevel;      // assigned warning level: 0, 1, 2 or 3
+     } ;
+   } ;
 
    int16_t        dX;        // [0.5m]   relative position of target
    int16_t        dY;        // [0.5m]
@@ -48,10 +60,11 @@ class LookOut_Target
    int16_t        Vy;        // [0.5m/s]
    int16_t        Vz;        // [0.5m/s]
 
+   // int16_t        dStdAlt;   // [0.5m]
    // int16_t        Ax;        // [1/16m/s^2] relative acceleration of target
    // int16_t        Ay;        // [1/16m/s^2]
 
-  uint16_t   HorDist;        // [0.5m]   relltive hor. distance to target
+  uint16_t   HorDist;        // [0.5m]   relative hor. distance to target
    int16_t  MissTime;        // [0.5s]   estimated closest approach time
   uint16_t  MissDist;        // [0.5m]   estimated closest approach distance
 
@@ -126,8 +139,16 @@ class LookOut_Target
 class LookOut
 { public:
    uint32_t        ID;                    // ID of me (own aircraft)
-   Acft_RelPos     Pos;                   // Position relative to the reference Lat/Lon/Alt
-   int8_t          Pred;                  // [0.5sec] amount of time by which position has been predicted/extrapolated
+   Acft_RelPos     Pos;                   // Own position relative to the reference Lat/Lon/Alt
+
+   uint32_t    RefTime;                   // [sec] ref. T for the local T,X,Y,Z coord. system
+                                          //       ref. X,Y,Z for the local T,X,Y,Z coord. system
+   int32_t     RefLat;                    // [1/60000deg]
+   int32_t     RefLon;                    // [1/60000deg]
+   int32_t     RefAlt;                    // [m]
+   int16_t     LatCos;                    // [2^-12]
+
+   int8_t      Pred;                      // [0.5sec] amount of time by which position has been predicted/extrapolated
 
    union
    { uint8_t Flags;
@@ -146,13 +167,6 @@ class LookOut
    uint8_t WorstTgtIdx;                   // [] most dangereous target
    uint8_t WorstTgtTime;                  // [0.5s] time to closest approach
 
-   uint8_t RefTime;                       // [sec] ref. T for the local T,X,Y,Z coord. system
-   int16_t LatCos;                        // [2^-12]
-                                          //       ref. X,Y,Z for the local T,X,Y,Z coord. system
-   int32_t RefLat;                        // [1/60000deg]
-   int32_t RefLon;                        // [1/60000deg]
-   int32_t RefAlt;                        // [m]
-
    const static uint8_t MaxTargets  = 32; // maximum number of targets
    LookOut_Target     Target[MaxTargets]; // array of Targets
 
@@ -161,9 +175,9 @@ class LookOut
    const static int16_t MinVertSepar  =  20; // [m] minimum vertical separation
    const static int16_t WarnTime      =  20; // [sec] target warning prior to impact
 
-   Acft_RelPos PredMe, PredTgt;           // for temporary storage for predictions.
+   Acft_RelPos PredMe, PredTgt;           // for temporary storage of predictions.
 
-   char Line[80];                         // for printing
+   char Line[120];                        // for printing
 
   public:
 
@@ -186,7 +200,7 @@ class LookOut
      NMEA[Len]=0;
      return Len; }
 
-   void PrintPFLA(void)                                      // print (for debug) $PFLAU and PFLAA
+   void PrintPFLA(void)                                    // print (for debug) $PFLAU and PFLAA
    { WritePFLAU(Line); printf("%s", Line);
      for(uint8_t Idx=0; Idx<MaxTargets; Idx++)
      { if(!Target[Idx].Alloc) continue;
@@ -196,11 +210,11 @@ class LookOut
      }
    }
 
-   void WritePFLA(void (*Output)(char))                      // produce $PFLAU and PFLAA on the console output
+   void WritePFLA(void (*Output)(char))                    // produce $PFLAU and PFLAA on the console output
    { WritePFLAU(Line); Format_String(Output, Line);
      for(uint8_t Idx=0; Idx<MaxTargets; Idx++)
-     { if(!Target[Idx].Alloc) continue;
-       if( Target[Idx].DistMargin) continue;
+     { if(!Target[Idx].Alloc) continue;                    // skip empty slots
+       if( Target[Idx].DistMargin) continue;               // skip slots with distance margin remaining
        Target[Idx].WritePFLAA(Line);
        Format_String(Output, Line);
      }
@@ -242,9 +256,82 @@ class LookOut
      NMEA[Len]=0;
      return Len; }
 
+   int32_t Latitude(int32_t LatDist) const { return RefLat + (LatDist*27)/10; }   // relative distance [0.5m] => Latitude [1/60000 deg]
+   int32_t Longitude(int32_t LonDist) const { LonDist = (LonDist<<12)/LatCos; return RefLon + (LonDist*27)/10; }
+
+   // static int32_t CordicCoord(int32_t Coord) { return ((int64_t)Coord*83399993+(1<<21))>>22; } // [1/60000deg] => [cordic]
+
+   void Write(GDL90_REPORT &Report) const                   // Own GDL90 position report
+   { Report.Clear();
+     Report.setAddress(ID&0xFFFFFF);
+     Report.setAddrType(((ID>>24)&0x03)!=1);                // ICAO or non-ICAO
+     Report.setAcftType(ID>>26);
+     Report.setAcftCall(ID);
+     int32_t Alt = RefAlt+(Pos.Z>>1)+(Pos.dStdAlt>>1);      // [m]
+     Report.setAltitude(MetersToFeet(Alt));
+     Report.setHeading(Pos.Heading>>8);
+     Report.setSpeed(Pos.Speed);                            // [0.5m/s] => [knots]
+     Report.setClimbRate((int32_t)99*Pos.Climb);            // [0.5m/s] => [fpm]
+     int32_t Lat = Latitude (Pos.X); Report.setLatOGN(Lat);
+     int32_t Lon = Longitude(Pos.Y); Report.setLonOGN(Lon);
+     Report.setMiscInd(0x2);
+     Report.setAccuracy(9, 9); }
+
+   void Write(GDL90_REPORT &Report, const LookOut_Target *Tgt) const   // Target GDL90 position report
+   { Report.Clear();
+     Report.setAlertStatus(Tgt->WarnLevel>0);
+     Report.setAddress(Tgt->ID&0xFFFFFF);
+     Report.setAddrType(((Tgt->ID>>24)&0x03)!=1);
+     Report.setAcftType(Tgt->ID>>26);
+     Report.setAcftCall(Tgt->ID);
+     int32_t Alt = RefAlt+(Tgt->Pos.Z>>1)+(Tgt->Pos.dStdAlt>>1); // [m]
+     Report.setAltitude(MetersToFeet(Alt));
+     Report.setHeading(Tgt->Pos.Heading>>8);
+     Report.setSpeed(Tgt->Pos.Speed);                       // [0.5m/s] => [knots]
+     Report.setClimbRate((int32_t)99*Tgt->Pos.Climb);       // [0.5m/s] => [fpm]
+     int32_t Lat = Latitude (Tgt->Pos.X); Report.setLatOGN(Lat);
+     int32_t Lon = Longitude(Tgt->Pos.Y); Report.setLonOGN(Lon);
+     Report.setMiscInd(0x2);
+     Report.setAccuracy(9, 9); }
+
+   uint8_t WritePGAV5(char *NMEA, const LookOut_Target *Tgt) const
+   { uint8_t Len=0;
+     Len+=Format_String(NMEA+Len, "$PGVA5,");                      // sentence name   }
+     // age of position
+     NMEA[Len++]=',';
+     uint32_t Addr = Tgt->ID & 0xFFFFFF;                           // [24-bit] address
+     Len+=Format_Hex(NMEA+Len, (uint8_t)(Addr>>16));               // 24-bit address: RND, ICAO, FLARM, OGN
+     Len+=Format_Hex(NMEA+Len, (uint16_t)Addr);
+     NMEA[Len++]=',';
+     // [deg] Lattitude
+     NMEA[Len++]=',';
+     // [deg] Longitude
+     NMEA[Len++]=',';
+     // [feet] GPS altitude (HAE = MSL+GeoidSepar)
+     NMEA[Len++]=',';
+     // [feet] standard pressure altitude
+     NMEA[Len++]=',';
+     // FlightID (or call ?)
+     NMEA[Len++]=',';
+     // [deg] ground track
+     NMEA[Len++]=',';
+     // [kts] ground speed
+     NMEA[Len++]=',';
+     // [fpm] vertical speed
+     NMEA[Len++]=',';
+     // [] signal strength
+     NMEA[Len++]=',';
+     // [hex] aircraft category
+     Len+=NMEA_AppendCheckCRNL(NMEA, Len);
+     NMEA[Len]=0;
+     return Len; }                                                 // return number of formatted characters
+
    void Print(void) const
    { if(!hasPosition) return;
-     printf("Ref: %02d: [%+10.6f, %+11.6f]deg %ldm\n", RefTime, 0.0001/60*RefLat, 0.0001/60*RefLon, (long int)RefAlt);
+     uint32_t Sec = RefTime%60;
+     uint32_t Min = ((RefTime-Sec)/60)%60;
+     uint32_t Hour = ((RefTime-Sec-Min*60)/3600)%24;
+     printf("%08lX Ref: %02d:%02d:%02d: [%+10.6f, %+11.6f]deg %ldm\n", (long int)ID, Hour, Min, Sec, 0.0001/60*RefLat, 0.0001/60*RefLon, (long int)RefAlt);
      printf("%08lX/%+5.1fs/  Margin/ HorDist/Margin/  Miss/  Miss/w%d", (long int)ID, 0.5*Pred, WarnLevel); Pos.Print();
      for(uint8_t Idx=0; Idx<MaxTargets; Idx++)
      { const LookOut_Target *Tgt = Target+Idx;
@@ -253,37 +340,38 @@ class LookOut
    }
 
    template <class OGNx_Packet>
-    int32_t Start(OGNx_Packet &Me)
+    int32_t Start(OGNx_Packet &OwnPos, uint32_t RxTime)
    { Clear();
-     ID = Me.getAddressAndType() | ((uint32_t)Me.Position.AcftType<<26) ;
-     RefTime = Me.Position.Time;
-     RefLat = Me.DecodeLatitude();
-     RefLon = Me.DecodeLongitude();
-     RefAlt = Me.DecodeAltitude();
+     ID = OwnPos.getAddressAndType() | ((uint32_t)OwnPos.Position.AcftType<<26) ;
+     RefTime = OwnPos.getTime(RxTime);                // set reference time
+     RefLat = OwnPos.DecodeLatitude();                // and reference positon
+     RefLon = OwnPos.DecodeLongitude();
+     RefAlt = OwnPos.DecodeAltitude();                // and reference altitude
      LatCos = Icos(GPS_Position::calcLatAngle16(RefLat));
      Pred=0;
-     return Pos.Read(Me, RefTime, RefLat, RefLon, RefAlt, LatCos, DistRange); }
+     return Pos.Read(OwnPos, RxTime, RefTime, RefLat, RefLon, RefAlt, LatCos, DistRange); }
 
    template <class OGNx_Packet>
-    const LookOut_Target *ProcessOwn(OGNx_Packet &Me)                                   // process my own position
+    const LookOut_Target *ProcessOwn(OGNx_Packet &OwnPos, uint32_t RxTime)                // process own position
    { // printf("ProcessOwn() ... entry\n");
-     if(hasPosition)                                                                  // in my position is valid
+     if(hasPosition)                                                                      // in my position is valid
      { Pred=0;
-       if(Pos.Read(Me, RefTime, RefLat, RefLon, RefAlt, LatCos, DistRange)<0)         // read the new position
-       { hasPosition = Start(Me)>=0; }                                                // if this fails, attempt to start from the new position
+       if(Pos.Read(OwnPos, RxTime, RefTime, RefLat, RefLon, RefAlt, LatCos, DistRange)<0)         // read the new position
+       { hasPosition = Start(OwnPos, RxTime)>=0; }                                                // if this fails, attempt to start from the new position
+       // if(!Pos.hasStdAlt)                                                              // if no StdAlt
+       // { }                                                                             // get it from targets
      }
      else
-     { hasPosition = Start(Me)>=0;
-     }
+     { hasPosition = Start(OwnPos, RxTime)>=0; }
 
      if(hasPosition)                                                                  // if already started
      { AdjustRefTime(Pos.T);                                                          // adjust time ref. point if needed
        AdjustRefAlt();                                                                // adjust vertical ref. altitude if needed
-       AdjustRefLatLon(Me); }                                                         // adjuest horizontal Lat/Lon position if needed.
+       AdjustRefLatLon(OwnPos); }                                                         // adjust horizontal Lat/Lon position if needed.
 
      WarnLevel=0;
      Targets=0;
-     WorstTgtIdx=0;
+     WorstTgtIdx=0;                                                                   // get ready to search the most dangerous aircraft
      WorstTgtTime=0xFF;
      for(uint8_t Idx=0; Idx<MaxTargets; Idx++)                                        // go over targets
      { LookOut_Target *Tgt = Target+Idx;
@@ -294,8 +382,8 @@ class LookOut
        }
        uint8_t Warn=calcTarget(Tgt);                                                  // (re)calculate the target
        if(Warn)
-       { if(Warn>WarnLevel) WarnLevel=Warn;
-         if(Tgt->TimeMargin<WorstTgtTime) { WorstTgtTime=Tgt->TimeMargin; WorstTgtIdx=Idx; }
+       { if(Warn>WarnLevel) WarnLevel=Warn;                                           // register highest warning level
+         if(Tgt->TimeMargin<WorstTgtTime) { WorstTgtTime=Tgt->TimeMargin; WorstTgtIdx=Idx; } // and shortest time margin
        }
        Targets++; }
      // printf("ProcessOwn() ... exit\n");
@@ -305,21 +393,23 @@ class LookOut
      return Tgt; }                                                                     // return the pointer to the most dangerous target
 
    template <class OGNx_Packet>
-    const LookOut_Target *ProcessTarget(OGNx_Packet &Packet)                             // process positions of other aircrafts
+    const LookOut_Target *ProcessTarget(OGNx_Packet &Packet, uint32_t RxTime)          // process positions of other aircrafts
    { // printf("ProcessTarget(%d) ... entry\n", WeakestIdx);
      LookOut_Target *New = Target+WeakestIdx;                                          // get a free or lowest rank slot
-     New->Clear();
-     if(New->Pos.Read(Packet, RefTime, RefLat, RefLon, RefAlt, LatCos, DistRange)<0) return 0; // calculate the position against the reference position
+     New->Clear();                                                                     // put the new position there
+     if(New->Pos.Read(Packet, RxTime, RefTime, RefLat, RefLon, RefAlt, LatCos, DistRange)<0) return 0; // calculate the position against the reference position
+     if(!New->Pos.hasStdAlt)                                                           // if no baro altitude
+     { if(Pos.hasStdAlt) { New->Pos.dStdAlt=Pos.dStdAlt; New->Pos.hasStdAlt=1;} }      // take it from own
      uint32_t ID = Packet.getAddressAndType() | ((uint32_t)Packet.Position.AcftType<<26) ; // get ID
      New->ID = ID;                                                                     // set ID of this position
      // printf("ProcessTarget() ... %08X\n", ID);
-     uint8_t OldIdx;
+     uint8_t OldIdx;                                                                   // possible previous index to the same ID
      for(OldIdx=0; OldIdx<MaxTargets; OldIdx++)                                        // scan targets already on the list
-     { if(Target[OldIdx].Alloc==0) continue;
-       if(OldIdx==WeakestIdx) continue;
+     { if(Target[OldIdx].Alloc==0) continue;                                           // skip not allocated
+       if(OldIdx==WeakestIdx) continue;                                                // skip the new position
        if(Target[OldIdx].ID==ID) break; }                                              // to find previous position for the target
      if(OldIdx<MaxTargets)                                                             // if found
-     { if((Target[OldIdx].Pos.T-Target[OldIdx].Pred)>Target[WeakestIdx].Pos.T) return Target+OldIdx; // if position is not really older than stop processing this (not new) position
+     { if((Target[OldIdx].Pos.T-Target[OldIdx].Pred)>Target[WeakestIdx].Pos.T) return Target+OldIdx; // if position is not really newer than stop processing this (not new) position
        Target[OldIdx].Alloc=0; }                                                       // mark old position as "not allocated"
 
      New->Alloc=1;                                                                     // mark this position as allocated
@@ -327,20 +417,20 @@ class LookOut
      AdjustRefTime(New->Pos.T);                                                        // possibly adjust the time reference after this new position time
      // printf("ProcessTarget() ... AdjustRefTime()\n");
 
-     if(Pos.T<=(New->Pos.T-4))                                                          // bring my position closer in time
-     { Pos.StepFwd2secs(); Pred+=4; }
+     if(Pos.T<=(New->Pos.T-4))                                                         // if new position more than 2sec away from own
+     { Pos.StepFwd2secs(); Pred+=4; }                                                  // bring own position closer in time
 
      uint8_t Warn=calcTarget(New);                                                     // calculate the safety margin for the target
-     if(Warn>WarnLevel) WarnLevel=Warn;
+     if(Warn>WarnLevel) WarnLevel=Warn;                                                // record higest warnign level
      // printf("ProcessTarget() ... calc()\n");
 
-     uint8_t MaxIdx=WeakestIdx; uint16_t Max=New->Rank;                                // look for the lowest rank position on the list
+     uint8_t MaxIdx=WeakestIdx; uint32_t Max=New->Rank;                                // look for the lowest rank position on the list
      for( uint8_t Idx=MaxIdx; ; )                                                      // go over targets
      { Idx++; if(Idx>=MaxTargets) Idx=0;
        if(Idx==WeakestIdx) break;                                                      // end the loop when back at New
        LookOut_Target &Tgt = Target[Idx];
        if(!Tgt.Alloc) { MaxIdx=Idx; break; }                                           // if unallocated target found: stop the search
-       if(Tgt.Rank==0xFFFF) { MaxIdx=Idx; break; }                                     // if abs. weakest target found: stop the search
+       // if(Tgt.Rank==0xFFFFFFFF) { MaxIdx=Idx; break; }                                 // if abs. weakest target found: stop the search
        if(Tgt.Rank>=Max) { Max=Tgt.Rank; MaxIdx=Idx; }                                 // if weaker rank found: note it
      }
      WeakestIdx=MaxIdx;                                                                // tqke the weakest slot for the nest time
@@ -458,12 +548,12 @@ class LookOut
      if(MaxDist<Tgt->HorDist) return Tgt->HorDist-MaxDist;             // [0.5m] return the (positive) difference: we are safe
      return 0; }                                                       // zero-margin => bad !
 
-   void AdjustRefTime(int16_t TimeDelta)                               // adjust the time reference point
-   { if(TimeDelta<(2*12)) return;                                      // in more than 10sec into the future from the current reference
-     TimeDelta/=2;
-     RefTime+=TimeDelta; if(RefTime>=60) RefTime-=60;                  // shift time reference
+   void AdjustRefTime(int16_t TimeDelta)                               // [0.5s] adjust the time reference point
+   { if(TimeDelta<(2*12)) return;                                      // if less than 12sec into the future than skip it
+     TimeDelta/=2;                                                     // [sec]
+     RefTime+=TimeDelta;                                               // shift time reference
      Pos.T-=2*TimeDelta;                                               // shift the relative time on my own position
-     if(Pos.T<(-2*60)) hasPosition=0;                                  // if older than 60sec declare "no position"
+     if(Pos.T<(-2*30)) hasPosition=0;                                  // if older than 30sec declare "no position"
      for(uint8_t Idx=0; Idx<MaxTargets; Idx++)                         // go over the targets
      { LookOut_Target &Tgt = Target[Idx]; if(!Tgt.Alloc) continue;     // skip unallocated
        Tgt.Pos.T-=2*TimeDelta;                                         // shift the relative time
@@ -472,7 +562,7 @@ class LookOut
    }
 
    void AdjustRefAlt(void)                     // shift the vertical reference point when we get too far off
-   { if(fabs(Pos.Z)<(2*200)) return;           // don't shift if less than 200m from the reference point
+   { if(abs(Pos.Z)<(2*200)) return;           // don't shift if less than 200m from the reference point
      int16_t AltDelta=Pos.Z/2;
      RefAlt+=AltDelta;
      Pos.Z-=2*AltDelta;
@@ -481,17 +571,17 @@ class LookOut
    }
 
    template <class OGNx_Packet>
-    void AdjustRefLatLon(OGNx_Packet &Me)        // shift the horizontal reference point when we get too far off
-   { if( (fabs(Pos.X)<(2*1000)) && (fabs(Pos.Y)<(2*500)) ) return;
+    void AdjustRefLatLon(OGNx_Packet &Me)                          // shift the horizontal reference point when we get too far off
+   { if( (abs(Pos.X)<(2*1000)) && (abs(Pos.Y)<(2*1000)) ) return; // when we are off by 1km horizontal
      int32_t LatDist, LonDist;
-     if(Me.calcDistanceVector(LatDist, LonDist, RefLat, RefLon, LatCos, DistRange)<0) { return; }
-     RefLat = Me.DecodeLatitude();
+     if(Me.calcDistanceVector(LatDist, LonDist, RefLat, RefLon, LatCos, DistRange)<0) { return; } // distance from the current reference
+     RefLat = Me.DecodeLatitude();                                 // take the ref. Lat/Lon from the packet
      RefLon = Me.DecodeLongitude();
-     LatDist*=2;
+     LatDist*=2;                                                   // [m/s] => [0.5m/s]
      LonDist*=2;
      Pos.X -= LatDist;
      Pos.Y -= LonDist;
-     for(uint8_t Idx=0; Idx<MaxTargets; Idx++)
+     for(uint8_t Idx=0; Idx<MaxTargets; Idx++)                     // shift the relative position of every target
      { if(Target[Idx].Alloc) { Target[Idx].Pos.X-=LatDist; Target[Idx].Pos.Y-=LonDist; } }
      LatCos = Icos(GPS_Position::calcLatAngle16(RefLat));
    }

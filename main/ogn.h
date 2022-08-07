@@ -52,10 +52,10 @@ template <class OGNx_Packet, class OGNy_Packet>
   if(abs(DistDeltaH)>=200) return 1;                                          // if extrapolation error more than 50m
   int16_t Turn = Packet->DecodeTurnRate();                                    // [0.1deg/s]
   int16_t CFaccel = ((int32_t)Turn*Speed*229+0x10000)>>17;                    // [0.1m/s^2] centrifugal acceleration in turn
-  if(abs(CFaccel)>=50) return 1;                                              // CFaccel at or above 5m/s^2 (0.5g)
+  if(abs(CFaccel)>=25) return 1;                                              // CFaccel at or above 5m/s^2 (0.5g)
   int16_t PrevTurn = PrevPacket->DecodeTurnRate();                            // [0.1deg/s]
   int16_t PrevCFaccel = ((int32_t)PrevTurn*PrevSpeed*229+0x10000)>>17;        // [0.1m/s^2]
-  int32_t DistDeltaR = abs(CFaccel-PrevCFaccel)*TimeDelta*TimeDelta/2;        // [0.1m]
+  int32_t DistDeltaR = abs(CFaccel-PrevCFaccel)*(int32_t)TimeDelta*TimeDelta/2; // [0.1m]
   if(abs(DistDeltaR)>=200) return 1;                                          // [0.1m]
   return 0; }
 
@@ -182,17 +182,22 @@ template <class OGNx_Packet=OGN1_Packet>
    union
    { uint8_t State;       //
      struct
-     { bool Saved   :1;   // has been already saved in internal storage
-       bool Warn    :1;   // there is a warning associated with this packet
-       bool Spare   :1;
+     { // bool Saved   :1;   // has been already saved in internal storage
+       // bool Ready   :1;   // is ready for transmission
+       // bool Sent    :1;   // has already been transmitted out
        bool Correct :1;   // correctly received or corrected by FEC
        uint8_t RxErr:4;   // number of bit errors corrected upon reception
+       uint8_t Warn :2;   // LookOut warning level
      } ;
    } ;
 
    uint8_t RxChan;        // RF channel where the packet was received
    uint8_t RxRSSI;        // [-0.5dBm]
-   uint8_t Rank;          // relay rank: low altitude and weak signal => high rank
+   uint8_t Rank;          // rank: low altitude and weak signal => high rank
+
+   int16_t LatDist;       // [m]
+   int16_t LonDist;       // [m]
+   // int16_t AltDist;       // [m]
 
   public:
 
@@ -201,7 +206,16 @@ template <class OGNx_Packet=OGN1_Packet>
 
    uint8_t  *Byte(void) const { return (uint8_t  *)&Packet.HeaderWord; } // packet as bytes
    uint32_t *Word(void) const { return (uint32_t *)&Packet.HeaderWord; } // packet as words
-
+/*
+   int Print(char *Out) const
+   { int Len = sprintf(Out, "%c%X:%c:%06lX R%c%c",
+            Packet.Position.Stealth ?'s':' ', (int)Packet.Position.AcftType, '0'+Packet.Header.AddrType, (long int)Packet.Header.Address,
+            '0'+Packet.Header.Relay, Packet.Header.Emergency?'E':' ');
+     Len+= sprintf(Out+Len, " %d/%dD/%4.1f", (int)Position.FixQuality, (int)Position.FixMode+2, 0.1*(10+DecodeDOP()) );
+     if(Position.Time<60) Len+=sprintf(Out+Len, " %02ds:", (int)Position.Time);
+                     else Len+=sprintf(Out+Len, " ---:");;
+     return Len; }
+*/
    void recvBytes(const uint8_t *SrcPacket) { memcpy(Byte(), SrcPacket, Bytes); } // load data bytes e.g. from a demodulator
 
    uint8_t calcErrorPattern(uint8_t *ErrPatt, const uint8_t *OtherPacket) const
@@ -885,19 +899,24 @@ class GPS_Position: public GPS_Time
 { public:
 
   union
-  { uint16_t Flags;             // bit #0 = GGA and RMC had same Time
+  { uint32_t Flags;             // bit #0 = GGA and RMC had same Time
     struct
     { bool hasGPS   :1;         // all required GPS information has been supplied (but this is not the GPS lock status)
-      bool hasBaro  :1;         // pressure sensor information: pressure, standard pressure altitude, temperature, humidity
-      bool hasHum   :1;         //
       bool hasTime  :1;         // Time has been supplied
-      bool hasDate  :1;         // Time has been supplied
+      bool hasDate  :1;         // Date has been supplied
       bool hasRMC   :1;         // GxRMC has been supplied
       bool hasGGA   :1;         // GxGGA has been supplied
       bool hasGSA   :1;         // GxGSA has been supplied
       bool hasGSV   :1;
       bool isReady  :1;         // is ready for the following treaement
       bool Sent     :1;         // has been transmitted
+      bool hasBaro  :1;         // pressure sensor information: pressure, standard pressure altitude, temperature
+      bool hasHum   :1;         // has humidity (not all baro have humiditiy)
+      bool hasClimb :1;         // has climb-rate computed or measured
+      bool hasTurn  :1;         //
+      bool hasAccel :1;         //
+      bool hasIAS   :1;         // has Indicated Air Speed calculated/measured
+      bool hasAHRS  :1;         // has Attitude Heading Reference System data
       bool InFlight :1;         // take-off and landing detection
     } ;
   } ;
@@ -908,13 +927,18 @@ class GPS_Position: public GPS_Time
    int8_t FixQuality;           // 0 = none, 1 = GPS, 2 = Differential GPS (can be WAAS)
    int8_t FixMode;              // 0 = not set (from GSA) 1 = none, 2 = 2-D, 3 = 3-D
    int8_t Satellites;           // number of active satellites
-
    uint8_t PDOP;                // [0.1] dilution of precision
+
    uint8_t HDOP;                // [0.1] horizontal dilution of precision
    uint8_t VDOP;                // [0.1] vertical dilution of precision
 
    int16_t Speed;               // [0.1 m/s] speed-over-ground
    int16_t Heading;             // [0.1 deg]  heading-over-ground
+
+  uint16_t AirSpeed;            // [0.1m/s] Indicated Air Speed
+
+   int16_t Pitch;               // [] AHRS Attitude
+   int16_t Roll;                // [] AHRS Inclination
 
    int16_t ClimbRate;           // [0.1 meter/sec)
    int16_t TurnRate;            // [0.1 deg/sec]
@@ -930,7 +954,7 @@ class GPS_Position: public GPS_Time
    int32_t StdAltitude;         // [0.1 meter] standard pressure altitude (from the pressure sensor and atmosphere calculator)
    int16_t Temperature;         // [0.1 degC]
    int16_t Humidity;            // [0.1%]      relative humidity
-   int16_t Accel;               // [0.1m/s^2]  acceleration along the track
+   int16_t LongAccel;           // [0.1m/s^2]  acceleration along the track
    uint16_t Seq;                // sequencial number to track GPS positions in a pipe
 
   public:
@@ -1234,7 +1258,9 @@ class GPS_Position: public GPS_Time
      return TimeDiff; }                                                                     // [0.01s]
 */
    int16_t calcDifferentials(GPS_Position &RefPos, bool useBaro=1) // calculate climb rate and turn rate with an earlier reference position
-   { ClimbRate=0; TurnRate=0;
+   { // ClimbRate=0; hasClimb=0;
+     // TurnRate=0;  hasTurn=0;
+     // LongAccel=0; hasAccel=0;
      if(RefPos.FixQuality==0) return 0;            // give up if no fix on the reference position
      int16_t TimeDiff = calcTimeDiff(RefPos);      // [ms] time difference between positions
      if(TimeDiff<10) return 0;                     // [ms] give up if smaller than 10ms (as well when negative)
@@ -1243,30 +1269,37 @@ class GPS_Position: public GPS_Time
      ClimbRate = Altitude-RefPos.Altitude;         // [0.1m/s] climb rate as altitude difference
      if(useBaro && hasBaro && RefPos.hasBaro && (abs(Altitude-StdAltitude)<2500) ) // if there is baro data then
      { ClimbRate += StdAltitude-RefPos.StdAltitude; // [0.1m/s] on pressure altitude
-       ClimbRate = (ClimbRate+1)>>1; }
-     Accel = Speed-RefPos.Speed;                   // longitual acceleration
+       ClimbRate = (ClimbRate+1)>>1; }             // take average of the GPS and baro climb rate
+     LongAccel = Speed-RefPos.Speed;               // longitual acceleration
      if(TimeDiff==100)                             // [ms] if 0.1sec difference
-     { ClimbRate*=10;
-       TurnRate *=10;
-       Accel    *=10; }
+     { ClimbRate *=10;
+       TurnRate  *=10;
+       LongAccel *=10; }
      if(TimeDiff==200)                             // [ms] if 0.2sec difference
-     { ClimbRate*=5;
-       TurnRate *=5;
-       Accel    *=5; }
+     { ClimbRate *=5;
+       TurnRate  *=5;
+       LongAccel *=5; }
+     if(TimeDiff==250)                             // [ms] if 0.25sec difference
+     { ClimbRate *=4;
+       TurnRate  *=4;
+       LongAccel *=4; }
      else if(TimeDiff==500)
-     { ClimbRate*=2;
-       TurnRate *=2;
-       Accel    *=2; }
+     { ClimbRate *=2;
+       TurnRate  *=2;
+       LongAccel *=2; }
      else if(TimeDiff==1000)
      { }
      else if(TimeDiff==2000)
-     { ClimbRate=(ClimbRate+1)>>1;
-        TurnRate=( TurnRate+1)>>1;
-        Accel   =( Accel   +1)>>1; }
+     { ClimbRate = (ClimbRate+1)>>1;
+       TurnRate  = ( TurnRate+1)>>1;
+       LongAccel = (LongAccel+1)>>1; }
      else if(TimeDiff!=0)
      { ClimbRate = ((int32_t)ClimbRate*1000)/TimeDiff;
-        TurnRate = ((int32_t) TurnRate*1000)/TimeDiff;
-        Accel    = ((int32_t) Accel   *1000)/TimeDiff; }
+       TurnRate  = ((int32_t) TurnRate*1000)/TimeDiff;
+       LongAccel = ((int32_t)LongAccel*1000)/TimeDiff; }
+     // printf("calcDifferences( , %d) %02d.%03ds hasBaro:%d:%d %4dms %3.1f/%3.1f m %+4.1f m/s\n",
+     //         useBaro, Sec, mSec, hasBaro, RefPos.hasBaro, TimeDiff, 0.1*Altitude, 0.1*StdAltitude, 0.1*ClimbRate);
+     hasClimb=0; hasTurn=0; hasAccel=0;
      return TimeDiff; } // [ms]
 
    void Write(MAV_GPS_RAW_INT *MAV) const
@@ -1349,6 +1382,12 @@ class GPS_Position: public GPS_Time
      Report.setClimbRate(6*MetersToFeet(ClimbRate));
    }
 
+   int EncodeIAS(OGN1_Packet &Packet)
+   { if(!hasIAS) return 0;
+     Packet.Position.Time = 61;                                            // "current" packet with airspeed
+     Packet.EncodeSpeed(AirSpeed);
+     return 1; }
+
   template <class OGNx_Packet>
    void Encode(OGNx_Packet &Packet) const
    { Packet.Position.FixQuality = FixQuality<3 ? FixQuality:3;             //
@@ -1403,7 +1442,7 @@ class GPS_Position: public GPS_Time
        if(hasHum) Packet.EncodeHumidity(Humidity);
              else Packet.clrHumidity(); }
      else
-     { Packet.Status.Pressure = 0;
+     { Packet.Status.Pressure=0;
        Packet.clrTemperature();
        Packet.clrHumidity(); }
    }
@@ -1461,7 +1500,7 @@ class GPS_Position: public GPS_Time
    }
 
    void Extrapolate(int32_t dTime)                                            // [ms] extrapolate the position by dTime
-   { int16_t dSpeed = ((int32_t)Accel*dTime)/1000;
+   { int16_t dSpeed = ((int32_t)LongAccel*dTime)/1000;
      Speed += dSpeed/2;
      int16_t HeadAngle = ((int32_t)Heading<<12)/225;                          // [cordic] heading angle
      int16_t TurnAngle = (((dTime*TurnRate)/250)<<9)/225;                     // [cordic]
@@ -1532,7 +1571,9 @@ class GPS_Position: public GPS_Time
    // { return IntSine((uint16_t)(LatAngle+0x4000)); }
 
    static int16_t calcLatCosine(int16_t LatAngle)
-   { return Icos(LatAngle); }
+   { int16_t LatCos=Icos(LatAngle);
+     if(LatCos<=0) LatCos=1;                                                 // protect against zero as it is used for division
+     return LatCos; }
 
    // int32_t getLatDistance(int32_t RefLatitude) const                      // [m] distance along latitude
    // { return calcLatDistance(RefLatitude, Latitude); }
@@ -1612,7 +1653,7 @@ class GPS_Position: public GPS_Time
      { Len+=WriteIGCcoord(Out+Len, Latitude, 2, "NS");            // DDMM.MMM latitude
        Len+=WriteIGCcoord(Out+Len, Longitude, 3, "EW");           // DDDMM.MMM longitude
        Out[Len++] = FixMode>2 ? 'A':'V'; }                        // fix mode
-     else Len+=Format_String(Out+Len, "                  ");      // is position not valid then leave empty
+     else Len+=Format_String(Out+Len, "                    ");    // is position not valid then leave empty
      if(hasBaro)                                                  // if pressure data is there
      { int32_t Alt = StdAltitude/10;                              // [m] pressure altitude
        if(Alt<0) { Alt = (-Alt); Out[Len++] = '-'; Len+=Format_UnsDec(Out+Len, (uint32_t)Alt, 4); } // -AAAA (when negative)

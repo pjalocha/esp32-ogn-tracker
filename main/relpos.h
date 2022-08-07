@@ -1,3 +1,6 @@
+#ifndef __RELPOS_H__
+#define __RELPOS_H__
+
 #include <stdio.h>
 
 #include <stdint.h>
@@ -6,6 +9,7 @@
 
 #include "intmath.h"
 
+#include "gdl90.h"
 #include "ogn.h"
 
 // =======================================================================================================
@@ -19,15 +23,23 @@ class Acft_RelPos             // 3-D relative position with speed and turn rate
    int16_t Climb;                // [0.5m/s]
    int16_t Turn;                 // [360/0x10000 deg/s] [2*PI/0x10000 rad/sec]
    int16_t Dx,Dy;                // [2^-12] directon vector - calc. on Heading
+   int16_t dStdAlt;              // [0.5m]
   uint8_t  Error;                // [0.5m]
-  uint8_t  Spare;
+  union
+  { uint8_t  Flags;
+    struct
+    { bool hasStdAlt:1;
+      bool hasClimb :1;
+      bool hasTurn  :1;
+    } ;
+  } ;
    // int16_t Ax,Ay;                // [1/16m/s^2] acceleration vactor
    // int16_t R;                    // [0.5m] (signed) turning radius - calc. from Turn and Speed
    // int16_t Ox,Oy;                // [0.5m] turning circle center   - only valid when R!=0
 
   public:
    void Print(void) const
-   { printf("%+7.1f: [%+7.1f,%+7.1f,%+7.1f]m %5.1fm/s %05.1fdeg %+5.1fm/s %+5.1fdeg/sec [%3.1fm]",
+   { printf("%+7.1fs: [%+7.1f,%+7.1f,%+7.1f]m %5.1fm/s %05.1fdeg %+5.1fm/s %+5.1fdeg/s [%3.1fm]",
             0.5*T, 0.5*X, 0.5*Y, 0.5*Z, 0.5*Speed, (360.0/0x10000)*Heading, 0.5*Climb, (360.0/0x10000)*Turn, 0.5*Error);
      // printf(" [%+6.2f,%+6.2f]m/s^2", 0.0625*Ax, 0.0625*Ay);
      // if(R) printf(" R:%+8.1fm [%+7.1f, %+7.1f]", 0.5*R, 0.5*Ox, 0.5*Oy);
@@ -247,19 +259,26 @@ class Acft_RelPos             // 3-D relative position with speed and turn rate
      Error = (2*Packet.DecodeDOP()+22)/5; }
 
    template <class OGNx_Packet>                          // read position from an OGN packet, use provided reference
-    int32_t Read(OGNx_Packet &Packet, uint8_t RefTime, int32_t RefLat, int32_t RefLon, int32_t RefAlt, uint16_t LatCos=3000, int32_t MaxDist=10000)
-   { T = (int16_t)Packet.Position.Time-(int16_t)RefTime;
-     if(T<=(-30)) T+=60; else if(T>30) T-=60;
-     T<<=1;
-     int32_t LatDist, LonDist;
-     if(Packet.calcDistanceVector(LatDist, LonDist, RefLat, RefLon, LatCos, MaxDist)<0) return -1;
-     X = LatDist<<1;                                    // [m]      => [0.5m]
-     Y = LonDist<<1;                                    // [m]      => [0.5m]
-     Z = (Packet.DecodeAltitude()-RefAlt)<<1;           // [m]      => [0.5m]
+    int32_t Read(OGNx_Packet &Packet, uint32_t RxTime, uint32_t RefTime, int32_t RefLat, int32_t RefLon, int32_t RefAlt, uint16_t LatCos=3000, int32_t MaxDist=10000)
+   { Flags=0;
+     uint32_t PosTime=Packet.getTime(RxTime);
+     if(PosTime) T = PosTime-RefTime;                   // [sec]
+            else T =  RxTime-RefTime;
+     T<<=1;                                             // [0.5sec]
+     int32_t LatDist, LonDist;                          // [1/60000deg]
+     if(Packet.calcDistanceVector(LatDist, LonDist, RefLat, RefLon, LatCos, MaxDist)<0) return -1; // [m, m, , , , m]
+     X = LatDist<<1;                                    // [m]      => [0.5m] relative along latitude
+     Y = LonDist<<1;                                    // [m]      => [0.5m] relative along longitude
+     Z = (Packet.DecodeAltitude()-RefAlt)<<1;           // [m]      => [0.5m] relative vertical
+     if(Packet.hasBaro()) { dStdAlt=Packet.getBaroAltDiff()<<1; hasStdAlt=1; }
      Speed = (Packet.DecodeSpeed()+2)/5;                // [0.1m/s] => [0.5m/s]
      Heading = Packet.getHeadingAngle();                // [360/0x10000deg]
-     Climb = Packet.DecodeClimbRate()/5;                // [0.1m/s] => [0.5m/s]
-     Turn = ((int32_t)Packet.DecodeTurnRate()*1165+32)>>6; // [0.1deg/s] => [360/0x10000deg/s] 
+     if(Packet.hasClimbRate())
+     { Climb = Packet.DecodeClimbRate()/5;              // [0.1m/s] => [0.5m/s]
+       hasClimb = 1; }
+     if(Packet.hasTurnRate())
+     { Turn = ((int32_t)Packet.DecodeTurnRate()*1165+32)>>6; // [0.1deg/s] => [360/0x10000deg/s] 
+       hasTurn = 1; }
      calcDir();
      Error = (2*Packet.DecodeDOP()+22)/5;
      // calcAccel();
@@ -275,15 +294,22 @@ class Acft_RelPos             // 3-D relative position with speed and turn rate
      Packet.Position.Time = Time%60;
      Packet.setDistanceVector(X>>1, Y>>1, RefLat, RefLon, LatCos);
      Packet.EncodeAltitude(RefAlt+(Z>>1));              //
-     Packet.clrBaro();                                  // don't know the standard pressure altitude
+     if(hasStdAlt) Packet.setBaroAltDiff(dStdAlt>>1);   // set std. altitude differemce
+              else Packet.clrBaro();                    // don't know the standard pressure altitude
      Packet.EncodeSpeed(Speed*5);                       // [0.5m/s] => [0.1m/s]
      Packet.setHeadingAngle(Heading);                   //
      Packet.EncodeClimbRate(Climb*5);                   // [0.5m/s] => [0.1m/s]
      Packet.EncodeTurnRate((Turn*7+64)>>7);             // [360/0x10000deg/s] => [0.1deg/s]
-     Packet.EncodeDOP((5*Error)/2-10);
+     Packet.EncodeDOP((5*Error)/2-10); 
+     Packet.Position.FixMode=1;
+     Packet.Position.FixQuality=1; }
+
+   void Write(GDL90_REPORT &Report, uint8_t RefTime, int32_t RefLat, int32_t RefLon, int32_t RefAlt, uint16_t LatCos=3000)
+   {
    }
 
 } ;
 
 // =======================================================================================================
 
+#endif // __RELPOS_H__
