@@ -1606,7 +1606,7 @@ void IO_Configuration(void)
   };
   uart_param_config  (GPS_UART, &GPS_UART_Config);
   uart_set_pin       (GPS_UART, PIN_GPS_TXD, PIN_GPS_RXD, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-  uart_driver_install(GPS_UART, 256, 256, 0, 0, 0);
+  uart_driver_install(GPS_UART, 512, 512, 0, 0, 0);
 #endif
 
 #ifdef AERO_UART
