@@ -277,7 +277,7 @@ int APRS2IGC(char *Out, const char *Inp, int GeoidSepar)             // convert 
   Msg++;                                                             // where message starts
   if(Msg[0]!='/' || Msg[7]!='h') return 0;
   const char *Pos = Msg+8; if(Pos[4]!='.' || Pos[14]!='.') return 0; // where position starts
-  const char *ExtPos = strstr(Pos+18, " !W"); if(ExtPos[5]=='!') ExtPos+=3; else ExtPos=0;
+  const char *ExtPos = strstr(Pos+18, " !W"); if(ExtPos && ExtPos[5]=='!') ExtPos+=3; else ExtPos=0;
   Out[Len++]='B';                                                    // B-record
   memcpy(Out+Len, Msg+1, 6); Len+=6;                                 // copy UTC time
   memcpy(Out+Len, Pos, 4); Len+=4;                                   // copy DDMM
