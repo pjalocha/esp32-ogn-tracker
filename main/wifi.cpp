@@ -1,5 +1,5 @@
 #include <string.h>
-
+#include "config.h"  //Added By Fab501
 #include "wifi.h"
 #include "format.h"
 
@@ -49,7 +49,23 @@ static esp_err_t WIFI_event_handler(void *ctx, system_event_t *event)
   return ESP_OK; }
 
 esp_err_t WIFI_Init(void)
-{ esp_err_t Err;
+{ 
+
+  //Fab501 test to change IP to 192.168.1.1 for comptability with SkyDemon
+  
+    esp_netif_init();
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    esp_netif_t* wifiAP = esp_netif_create_default_wifi_ap();
+    esp_netif_ip_info_t ipInfo;
+    IP4_ADDR(&ipInfo.ip, WIFI_ADDRESS_IP1,WIFI_ADDRESS_IP2,WIFI_ADDRESS_IP3,WIFI_ADDRESS_IP4);	  	// Change IP in config.h
+    IP4_ADDR(&ipInfo.gw, WIFI_ADDRESS_GW1,WIFI_ADDRESS_GW2,WIFI_ADDRESS_GW3,WIFI_ADDRESS_GW4);      	// Change GATEWAY in config.h
+    IP4_ADDR(&ipInfo.netmask, WIFI_ADDRESS_MK1,WIFI_ADDRESS_MK2,WIFI_ADDRESS_MK3,WIFI_ADDRESS_MK4); 	// change MASK in config.h
+    esp_netif_dhcps_stop(wifiAP);
+    esp_netif_set_ip_info(wifiAP, &ipInfo);
+    esp_netif_dhcps_start(wifiAP);
+
+  // end of Fab501 changes 
+  esp_err_t Err;
   tcpip_adapter_init();
   Err = esp_event_loop_init(WIFI_event_handler, NULL); if(Err!=ESP_OK) return Err;
   wifi_init_config_t Config = WIFI_INIT_CONFIG_DEFAULT();
