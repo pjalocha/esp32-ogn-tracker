@@ -212,41 +212,25 @@ static void ParmForm_GPS(httpd_req_t *Req)  // produce HTML form for GPS paramet
   httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Save\"></div>\n");
   httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 
-static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for parameters not included in other forms
+static void ParmForm_Page(httpd_req_t *Req)  // produce HTML form for parameters not included in other forms
 { char Line[16]; int Len;
 
-  httpd_resp_sendstr_chunk(Req, "<h2>Other</h2>");
-  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"POST\" id=\"Other\">\n");
+  httpd_resp_sendstr_chunk(Req, "<h2>Pages</h2>");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"POST\" id=\"Pages\">\n");
 
-  Begin_Control_Row(Req, "Freq. plan");
-  const char *FreqPlanTable[6] = { "Auto", "Europe/Africa", "USA/Canada", "Australia/Chile", "New Zeeland", "Izrael" };
-  SelectList(Req, "FreqPlan", FreqPlanTable, 6, Parameters.FreqPlan);
+  Begin_Control_Row(Req, "Altitude Unit");
+  const char *AltitudeUnitTable[2] = { "meter", "feet" } ;
+  SelectList(Req, "AltitudeUnit", AltitudeUnitTable, 2, Parameters.AltitudeUnit);
   End_Control_Row(Req);
 
-  Begin_Control_Row(Req, "Tx power [dBm]");
-  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"TxPower\" size=\"10\" value=\"");
-  Len=Format_SignDec(Line, (int16_t)Parameters.TxPower, 1, 0, 1);
-  httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\">");
+  Begin_Control_Row(Req, "Speed Unit");
+  const char *SpeedUnitTable[2] = { "km/h", "knot" } ;
+  SelectList(Req, "SpeedUnit", SpeedUnitTable, 2, Parameters.SpeedUnit);
   End_Control_Row(Req);
 
-  Begin_Control_Row(Req, "Freq.corr. [ppm]");
-  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"RFchipFreqCorr\" size=\"10\" value=\"");
-  Len=Format_SignDec(Line, Parameters.RFchipFreqCorr, 2, 1, 1);
-  httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\">");
-  End_Control_Row(Req);
-
-  Begin_Control_Row(Req, "Console baud");
-  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"CONbaud\" size=\"10\" value=\"");
-  Len=Format_UnsDec(Line, Parameters.CONbaud);
-  httpd_resp_send_chunk(Req, Line, Len);
-  httpd_resp_sendstr_chunk(Req, "\">");
-  End_Control_Row(Req);
-
-  Begin_Control_Row(Req, "Verbose");
-  const char *VerboseTable[2] = { "0 (off)", "1 (on)" };
-  SelectList(Req, "Verbose", VerboseTable, 2, Parameters.Verbose);
+  Begin_Control_Row(Req, "Vario Unit");
+  const char *VarioUnitTable[2] = { "m/s", "fpm" } ;
+  SelectList(Req, "VarioUnit", VarioUnitTable, 2, Parameters.VarioUnit);
   End_Control_Row(Req);
 
   Begin_Control_Row(Req, "Pages");
@@ -299,6 +283,45 @@ function pageCheckbox(checkbox) {\n\
 }\n\
 </script>\n");
 
+  httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Save\"></div>\n");
+  httpd_resp_sendstr_chunk(Req, "</form>\n"); }
+
+static void ParmForm_Other(httpd_req_t *Req)  // produce HTML form for parameters not included in other forms
+{ char Line[16]; int Len;
+
+  httpd_resp_sendstr_chunk(Req, "<h2>Other</h2>");
+  httpd_resp_sendstr_chunk(Req, "<form action=\"/parm.html\" method=\"POST\" id=\"Other\">\n");
+
+  Begin_Control_Row(Req, "Freq. plan");
+  const char *FreqPlanTable[6] = { "Auto", "Europe/Africa", "USA/Canada", "Australia/Chile", "New Zeeland", "Izrael" };
+  SelectList(Req, "FreqPlan", FreqPlanTable, 6, Parameters.FreqPlan);
+  End_Control_Row(Req);
+
+  Begin_Control_Row(Req, "Tx power [dBm]");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"TxPower\" size=\"10\" value=\"");
+  Len=Format_SignDec(Line, (int16_t)Parameters.TxPower, 1, 0, 1);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
+
+  Begin_Control_Row(Req, "Freq.corr. [ppm]");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"RFchipFreqCorr\" size=\"10\" value=\"");
+  Len=Format_SignDec(Line, Parameters.RFchipFreqCorr, 2, 1, 1);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
+
+  Begin_Control_Row(Req, "Console baud");
+  httpd_resp_sendstr_chunk(Req, "<input type=\"text\" name=\"CONbaud\" size=\"10\" value=\"");
+  Len=Format_UnsDec(Line, Parameters.CONbaud);
+  httpd_resp_send_chunk(Req, Line, Len);
+  httpd_resp_sendstr_chunk(Req, "\">");
+  End_Control_Row(Req);
+
+  Begin_Control_Row(Req, "Verbose");
+  const char *VerboseTable[2] = { "0 (off)", "1 (on)" };
+  SelectList(Req, "Verbose", VerboseTable, 2, Parameters.Verbose);
+  End_Control_Row(Req);
 
   httpd_resp_sendstr_chunk(Req, "<div class=\"submit-row\"><input type=\"submit\" value=\"Save\"></div>\n");
   httpd_resp_sendstr_chunk(Req, "</form>\n"); }
@@ -397,7 +420,14 @@ static void ParmForm_AP(httpd_req_t *Req) // Wi-Fi access point parameters { cha
   httpd_resp_sendstr_chunk(Req, "</form>\n"); }
 #endif
 
-
+static void ParmForm_Defaults(httpd_req_t *Req)
+{
+  httpd_resp_sendstr_chunk(Req, "\
+<form action=\"/parm.html\" method=\"POST\" onsubmit=\"return confirm('Are you sure to restore default configuration?')\">\n\
+<input type=\"submit\" value=\"Restore Default Configuration\">\n\
+<input type=\"hidden\" name=\"Defaults\" value=\"1\">\n\
+</form>\n");
+}
 
 static void ParmForm_Restart(httpd_req_t *Req)
 {
@@ -409,6 +439,184 @@ static void ParmForm_Restart(httpd_req_t *Req)
 }
 
 // ============================================================================================================
+
+
+
+static void Table_System(httpd_req_t *Req)
+{ char Line[128]; int Len;
+  uint32_t Time=TimeSync_Time();
+  uint32_t Sec = (Time-1)%60;
+  GPS_Position *GPS = GPS_getPosition(Sec); if(GPS==0) return;
+
+  httpd_resp_sendstr_chunk(Req, "<h2>System</h2>");
+  httpd_resp_sendstr_chunk(Req, "<table class=\"table table-striped table-bordered\">\n");
+
+
+  Len =Format_String(Line, "<tr><td>Board</td><td align=\"right\">");
+#ifdef WITH_FollowMe
+  Len+=Format_String(Line+Len, "FollowMe");
+#endif
+#ifdef WITH_TTGO
+  Len+=Format_String(Line+Len, "TTGO");
+#endif
+#if defined(WITH_HELTEC) || defined(WITH_HELTEC_V2)
+  Len+=Format_String(Line+Len, "HELTEC");
+#endif
+#if defined(WITH_TBEAM) || defined(WITH_TBEAM_V10)
+  Len+=Format_String(Line+Len, "T-BEAM");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Display</td><td align=\"right\">");
+#ifdef WITH_ILI9341                        // 320x240 M5stack
+  Len+=Format_String(Line+Len, "ILI9341");
+#endif
+#ifdef WITH_ST7789                         // IPS 240x240 ST7789
+  Len+=Format_String(Line+Len, "ST7789");
+#endif
+#ifdef WITH_TFT_LCD                       // TFT LCD
+  Len+=Format_String(Line+Len, "TFT_LCD");
+#endif
+#ifdef WITH_OLED                          // OLED display on the I2C: some TTGO modules are without OLED display
+  Len+=Format_String(Line+Len, "OLED");
+#endif
+#ifdef WITH_OLED2                         // 2nd OLED display, I2C address next higher
+  Len+=Format_String(Line+Len, "<br>OLED2");
+#endif
+#ifdef WITH_U8G2_OLED                     // I2C OLED through the U8g2 library
+  Len+=Format_String(Line+Len, "U8G2_OLED");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+
+
+  Len =Format_String(Line, "<tr><td>GPS</td><td align=\"right\">");
+#ifdef WITH_GPS_MTK
+  Len+=Format_String(Line+Len, "MTK GPS");
+#endif
+#ifdef WITH_GPS_UBX
+  Len+=Format_String(Line+Len, "UBX GPS");
+#endif
+#ifdef WITH_GPS_SRF
+  Len+=Format_String(Line+Len, "SRF GPS");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Radio</td><td align=\"right\">");
+#ifdef WITH_RFM95
+  Len+=Format_String(Line+Len, "RFM95");
+#endif
+#ifdef WITH_RFM69
+  Len+=Format_String(Line+Len, "RFM69");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Baro</td><td align=\"right\">");
+#ifdef WITH_BMP180
+  Len+=Format_String(Line+Len, "BMP180");
+#endif
+#ifdef WITH_BMP280
+  Len+=Format_String(Line+Len, "BMP280");
+#endif
+#ifdef WITH_BME280
+  Len+=Format_String(Line+Len, "BME280");
+#endif
+#ifdef WITH_MS5607
+  Len+=Format_String(Line+Len, "MS5607");
+#endif
+#ifdef WITH_MS5611
+  Len+=Format_String(Line+Len, "MS5611");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Bluetooth serial port</td><td align=\"right\">");
+#ifdef WITH_BT_SPP
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>LoRaWAN</td><td align=\"right\">");
+#ifdef WITH_LORAWAN
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Digital Buzzer</td><td align=\"right\">");
+#ifdef WITH_BEEPER
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Analog Sound</td><td align=\"right\">");
+#ifdef WITH_SOUND
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>SD Card</td><td align=\"right\">");
+#ifdef WITH_SD
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>SPIFFS</td><td align=\"right\">");
+#ifdef WITH_SPIFFS
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>WiFi</td><td align=\"right\">");
+#ifdef WITH_WIFI
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Access Point (wifi)</td><td align=\"right\">");
+#ifdef WITH_AP
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+  Len =Format_String(Line, "<tr><td>Encrypt</td><td align=\"right\">");
+#ifdef WITH_ENCRYPT
+  Len+=Format_String(Line+Len, "Yes");
+#else
+  Len+=Format_String(Line+Len, "No");
+#endif
+  Len+=Format_String(Line+Len, "</td></tr>\n");
+  httpd_resp_send_chunk(Req, Line, Len);
+
+
+  httpd_resp_sendstr_chunk(Req, "</table>\n"); }
 
 static void Table_GPS(httpd_req_t *Req)
 { char Line[128]; int Len;
@@ -771,6 +979,7 @@ static void Html_End(httpd_req_t *Req)
 static esp_err_t parm_post_handler(httpd_req_t *Req)
 {
   bool Restart=0;
+  bool Defaults=0;
   /* Destination buffer for content of HTTP POST request.
    * httpd_req_recv() accepts char* only, but content could
    * as well be any binary data (needs type casting).
@@ -806,12 +1015,16 @@ static esp_err_t parm_post_handler(httpd_req_t *Req)
 #endif
   char *Line=URL;
   Restart = strstr(Line,"Restart=1");
+  Defaults = strstr(Line,"Defaults=1");
   for( ; ; )
   { Parameters.ReadLine(Line);
     Line = strchr(Line, '&'); if(Line==0) break;
     Line++; }
   free(URL);
   Parameters.WriteToNVS();
+
+  if(Defaults)
+  { Parameters.setDefault(); }
 
   if(Restart)
   {
@@ -842,7 +1055,11 @@ static esp_err_t parm_get_handler(httpd_req_t *Req)
 #ifdef WITH_STRATUX
   ParmForm_Stratux(Req);
 #endif
+  ParmForm_Page(Req);
+
   ParmForm_Other(Req);
+
+  ParmForm_Defaults(Req);
 
   ParmForm_Restart(Req);
 
@@ -860,6 +1077,7 @@ static esp_err_t top_get_handler(httpd_req_t *Req)
   httpd_resp_send_chunk(Req, Line, Len);
   httpd_resp_sendstr_chunk(Req, "</b><br />\n");
 
+  Table_System(Req);
   Table_GPS(Req);
   Table_RF(Req);
   Table_Batt(Req);

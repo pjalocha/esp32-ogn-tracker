@@ -227,7 +227,9 @@ void OLED_DrawPosition(u8g2_t *OLED, GPS_Position *GPS=0, uint8_t LineIdx=2)
 }
 
 void OLED_DrawGPS(u8g2_t *OLED, GPS_Position *GPS)  // GPS time, position, altitude
-{ // u8g2_SetFont(OLED, u8g2_font_ncenB14_tr);
+{ bool isAltitudeUnitMeter = Parameters.AltitudeUnit == 0;  // display altitude in meters
+  bool isAltitudeUnitFeet  = Parameters.AltitudeUnit == 1;  // display altitude in feet
+  // u8g2_SetFont(OLED, u8g2_font_ncenB14_tr);
   u8g2_SetFont(OLED, u8g2_font_7x13_tf);              // 5 lines, 12 pixels/line
   uint8_t Len=0;
 /*
@@ -276,14 +278,14 @@ void OLED_DrawGPS(u8g2_t *OLED, GPS_Position *GPS)  // GPS time, position, altit
   if(GPS && GPS->isValid())
   { int32_t Alt = GPS->Altitude;
     if(Alt>=0) Line[Len++]=' ';
-    if(GPS->Sec&4)                                                // display altitude in meters
-    { Len+=Format_SignDec(Line+Len,  Alt, 1, 1, 1);               // [0.1m/s]
+    if(isAltitudeUnitMeter)                                       // display altitude in meters
+    { Len+=Format_SignDec(Line+Len,  Alt, 1, 1, 1);               // [0.1m]
       Line[Len++]='m'; }
-    else                                                          // and alternate in feet
-    { Alt = (Alt*336+512)>>10;                                    // [0.1m/s] => [feet]
+    else if(isAltitudeUnitFeet)                                   // display altitude in feet
+    { Alt = (Alt*336+512)>>10;                                    // [0.1m] => [feet]
       Len+=Format_SignDec(Line+Len,  Alt, 1, 0, 1);               // [feet]
       Line[Len++]='f'; Line[Len++]='t'; }
-    // for( ; Len<14; ) Line[Len++]=' ';                             // tail of spaces to cover older printouts
+    // for( ; Len<14; ) Line[Len++]=' ';                          // tail of spaces to cover older printouts
   }
   else Len+=Format_String(Line+Len, "-----.-  ");
   Line[Len]=0;
@@ -433,7 +435,13 @@ void OLED_DrawTrafWarn(u8g2_t *OLED, GPS_Position *GPS)
 #endif // WITH_LOOKOUT
 
 void OLED_DrawBaro(u8g2_t *OLED, GPS_Position *GPS)
-{ u8g2_SetFont(OLED, u8g2_font_7x13_tf);              // 5 lines, 12 pixels/line
+{ bool isAltitudeUnitMeter = Parameters.AltitudeUnit == 0;  // display altitude in meters
+  bool isAltitudeUnitFeet  = Parameters.AltitudeUnit == 1;  // display altitude in feet
+
+  bool isVarioUnitMPS = Parameters.VarioUnit == 0;  // display Vario in m/s
+  bool isVarioUnitFPM = Parameters.VarioUnit == 1;  // display Vario in fpm
+
+  u8g2_SetFont(OLED, u8g2_font_7x13_tf);              // 5 lines, 12 pixels/line
   uint8_t Len=0;
 #ifdef WITH_BMP180
   Len+=Format_String(Line+Len, "BMP180 ");
@@ -458,11 +466,22 @@ void OLED_DrawBaro(u8g2_t *OLED, GPS_Position *GPS)
   u8g2_DrawStr(OLED, 0, 24, Line);
   Len=0;
   if(GPS && GPS->hasBaro)
-  { Len+=Format_SignDec(Line+Len, GPS->StdAltitude, 5, 1);
-    Len+=Format_String(Line+Len, "m ");
-    Len+=Format_SignDec(Line+Len, GPS->ClimbRate, 2, 1);
-    Len+=Format_String(Line+Len, "m/s "); }
-  else Len+=Format_String(Line+Len, "-----.-m --.-m/s ");
+  { if(isAltitudeUnitMeter)
+    { Len+=Format_SignDec(Line+Len, GPS->StdAltitude, 5, 1);
+      Len+=Format_String(Line+Len, "m "); }
+    else if(isAltitudeUnitFeet)
+    { Len+=Format_SignDec(Line+Len, (GPS->StdAltitude*336+512)>>10, 5, 0);
+      Len+=Format_String(Line+Len, "ft "); }
+    if(isVarioUnitMPS)
+    { Len+=Format_SignDec(Line+Len, GPS->ClimbRate, 2, 1);
+      Len+=Format_String(Line+Len, "m/s "); }
+    else if(isVarioUnitFPM)
+    { Len+=Format_SignDec(Line+Len, (GPS->ClimbRate*5039+128)>>8, 2, 0);
+      Len+=Format_String(Line+Len, "fpm "); } }
+  else
+  { if(isAltitudeUnitMeter) Len+=Format_String(Line+Len, "-----.-m");
+    else if(isAltitudeUnitFeet) Len+=Format_String(Line+Len, "-----ft  ");
+    Len+=Format_String(Line+Len, " --.-m/s "); }
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 36, Line);
   Len=0;
@@ -773,13 +792,21 @@ void OLED_DrawID(u8g2_t *OLED, GPS_Position *GPS)
 void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
 { uint8_t Len;
 
-  bool inFeet = GPS->Sec&4;                      // decide if display altitude in meters or in feet
+  bool isAltitudeUnitMeter = Parameters.AltitudeUnit == 0;  // display altitude in meters
+  bool isAltitudeUnitFeet  = Parameters.AltitudeUnit == 1;  // display altitude in feet
+
+  bool isSpeedUnitKMH  = Parameters.SpeedUnit == 0;  // display Speed in km/h
+  bool isSpeedUnitKnot = Parameters.SpeedUnit == 1;  // display Speed in knot
+
+  bool isVarioUnitMPS = Parameters.VarioUnit == 0;  // display Vario in m/s
+  bool isVarioUnitFPM = Parameters.VarioUnit == 1;  // display Vario in fpm
+
   // Standard Pressure Altitude
   if(GPS && (GPS->hasBaro || GPS->isValid()))    // if GPS has lock or just the pressure data
   { int32_t Alt = GPS->Altitude;                 // [0.1m/s] take GPS (geometrical) altitude
     if(GPS->hasBaro) Alt = GPS->StdAltitude;     // but if pressure sensor is there then replace with pressure altitude
-    if(inFeet) Alt = (Alt*336+512)>>10;          // [0.1m] => [feet]  // convert to feet
-          else Alt = (Alt+5)/10;                 // [0.1m] => [m]     // or to meters
+    if(isAltitudeUnitMeter) Alt = (Alt+5)/10;            // [0.1m] => [m]     // or to meters
+    else if(isAltitudeUnitFeet)  Alt = (Alt*336+512)>>10;     // [0.1m] => [feet]  // convert to feet
     Len=Format_SignDec(Line, Alt, 1, 0, 1); }    // print altitude into the string
   else
     Len=Format_String(Line, "----");             // if altitude not available then print place holders
@@ -789,8 +816,8 @@ void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
   u8g2_DrawStr(OLED, 60-Altitude_width, 40, Line); // print the string
 
   u8g2_SetFont(OLED, u8g2_font_9x15_tr);         // smaller font
-  if(inFeet) u8g2_DrawStr(OLED, 62, 40, "ft");   // print units
-        else u8g2_DrawStr(OLED, 64, 40, "m");
+  if(isAltitudeUnitMeter) u8g2_DrawStr(OLED, 64, 40, "m");
+  else if(isAltitudeUnitFeet)  u8g2_DrawStr(OLED, 62, 40, "ft");   // print units
 
   u8g2_SetFont(OLED, u8g2_font_fub17_tr);
   if(GPS && GPS->isValid())
@@ -807,6 +834,7 @@ void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
 
   if(GPS && (GPS->hasBaro || GPS->isValid()))    // if GPS has lock or just the pressure data
   { int16_t vario_value = GPS->ClimbRate;        // [0.1m/s] climb rate
+    if(isVarioUnitFPM) vario_value = (vario_value*5039+128)>>8;  // [0.1m/s] => [feet per meter]
     if(vario_value<0)
     { vario_value=(-vario_value);
       const int minus_width=10;
@@ -826,7 +854,8 @@ void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
       u8g2_DrawXBM(OLED, 0, 47, plus_width, plus_height, plus_bits);
     }
-    Len=Format_UnsDec(Line, vario_value, 2, 1);
+    if(isVarioUnitMPS) Len=Format_UnsDec(Line, vario_value, 2, 1);
+    if(isVarioUnitFPM) Len=Format_UnsDec(Line, vario_value, 2, 0);
   }
   else
     Len=Format_String(Line, "-.-");
@@ -835,16 +864,24 @@ void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
   uint8_t Vario_width = u8g2_GetStrWidth(OLED, Line);
   u8g2_DrawStr(OLED, 54-Vario_width, 64, Line);
 
-  const int ms_width=7;
-  const int ms_height=17;
-  static unsigned char ms_bits[] =
-  { 0x00, 0x00, 0x16, 0x2a, 0x2a, 0x2a, 0x2a, 0x00, 0x7f, 0x00, 0x1c, 0x22,
-    0x02, 0x1c, 0x20, 0x22, 0x1c };
-  u8g2_DrawXBM(OLED, 58, 47, ms_width, ms_height, ms_bits);
+  if(isVarioUnitMPS)
+  { const int ms_width=7;
+    const int ms_height=17;
+    static unsigned char ms_bits[] =
+    { 0x00, 0x00, 0x16, 0x2a, 0x2a, 0x2a, 0x2a, 0x00, 0x7f, 0x00, 0x1c, 0x22,
+      0x02, 0x1c, 0x20, 0x22, 0x1c };
+    u8g2_DrawXBM(OLED, 58, 47, ms_width, ms_height, ms_bits); }
+  else if(isVarioUnitFPM)
+  { const int ms_width=7;
+    const int ms_height=17;
+    static unsigned char ms_bits[] =
+    { 0x84, 0xa2, 0xf7, 0xa2, 0xa2, 0xa2, 0xc2, 0x80, 0xff, 0x80, 0x00, 0x16, 0x2a, 0x2a, 0x2a, 0x2a, 0x00 };
+    u8g2_DrawXBM(OLED, 58, 47, ms_width, ms_height, ms_bits); }
 
   // Speed
   if(GPS && GPS->isValid())
   { uint16_t speed = (GPS->Speed*9+12)/25;
+    if(isSpeedUnitKnot) speed = (GPS->Speed*199+512)>>10;
     Len=Format_UnsDec(Line, speed, 1, 0); }
   else
     Len=Format_String(Line, "--");
@@ -853,13 +890,22 @@ void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
   uint8_t Speed_width = u8g2_GetStrWidth(OLED, Line);
   u8g2_DrawStr(OLED, 114-Speed_width, 64, Line);
 
-  const int kmh_width=10;
-  const int kmh_height=17;
-  static unsigned char kmh_bits[] =
-  { 0x01, 0x00, 0x01, 0x00, 0x69, 0x01, 0xa5, 0x02, 0xa3, 0x02, 0xa5, 0x02,
-    0xa9, 0x02, 0x00, 0x00, 0xff, 0x03, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00,
-    0x08, 0x00, 0x38, 0x00, 0x48, 0x00, 0x48, 0x00, 0x48, 0x00 };
-  u8g2_DrawXBM(OLED, 118, 47, kmh_width, kmh_height, kmh_bits);
+  if(isSpeedUnitKMH)
+  { const int kmh_width=10;
+    const int kmh_height=17;
+    static unsigned char kmh_bits[] =
+    { 0x01, 0x00, 0x01, 0x00, 0x69, 0x01, 0xa5, 0x02, 0xa3, 0x02, 0xa5, 0x02,
+      0xa9, 0x02, 0x00, 0x00, 0xff, 0x03, 0x00, 0x00, 0x08, 0x00, 0x08, 0x00,
+      0x08, 0x00, 0x38, 0x00, 0x48, 0x00, 0x48, 0x00, 0x48, 0x00 };
+    u8g2_DrawXBM(OLED, 118, 47, kmh_width, kmh_height, kmh_bits); }
+  else if(isSpeedUnitKnot)
+  { const int kmh_width=10;
+    const int kmh_height=17;
+    static unsigned char kmh_bits[] =
+    { 0x00, 0xfc, 0x00, 0xfc, 0x00, 0xfc, 0x00, 0xfc, 0x01, 0xfc, 0x01, 0xfc, 
+      0xe9, 0xfc, 0x25, 0xfd, 0x23, 0xfd, 0x25, 0xfd, 0x29, 0xfd, 0x00, 0xfc, 
+      0x00, 0xfc, 0x00, 0xfc, 0x00, 0xfc, 0x00, 0xfc, 0x00, 0xfc};
+    u8g2_DrawXBM(OLED, 118, 47, kmh_width, kmh_height, kmh_bits); }
 }
 
 void OLED_DrawFlight(u8g2_t *OLED, GPS_Position *GPS) // draw flight status page
