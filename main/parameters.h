@@ -196,15 +196,13 @@ uint16_t StratuxPort;
 
 #ifdef WITH_LORAWAN
    bool hasAppKey(void) const
-   { uint8_t Sum=AppKey[0];
-     for(int Idx=1; Idx<16; Idx++)
-     { if(Sum!=0) break;
-       Sum|=AppKey[Idx]; }
-     return Sum!=0; }
+   { for(int Idx=0; Idx<16; Idx++)
+     { if(AppKey[Idx]) return 1; }
+     return 0; }
 
-   void clrAppKey(void) { for(int Idx=0; Idx<16; Idx++) AppKey[Idx]=0; }
-   void cpyAppKey(uint8_t *Key) { memcpy(Key, AppKey, 16); }
-   bool sameAppKey(const uint8_t *RefKey) const { return memcmp(AppKey, RefKey, 16)==0; }
+   void clrAppKey(void) { for(int Idx=0; Idx<16; Idx++) AppKey[Idx]=0x00; }                   // set AppKey to all-zero
+   void cpyAppKey(uint8_t *Key) { memcpy(Key, AppKey, 16); }                                  // copy AppKey from given pointer
+   bool sameAppKey(const uint8_t *RefKey) const { return memcmp(AppKey, RefKey, 16)==0; }     // is AppKey same as given ?
 #endif
 
    uint32_t static calcCheckSum(volatile uint32_t *Word, uint32_t Words)                      // calculate check-sum of pointed data
@@ -233,7 +231,9 @@ uint16_t StratuxPort;
 
   void setDefault(uint32_t UniqueAddr)
   { AcftID = ((uint32_t)DEFAULT_AcftType<<26) | 0x03000000 | (UniqueAddr&0x00FFFFFF);
-    RFchipFreqCorr =         0; // [0.1ppm]
+    RFchip         =         0; // this clears FreqCorr and other
+    // RFchipFreqCorr =         0; // [0.1ppm]
+    // RFchipTempCorr =         0; // [degC]
 #ifdef WITH_RFM69W
     TxPower        =        13; // [dBm] for RFM69W
     RFchipTypeHW   =         0;
@@ -675,8 +675,8 @@ uint16_t StratuxPort;
     { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
       NavMode=Mode; return 1; }
     if(strcmp(Name, "NavRate")==0)
-    { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
-      if(Mode<0) Mode=0; NavRate=Mode; return 1; }
+    { int32_t Rate=0; if(Read_Int(Rate, Value)<=0) return 0;
+      if(Rate<0) Rate=0; NavRate=Rate; return 1; }
     if(strcmp(Name, "GNSS")==0)
     { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
       GNSS=Mode; return 1; }
@@ -691,8 +691,8 @@ uint16_t StratuxPort;
       Verbose=Mode; return 1; }
 #ifdef WITH_LORAWAN
     if(strcmp(Name, "AppKey")==0)
-    { if(Value[0]=='0' && Value[1]=='x') Value+=2;
-      for(uint8_t Idx=0; Idx<16; Idx++)
+    { if(Value[0]=='0' && Value[1]=='x') Value+=2;                     // skip initial 0x if present
+      for(uint8_t Idx=0; Idx<16; Idx++)                                // read 16 hex bytes
       { uint8_t Byte;
         uint8_t Len=Read_Hex(Byte, Value);
         if(Len!=2) break;
@@ -970,6 +970,11 @@ uint16_t StratuxPort;
     // Write_String (Line, "WIFIname", WIFIname[0]); strcat(Line, " #  [char]\n"); Format_String(Output, Line);
     // Write_String (Line, "WIFIpass", WIFIpass[0]); strcat(Line, " #  [char]\n"); Format_String(Output, Line);
 #endif
+// #ifdef WITH_LORAWAN
+//     Format_String(Output, "AppKey = ");
+//     Format_HexBytes(Output, AppKey, 16);
+//     Format_String(Output, "\n");
+// #endif
   }
 
 } ;
