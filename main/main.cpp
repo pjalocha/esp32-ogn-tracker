@@ -73,19 +73,55 @@ void app_main(void)
 // #endif
     }
 #endif
+
+    CONS_UART_SetBaudrate(Parameters.CONbaud);
+
 #ifdef WITH_LORAWAN
+#ifdef DEBUG_PRINT
+    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    Format_String(CONS_UART_Write, "Parameters.AppKey:");
+    Format_HexBytes(CONS_UART_Write, Parameters.AppKey, 16);
+    Format_String(CONS_UART_Write, "\n");
+    xSemaphoreGive(CONS_Mutex);
+#endif
     WANdev.Reset(getUniqueID(), Parameters.AppKey);     // set default LoRaWAN config.
     if(WANdev.ReadFromNVS()!=ESP_OK)                    // if can't read the LoRaWAN setup from NVS
     { WANdev.WriteToNVS(); }                            // then store the default
     if(Parameters.hasAppKey())
     { if(!Parameters.sameAppKey(WANdev.AppKey))         // if LoRaWAN key different from the one in Parameters
       { WANdev.Reset(getUniqueID(), Parameters.AppKey); // then reset LoRaWAN to this key
-        WANdev.WriteToNVS(); }                          // and save LoRaWAN config. to NVS
-      Parameters.clrAppKey(); }
+        WANdev.WriteToNVS();                            // and save LoRaWAN config. to NVS
+        xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+        Format_String(CONS_UART_Write, "LoRaWAN: AppKey <- ");
+        Format_HexBytes(CONS_UART_Write, Parameters.AppKey, 16);
+        // Format_String(CONS_UART_Write, " => ");
+        // Format_SignDec(CONS_UART_Write, Err);
+        Format_String(CONS_UART_Write, "\n");
+        xSemaphoreGive(CONS_Mutex);
+      }
+      Parameters.clrAppKey();                           // clear the AppKey in the Parameters and save it to Flash
+      Parameters.WriteToNVS(); }
     // WANdev.Disconnect();                                // restart with network join-request/accept at each restart
-#endif
 
-    CONS_UART_SetBaudrate(Parameters.CONbaud);
+#ifdef DEBUG_PRINT
+    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    Format_String(CONS_UART_Write, "LoRaWAN: AppEUI:");
+    Format_Hex(CONS_UART_Write, WANdev.AppEUI);
+    Format_String(CONS_UART_Write, " DevEUI:");
+    Format_Hex(CONS_UART_Write, WANdev.DevEUI);
+    Format_String(CONS_UART_Write, " DevNonce:");
+    Format_Hex(CONS_UART_Write, WANdev.DevNonce);
+    Format_String(CONS_UART_Write, " State:");
+    Format_Hex(CONS_UART_Write, WANdev.State);
+    Format_String(CONS_UART_Write, " AppKey:");
+    Format_HexBytes(CONS_UART_Write, WANdev.AppKey, 16);
+    Format_String(CONS_UART_Write, "\n");
+    Format_String(CONS_UART_Write, "Parameters.AppKey:");
+    Format_HexBytes(CONS_UART_Write, Parameters.AppKey, 16);
+    Format_String(CONS_UART_Write, "\n");
+    xSemaphoreGive(CONS_Mutex);
+#endif
+#endif
 
 #if defined(WITH_BT_SPP) || defined(WITH_BLE_SPP)
     { int32_t Err=BT_SPP_Init();                // start BT SPP
