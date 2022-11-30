@@ -100,7 +100,7 @@ static uint32_t GPS_nextBaudRate(void)   // produce next (possible) GPS baudrate
 
 uint32_t GPS_getBaudRate (void) { return GPS_BaudRate; }
 
-const uint32_t GPS_TargetBaudRate = 57600; // [bps]
+const uint32_t GPS_TargetBaudRate = 115200; // [bps]
 // const uint8_t  GPS_TargetDynModel =      7; // for UBX GPS's: 6 = airborne with >1g, 7 = with >2g
 
 #ifdef WITH_MAVLINK
@@ -119,7 +119,7 @@ static uint32_t RndID_TimeToChange = 0;
 void FlightProcess(void)
 { bool PrevInFlight=Flight.inFlight();
   GPS_Position &GPS = GPS_Pos[GPS_PosIdx];
-  Flight.Process(GPS_Pos[GPS_PosIdx]);
+  Flight.Process(GPS);
   GPS.InFlight=Flight.inFlight();
   if(Parameters.AddrType!=0) return;
   uint32_t Random = GPS_Random^RX_Random;
@@ -320,9 +320,9 @@ static void GPS_BurstStart(int CharDelay=0)  // when GPS starts sending the data
 #ifdef WITH_GPS_UBX
         if(Parameters.NavRate)
         { UBX_CFG_RATE CFG_RATE;
-          CFG_RATE.measRate = 1000/Parameters.NavRate;
+          CFG_RATE.measRate = 1000/Parameters.NavRate;                   // set the requested measuring period
           CFG_RATE.navRate = 1;
-          CFG_RATE.timeRef = 0;
+          CFG_RATE.timeRef = 0;                                          //
           UBX_RxMsg::Send(0x06, 0x08, GPS_UART_Write, (uint8_t*)(&CFG_RATE), sizeof(CFG_RATE));
 #ifdef DEBUG_PRINT
           Format_String(CONS_UART_Write, "GPS <- CFG-RATE: ");
@@ -331,7 +331,7 @@ static void GPS_BurstStart(int CharDelay=0)  // when GPS starts sending the data
 #endif
         }
         { UBX_CFG_NAV5 CFG_NAV5;
-          CFG_NAV5.setDynModel(Parameters.NavMode);
+          CFG_NAV5.setDynModel(Parameters.NavMode);                      // set the navigation/dynamic model
           UBX_RxMsg::Send(0x06, 0x24, GPS_UART_Write, (uint8_t*)(&CFG_NAV5), sizeof(CFG_NAV5));
 #ifdef DEBUG_PRINT
           Format_String(CONS_UART_Write, "GPS <- CFG-NAV5: ");
@@ -461,7 +461,8 @@ static void GPS_BurstStart(int CharDelay=0)  // when GPS starts sending the data
         // GPS_UART_Flush(500);                                                 // wait for all data to be sent to the GPS
         // GPS_UART_SetBaudrate(GPS_TargetBaudRate); GPS_BaudRate=GPS_TargetBaudRate;   // switch serial port to the new baudrate
       }
-      QueryWait=60;
+
+      QueryWait=60; if(Parameters.NavRate) QueryWait+=Parameters.NavRate;
     }
   }
   else { QueryWait=0; }
@@ -1089,12 +1090,12 @@ void vTaskGPS(void* pvParameters)
 #endif
     LineIdle+=Delta;                                                      // count idle time
     NoValidData+=Delta;                                                   // count time without any valid NMEA nor UBX packet
-    uint16_t Bytes=0;
-    uint16_t MaxBytesPerTick = 1+(GPS_getBaudRate()+2500)/5000;
+    // uint16_t Bytes=0;
+    // uint16_t MaxBytesPerTick = 1+(GPS_getBaudRate()+2500)/5000;
     for( ; ; )                                                            // loop over bytes in the GPS UART buffer
     { uint8_t Byte; int Err=GPS_UART_Read(Byte); if(Err<=0) break;        // get Byte from serial port, if no bytes then break this loop
       // CONS_UART_Write(Byte);                                              // copy the GPS output to console (for debug only)
-      Bytes++;
+      // Bytes++;
       LineIdle=0;                                                         // if there was a byte: restart idle counting
       NMEA.ProcessByte(Byte);                                             // process through the NMEA interpreter
 #ifdef WITH_GPS_UBX
@@ -1112,7 +1113,7 @@ void vTaskGPS(void* pvParameters)
 #ifdef WITH_MAVLINK
       if(MAV.isComplete()) { GPS_MAV(); NoValidData=0; MAV.Clear(); break; }
 #endif
-      if(Bytes>=MaxBytesPerTick) break;
+      // if(Bytes>=MaxBytesPerTick) break;
     }
 /*
 #ifdef DEBUG_PRINT
