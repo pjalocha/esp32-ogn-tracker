@@ -76,6 +76,10 @@ void Format_Hex( void (*Output)(char), uint32_t Word )
 { Format_Hex(Output, (uint8_t)(Word>>24)); Format_Hex(Output, (uint8_t)(Word>>16));
   Format_Hex(Output, (uint8_t)(Word>>8));  Format_Hex(Output, (uint8_t)Word); }
 
+void Format_Hex( void (*Output)(char), uint64_t Word )
+{ Format_Hex(Output, (uint32_t)(Word>>32));
+  Format_Hex(Output, (uint32_t)(Word    )); }
+
 void Format_MAC( void (*Output)(char), uint8_t *MAC, uint8_t Len)
 { for(uint8_t Idx=0; Idx<Len; Idx++)
   { if(Idx) (*Output)(':');
@@ -284,10 +288,15 @@ int16_t Read_Dec3(const char *Inp)             // convert three digit decimal nu
   int8_t Low=Read_Dec1(Inp[2]);  if(Low<0) return -1;
   return (int16_t)Low + (int16_t)10*(int16_t)Mid + (int16_t)100*(int16_t)High; }
 
-int16_t Read_Dec4(const char *Inp)             // convert three digit decimal number into an integer
+int16_t Read_Dec4(const char *Inp)             // convert four digit decimal number into an integer
 { int16_t High=Read_Dec2(Inp  ); if(High<0) return -1;
   int16_t Low =Read_Dec2(Inp+2); if(Low<0) return -1;
   return Low + (int16_t)100*(int16_t)High; }
+
+int32_t Read_Dec5(const char *Inp)             // convert four digit decimal number into an integer
+{ int16_t High=Read_Dec2(Inp  ); if(High<0) return -1;
+  int16_t Low =Read_Dec3(Inp+2); if(Low<0) return -1;
+  return (int32_t)Low + (int32_t)1000*(int32_t)High; }
 
 // ------------------------------------------------------------------------------------------
 

@@ -125,7 +125,8 @@ static void IGC_Close(void)
     Format_String(CONS_UART_Write, IGC_FileName);
     Format_String(CONS_UART_Write, "\n");
     xSemaphoreGive(CONS_Mutex);
-    fclose(IGC_File); IGC_File=0; IGC_FlightNum++; }
+    fclose(IGC_File); IGC_File=0;
+    IGC_FlightNum++; }
 }
 /*
     IGC_SaveTime = TimeSync_Time();
@@ -146,11 +147,14 @@ static int IGC_Open(const GPS_Position &GPS)
   IGC_FileName[IGC_PathLen]='/';                                    // slash after the path
   Flight.ShortName(IGC_FileName+IGC_PathLen+1, GPS, IGC_FlightNum, IGC_Serial); // full name
   IGC_File=fopen(IGC_FileName, "rt");                               // attempt to open for read, just to try if the file is already there
-  if(IGC_File) { IGC_Close(); return -2; }                          // -2 => file already exists
+  // Format_String(CONS_UART_Write, "IGC_Open() (1)\n");
+  if(IGC_File) { fclose(IGC_File); IGC_File=0; IGC_FlightNum++; return -2; } // -2 => file already exists
   IGC_File=fopen(IGC_FileName, "wt");                               // open for write
+  // Format_String(CONS_UART_Write, "IGC_Open() (2)\n");
   if(IGC_File==0)                                                   // failed: maybe sub-dir does not exist ?
   { if(mkdir(IGC_Path, 0777)<0) return -3;                          // -3 => can't create sub-dir
     IGC_File=fopen(IGC_FileName, "wt"); }                           // retry to open for write
+  // Format_String(CONS_UART_Write, "IGC_Open() (3)\n");
   if(IGC_File)
   { IGC_SaveTime = TimeSync_Time();
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -368,13 +372,13 @@ static void IGC_CheckGPS(void)                                   // check if new
 { static uint8_t PrevPosIdx=0;
   if(GPS_PosIdx==PrevPosIdx) return;
   PrevPosIdx=GPS_PosIdx;
-  const  uint8_t PosPipeIdxMask = GPS_PosPipeSize-1;                 // get the GPS position just before in the pipe
+  const  uint8_t PosPipeIdxMask = GPS_PosPipeSize-1;             // get the GPS position just before in the pipe
   uint8_t PosIdx = GPS_PosIdx-1; PosIdx&=PosPipeIdxMask;
   static bool PrevInFlight=0;
   const GPS_Position &GPS = GPS_Pos[PosIdx];
-  bool inFlight = GPS.InFlight;                                      // in-flight or on-the-ground ?
-  bool StopFile = PrevInFlight && !inFlight;
-  PrevInFlight = inFlight;;
+  bool inFlight = GPS.InFlight;                                  // in-flight or on-the-ground ?
+  bool StopFile = PrevInFlight && !inFlight;                     // decide to stop the file when InFlight switches from 1 to 0
+  PrevInFlight = inFlight;
 #ifdef DEBUG_PRINT
   GPS.PrintLine(Line);
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
