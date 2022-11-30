@@ -64,21 +64,25 @@ class LoRaWANnode
 
    // uint8_t  TxMAC[16];
    // uint8_t  TxMACs;
-   static const size_t MaxPacketSize = 64; // [bytes]
+   static const size_t MaxPacketSize = 63; // [bytes]
    uint8_t  Packet[MaxPacketSize];    // generic packet for storage/processing
 
+   uint8_t  TxBattLevel;              // battery level to be transmitted in the DevStatusAns
+   uint8_t  TxOptLen;
+   uint8_t  TxOpt[15];                // MAC commands/options to be transmitted
+
   public:
-   LoRaWANnode() { Reset(); }
+   LoRaWANnode() { Reset(); TxOptLen=0; TxBattLevel=0xFF; }
 
    void Reset(void)
    { State=0; DevNonce=0; JoinNonce=0;
      LastTx=0; TxCount=0; LastRx=0; RxCount=0; RxSilent=0; Flags=0; LastSaved=0;
      setCRC(); }
 
-   void Reset(uint64_t MAC, uint8_t *AppKey=0)
+   void Reset(uint64_t MAC, uint8_t *NewKey=0)
    { AppEUI=0x70B3D57ED0035895;                    // set OGN application
      DevEUI=MAC;                                   // set DevEUI from MAC
-     if(AppKey) memcpy(this->AppKey, AppKey, 16);  // set the AppKey
+     if(NewKey) memcpy(AppKey, NewKey, 16);        // set the AppKey
      Reset(); }                                    // reset to not-joined state
 
    void Disconnect(void)
@@ -155,8 +159,8 @@ class LoRaWANnode
 
    int procJoinAccept(const RFM_LoRa_RxPacket &RxPacket)
    { int Ret=procJoinAccept(RxPacket.Byte, RxPacket.Len); if(Ret<0) return Ret;
-     RxSNR  = RxPacket.SNR;
-     RxRSSI = RxPacket.RSSI;
+     RxSNR  = RxPacket.SNR;                        // store the SNR of the join-accept
+     RxRSSI = RxPacket.RSSI;                       // store the RSSI
      return Ret; }
 
    int procJoinAccept(const uint8_t *PktData, int PktLen)                        // process Join-Accept packet (5sec after Join-Request)
@@ -175,7 +179,8 @@ class LoRaWANnode
      RxDelay   = Packet[12];
      State = 2;                                                                  // State = accepted on network
      UpCount = 0;
-     DnCount = 0;
+     DnCount = 0xFFFFFFFF;
+     TxOptLen  = 0;
 #ifdef WITH_PRINTF
      printf("Accept[%d] ", PktLen-4);
      for(int Idx=0; Idx<PktLen-4; Idx++)
@@ -192,10 +197,13 @@ class LoRaWANnode
      int PktLen=0;
      Packet[PktLen++] = Type<<5;                             // packet-type
      PktLen+=writeInt(Packet+PktLen, DevAddr, 4);            // Device Address
-     uint8_t Ctrl=0;                                         // Frame Control
+     uint8_t Ctrl=0x00;                                       // Frame Control
      if(TxACK) { Ctrl|=0x20; TxACK=0; }                      // if there is ACK to be transmitted
-     Packet[PktLen++] = Ctrl;                                // Frame Control: ADR | ADR-ACK-Req | ACK | ClassB | FOptsLen[4]
+     Packet[PktLen++] = Ctrl | TxOptLen;                     // Frame Control: ADR | ADR-ACK-Req | ACK | ClassB | FOptsLen[4]
      PktLen+=writeInt(Packet+PktLen, UpCount, 2);            // uplink frame counter
+     for(int Idx=0; Idx<TxOptLen; Idx++)                     // add options, MAC replies
+       Packet[PktLen++]=TxOpt[Idx];
+     TxOptLen=0;
      Packet[PktLen++] = Port;                                // port
      LoRaMacPayloadEncrypt(Data, DataLen, AppSesKey, DevAddr, 0, UpCount, Packet+PktLen); PktLen+=DataLen; // copy+encrypt user data
      uint32_t MIC=0;
@@ -211,13 +219,14 @@ class LoRaWANnode
 
    int procRxData(const RFM_LoRa_RxPacket &RxPacket)
    { int Ret=procRxData(RxPacket.Byte, RxPacket.Len); if(Ret<0) return Ret;
-     RxSNR += (RxPacket.SNR-RxSNR+1)/2;
-     RxRSSI += (RxPacket.RSSI-RxRSSI+1)/2;
+     RxSNR  += (RxPacket.SNR-RxSNR+1)/2;                      // average the SNR
+     RxRSSI += (RxPacket.RSSI-RxRSSI+1)/2;                    // average the RSSI
      return Ret; }
 
    int procRxData(const uint8_t *PktData, int PktLen)
    { if(PktLen<12) return -1;
-     uint8_t Type = PktData[0]>>5; if(Type!=3 && Type!=5) return -1; // Frame Type: 3=unconfirmed data downlink, 5=confirmed data downlink
+     uint8_t Type = PktData[0]>>5;                                   // Frame Type
+     if(Type!=3 && Type!=5) return -1;                               // Frame Type: 3=unconfirmed data downlink, 5=confirmed data downlink
      uint32_t Addr=readInt<uint32_t>(PktData+1, 4);                  // device address
      if(Addr!=DevAddr) return 0;                                     // check if packet is for us (it could be for somebody else)
      uint8_t Ctrl = PktData[5];                                      // Frame Control: ADR | RFU | ACK | FPending | FOptLen[4]
@@ -253,12 +262,34 @@ class LoRaWANnode
      // }
      return DataLen; }
 
-     void procRxOpt(const uint8_t *Opt, uint8_t Len)                 // process the options
-     { }
-     // { Format_String(CONS_UART_Write, "LoRaWAN Opt: ");
-     //   for(uint8_t Idx=0; Idx<Len; Idx++)
-     //     Format_Hex(CONS_UART_Write, Opt[Idx]);
-     //   Format_String(CONS_UART_Write, "\n"); }
+   void procRxOpt(const uint8_t *Opt, uint8_t OptLen)                 // process the options
+   { if(OptLen==0) return;
+     for(uint8_t Idx=0; Idx<OptLen; Idx++)
+     { uint8_t Cmd=Opt[Idx];
+       if(Cmd==0x03)                                                 // LinkADRReq
+       { TxOpt[TxOptLen++]=0x03;                                     // LinkADRAns
+         TxOpt[TxOptLen++]=0x00;                                     // negative 0x00 or positive 0x07 on all requested changes ?
+         Idx+=4; continue; }                                         // skip the actual data for this command
+       if(Cmd==0x06)                                                 // DevStatusReq
+       { TxOpt[TxOptLen++]=0x06;                                     // DevStatusAns
+         TxOpt[TxOptLen++]=TxBattLevel;                              // battery level: 0=ext. power, 1..254=level, 255=not available
+         TxOpt[TxOptLen++]=(RxSNR>>2)&0x3F;                          // Rx SNR
+         continue; }
+       break; }
+// #ifdef WITH_PRINTF
+     printf("RxOpt: [%d] ", OptLen);
+     for(int Idx=0; Idx<OptLen; Idx++)
+       printf("%02X", Opt[Idx]);
+     printf(" => [%d] ", TxOptLen);
+     for(int Idx=0; Idx<TxOptLen; Idx++)
+       printf("%02X", TxOpt[Idx]);
+     printf("\n");
+// #endif
+   }
+   // { Format_String(CONS_UART_Write, "LoRaWAN Opt: ");
+   //   for(uint8_t Idx=0; Idx<Len; Idx++)
+   //     Format_Hex(CONS_UART_Write, Opt[Idx]);
+   //   Format_String(CONS_UART_Write, "\n"); }
 
   int WriteToFile(const char *Name)
   { FILE *File = fopen(Name, "wb"); if(File==0) return -1;
