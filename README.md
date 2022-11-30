@@ -42,7 +42,7 @@ Start with:
 
 ```
 cd
-git clone -b v4.1 --recursive https://github.com/espressif/esp-idf.git
+git clone -b v4.3 --recursive https://github.com/espressif/esp-idf.git
 cd esp-idf
 ./install.sh
 ```

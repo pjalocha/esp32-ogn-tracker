@@ -111,6 +111,7 @@ static void ReadParameters(void)  // read parameters requested by the user in th
     Parameters.ReadPOGNS(NMEA);
     PrintParameters();
     esp_err_t Err = Parameters.WriteToNVS();                                                  // erase and write the parameters into the Flash
+    // Parameters.ReadFromNVS();                                              // for debug only
     // if(Parameters.ReadFromNVS()!=ESP_OK) Parameters.setDefault();
     // Parameters.WriteToFlash();                                             // erase and write the parameters into the Flash
     // if(Parameters.ReadFromFlash()<0) Parameters.setDefault();              // read the parameters back: if invalid, set defaults
