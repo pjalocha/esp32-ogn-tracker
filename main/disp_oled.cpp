@@ -344,15 +344,35 @@ void OLED_DrawRF(u8g2_t *OLED, GPS_Position *GPS) // RF
 }
 
 void OLED_DrawRelay(u8g2_t *OLED, GPS_Position *GPS)
-{ u8g2_SetFont(OLED, u8g2_font_amstrad_cpc_extended_8r);
+{ 
+  const char *AcftTypeName[16] = { "----", "Glid", "Tow ", "Heli",
+                                   "SkyD", "Drop", "Hang", "Para",
+                                   "Pwrd", "Jet ", "UFO", "Ball",
+                                   "Zepp", "UAV", "Car ", "Fix " } ;
+
+  u8g2_SetFont(OLED, u8g2_font_amstrad_cpc_extended_8r);
   uint8_t Len=Format_String(Line, "Relay:");
   if(GPS && GPS->Sec>=0) { Len+=Format_UnsDec(Line+Len, (uint16_t)(GPS->Sec), 2); Line[Len++]='s'; }
   Line[Len]=0;
   u8g2_DrawStr(OLED, 0, 24, Line);
   uint8_t LineIdx=1;
   for( uint8_t Idx=0; Idx<RelayQueueSize; Idx++)
-  { OGN_RxPacket<OGN_Packet> *Packet = RelayQueue.Packet+Idx; if(!Packet->Alloc) continue;
+  { OGN_RxPacket<OGN_Packet> *Packet = RelayQueue.Packet+Idx; if(Packet->Alloc==0) continue;
+    if(Packet->Packet.Header.NonPos) continue;
     uint8_t Len=0;
+    uint32_t Dist= IntDistance(Packet->LatDist, Packet->LonDist);      // [m]
+    uint32_t Dir = IntAtan2(Packet->LonDist, Packet->LatDist);         // [16-bit cyclic]
+    Dir &= 0xFFFF; Dir = (Dir*360)>>16;                                // [deg]
+    uint8_t Len=0;
+    Len+=Format_String(Line+Len, AcftTypeName[Packet->Packet.Position.AcftType]);
+    Line[Len++]=' ';
+    Len+=Format_UnsDec(Line+Len, Packet->Packet.DecodeAltitude()); // [m] altitude
+    Line[Len++]='m'; Line[Len++]=' ';
+    Len+=Format_UnsDec(Line+Len, Dir, 3);                             // [deg] direction to target
+    Line[Len++]=' ';
+    Len+=Format_UnsDec(Line+Len, (Dist+50)/100, 2, 1);                // [km] distance to target
+    Len+=Format_String(Line+Len, "km");
+/*
     Line[Len++]='0'+Packet->Packet.Header.AddrType;
     Line[Len++]=':';
     Len+=Format_Hex(Line+Len, Packet->Packet.Header.Address, 6);
@@ -361,6 +381,7 @@ void OLED_DrawRelay(u8g2_t *OLED, GPS_Position *GPS)
     Line[Len++]=' ';
     Line[Len++]=':';
     Len+=Format_UnsDec(Line+Len, Packet->Packet.Position.Time, 2);
+*/
     Line[Len]=0;
     u8g2_DrawStr(OLED, 0, (LineIdx+3)*8, Line);
     LineIdx++; if(LineIdx>=8) break;
