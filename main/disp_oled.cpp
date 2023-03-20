@@ -351,7 +351,7 @@ void OLED_DrawRelay(u8g2_t *OLED, GPS_Position *GPS)
   u8g2_DrawStr(OLED, 0, 24, Line);
   uint8_t LineIdx=1;
   for( uint8_t Idx=0; Idx<RelayQueueSize; Idx++)
-  { OGN_RxPacket<OGN_Packet> *Packet = RelayQueue.Packet+Idx; if(Packet->Rank==0) continue;
+  { OGN_RxPacket<OGN_Packet> *Packet = RelayQueue.Packet+Idx; if(!Packet->Alloc) continue;
     uint8_t Len=0;
     Line[Len++]='0'+Packet->Packet.Header.AddrType;
     Line[Len++]=':';

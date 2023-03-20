@@ -19,6 +19,10 @@
   extern FIFO<RFM_FSK_RxPktData, 16> RF_RxFIFO;   // buffer for received packets
   extern FIFO<OGN_TxPacket<OGN_Packet>, 4> RF_TxFIFO;   // buffer for transmitted packets
 
+#ifdef WITH_ADSL
+  extern FIFO<ADSL_Packet, 4> ADSL_TxFIFO;
+#endif
+
 #ifdef WITH_FANET
   extern FIFO<FANET_RxPacket, 8> FNT_RxFIFO;
   extern FIFO<FANET_Packet, 4> FNT_TxFIFO;

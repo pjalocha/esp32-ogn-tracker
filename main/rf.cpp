@@ -11,11 +11,15 @@
 // ===============================================================================================
 
 // OGNv1 SYNC:       0x0AF3656C encoded in Manchester
-static const uint8_t OGN1_SYNC[8] = { 0xAA, 0x66, 0x55, 0xA5, 0x96, 0x99, 0x96, 0x5A };
+static const uint8_t OGN1_SYNC[10] = { 0xAA, 0x66, 0x55, 0xA5, 0x96, 0x99, 0x96, 0x5A, 0x00, 0x00 };
 // OGNv2 SYNC:       0xF56D3738 encoded in Machester
-static const uint8_t OGN2_SYNC[8] = { 0x55, 0x99, 0x96, 0x59, 0xA5, 0x95, 0xA5, 0x6A };
+static const uint8_t OGN2_SYNC[10] = { 0x55, 0x99, 0x96, 0x59, 0xA5, 0x95, 0xA5, 0x6A, 0x00, 0x00 };
 
-static const uint8_t PAW_SYNC [8] = { 0xB4, 0x2B, 0x00, 0x00, 0x00, 0x00, 0x18, 0x71 };
+// ADS-L SYNC:       0xF5724B18 encoded in Manchester (fixed packet length 0x18 is included)
+static const uint8_t ADSL_SYNC[10] = { 0x55, 0x99, 0x95, 0xA6, 0x9A, 0x65, 0xA9, 0x6A, 0x00, 0x00 };
+
+// PilotAWare SYNC including the packet size and CRC seed
+static const uint8_t PAW_SYNC [10] = { 0xB4, 0x2B, 0x00, 0x00, 0x00, 0x00, 0x18, 0x71, 0x00, 0x00 };
 
 #ifdef WITH_OGN1
 static const uint8_t *OGN_SYNC = OGN1_SYNC;
@@ -36,6 +40,10 @@ static uint32_t  RF_SlotTime;               // [sec] UTC time which belongs to t
        FIFO<RFM_FSK_RxPktData, 16> RF_RxFIFO;         // buffer for received packets
        FIFO<OGN_TxPacket<OGN_Packet>, 4> RF_TxFIFO;   // buffer for transmitted packets
 
+#ifdef WITH_ADSL
+       FIFO<ADSL_Packet, 4> ADSL_TxFIFO;
+#endif
+
 #ifdef WITH_FANET
        FIFO<FANET_RxPacket, 8> FNT_RxFIFO;
        FIFO<FANET_Packet, 4> FNT_TxFIFO;
@@ -51,17 +59,12 @@ static Delay<uint8_t, 64> RX_OGN_CountDelay;
 
       uint32_t RX_Random=0x12345678;        // Random number from LSB of RSSI readouts
 
-//       void XorShift32(uint32_t &Seed)      // simple random number generator
-// { Seed ^= Seed << 13;
-//   Seed ^= Seed >> 17;
-//   Seed ^= Seed << 5; }
-
 static uint8_t RX_Channel=0;                // (hopping) channel currently being received
 
-static void SetTxChannel(uint8_t TxChan=RX_Channel)         // default channel to transmit is same as the receive channel
+static void SetTxChannel(uint8_t TxChan=RX_Channel, const uint8_t *SYNC=OGN_SYNC)         // default channel to transmit is same as the receive channel
 {
 #ifdef WITH_SX1262
-  TRX.OGN_Configure(TxChan&0x7F, OGN_SYNC);
+  TRX.OGN_Configure(TxChan&0x7F, SYNC);
   TRX.WaitWhileBusy_ms(2);
   TRX.WriteTxPower(Parameters.TxPower);
   TRX.WaitWhileBusy_ms(2);
@@ -73,24 +76,38 @@ static void SetTxChannel(uint8_t TxChan=RX_Channel)         // default channel t
   TRX.WriteTxPower(Parameters.TxPower);                         // set TX for transmission
 #endif
   TRX.setChannel(TxChan&0x7F);
-  TRX.FSK_WriteSYNC(8, 7, OGN_SYNC);                            // Full SYNC for TX
+  TRX.FSK_WriteSYNC(8, 7, SYNC);                                // Full SYNC for TX
 #endif // WITH_SX1262
 }
 
-static void SetRxChannel(uint8_t RxChan=RX_Channel)
+static void SetRxChannel(uint8_t RxChan=RX_Channel, const uint8_t *SYNC=OGN_SYNC)
 {
 #ifdef WITH_SX1262
+  // TRX.OGN_Configure(RxChan&0x7F, SYNC);
   TRX.setChannel(RxChan&0x7F);
-  TRX.FSK_WriteSYNC(7, 7, OGN_SYNC);                            // Shorter SYNC for RX
+  TRX.FSK_WriteSYNC(7, 7, SYNC);                                // Shorter SYNC for RX
 #else
   TRX.WriteTxPowerMin();                                        // setup for RX
   TRX.setChannel(RxChan&0x7F);
-  TRX.FSK_WriteSYNC(7, 7, OGN_SYNC);                            // Shorter SYNC for RX
+  TRX.FSK_WriteSYNC(7, 7, SYNC);                                // Shorter SYNC for RX
 #endif
 }
 
 static uint8_t ReceivePacket(void)                              // see if a packet has arrived
-{ if(!TRX.DIO0_isOn()) return 0;                                // DIO0 line HIGH signals a new packet has arrived
+{
+#ifdef DEBUG_PRINT
+  uint16_t Mask=TRX.ReadIrqFlags();
+  // static uint16_t BackOff=0;
+  if(Mask /* || BackOff==0 */ )
+  { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    Format_String(CONS_UART_Write, "IRQ:0x");
+    Format_Hex(CONS_UART_Write, Mask);
+    Format_String(CONS_UART_Write, "\n");
+    xSemaphoreGive(CONS_Mutex);
+    TRX.ClearIrqFlags(0xFFFF); /* BackOff=100; */ }
+  // else BackOff--;
+#endif
+  if(!TRX.DIO0_isOn()) return 0;                                // DIO0 line HIGH signals a new packet has arrived
 #ifdef WITH_LED_RX
   LED_RX_Flash(20);
 #endif
@@ -131,10 +148,57 @@ static uint32_t ReceiveUntil(TickType_t End)
 // static uint32_t ReceiveFor(TickType_t Ticks)                     // keep receiving packets for given period of time
 // { return ReceiveUntil(xTaskGetTickCount()+Ticks); }
 
+#ifdef WITH_ADSL
+static uint8_t Transmit(uint8_t TxChan, const ADSL_Packet *Packet, uint8_t Thresh, uint8_t MaxWait=7)
+{
+  if(Packet==0) return 0;                                   // if no packet to send: simply return
+
+  if(MaxWait)
+  { for( ; MaxWait; MaxWait--)                                  // wait for a given maximum time for a free radio channel
+    {
+#ifdef WITH_RFM69
+      TRX.TriggerRSSI();
+#endif
+      vTaskDelay(1);
+      uint8_t RxRSSI=TRX.ReadRSSI();
+      RX_Random = (RX_Random<<1) | (RxRSSI&1);
+      if(RxRSSI>=Thresh) break; }
+    if(MaxWait==0) return 0; }
+
+#ifdef WITH_LED_TX
+  LED_TX_Flash(20);
+#endif
+  TRX.setModeStandby();                                        // switch to standby
+  vTaskDelay(1);
+  TRX.FSK_Configure(TxChan&0x7F, ADSL_SYNC, ADSL_Packet::TxBytes-3);
+  SetTxChannel(TxChan, ADSL_SYNC);
+
+#ifdef WITH_SX1262
+#else // not WITH_SX1262
+  TRX.ClearIrqFlags();
+  TRX.FSK_WritePacket(&(Packet->Version), ADSL_Packet::TxBytes-3);       // write packet into FIFO (apply Manchester conversion)
+  TRX.setModeTX();                                               // transmit
+  vTaskDelay(5);                                                 // wait 5ms (about the OGN packet time)
+  uint8_t Break=0;
+  for(uint16_t Wait=400; Wait; Wait--)                           // wait for transmission to end
+  { uint16_t Flags=TRX.ReadIrqFlags();
+    if(Flags&RF_IRQ_PacketSent) Break++;
+    if(Break>=2) break; }
+  TRX.setModeStandby();                                       // switch to standy
+  // vTaskPrioritySet(0, tskIDLE_PRIORITY+2);
+#endif
+
+  TRX.FSK_Configure(RX_Channel&0x7F, OGN_SYNC, OGN_TxPacket<OGN_Packet>::Bytes);
+  SetRxChannel();
+  TRX.setModeRX();                                            // back to receive mode
+  TRX.ClearIrqFlags();
+
+  return 1; }
+#endif
+
 static uint8_t Transmit(uint8_t TxChan, const uint8_t *PacketByte, uint8_t Thresh, uint8_t MaxWait=7)
 {
   if(PacketByte==0) return 0;                                   // if no packet to send: simply return
-  // if(Parameters.TxPower==(-32)) return 0;                       // if transmission turned OFF
 
   if(MaxWait)
   { for( ; MaxWait; MaxWait--)                                  // wait for a given maximum time for a free radio channel
@@ -181,9 +245,9 @@ static uint8_t Transmit(uint8_t TxChan, const uint8_t *PacketByte, uint8_t Thres
   Format_String(CONS_UART_Write, "ms\n");
   xSemaphoreGive(CONS_Mutex);
 #endif
-#else // of WITH_SX1262
+#else // not WITH_SX1262
   TRX.ClearIrqFlags();
-  TRX.OGN_WritePacket(PacketByte);                                // write packet into FIFO
+  TRX.FSK_WritePacket(PacketByte, OGN_TxPacket<OGN_Packet>::Bytes); // write packet into FIFO (apply Manchester conversion)
   TRX.setModeTX();                                               // transmit
   vTaskDelay(5);                                                 // wait 5ms (about the OGN packet time)
   uint8_t Break=0;
@@ -216,10 +280,22 @@ static void TimeSlot(uint8_t TxChan, uint32_t SlotLen, const uint8_t *PacketByte
   if( (TxTime==0) || (TxTime>=MaxTxTime) ) TxTime = RX_Random%MaxTxTime;   // if TxTime out of limits, setup a random TxTime
   TickType_t Tx    = Start + TxTime;                                       // Tx = the moment to start transmission
   ReceiveUntil(Tx);                                                        // listen until this time comes
-  if( (TX_Credit>0) && Parameters.TxPower!=(-32) && (PacketByte) )         // when packet to transmit is given and there is still TX credit left:
+  if( (TX_Credit>0) && Parameters.TxPower!=(-32) && PacketByte )           // when packet to transmit is given and there is still TX credit left:
     if(Transmit(TxChan, PacketByte, Rx_RSSI, MaxWait)) TX_Credit-=5;       // attempt to transmit the packet
-  ReceiveUntil(End);                                                       // listen till the end of the time-slot
-}
+  ReceiveUntil(End); }                                                     // listen till the end of the time-slot
+
+#ifdef WITH_ADSL
+static void TimeSlot(uint8_t TxChan, uint32_t SlotLen, const ADSL_Packet *Packet, uint8_t Rx_RSSI, uint8_t MaxWait=8, uint32_t TxTime=0)
+{ TickType_t Start = xTaskGetTickCount();                                  // when the slot started
+  TickType_t End   = Start + SlotLen;                                      // when should it end
+  uint32_t MaxTxTime = SlotLen-8-MaxWait;                                  // time limit when transmision could start
+  if( (TxTime==0) || (TxTime>=MaxTxTime) ) TxTime = RX_Random%MaxTxTime;   // if TxTime out of limits, setup a random TxTime
+  TickType_t Tx    = Start + TxTime;                                       // Tx = the moment to start transmission
+  ReceiveUntil(Tx);                                                        // listen until this time comes
+  if( (TX_Credit>0) && Parameters.TxPower!=(-32) && Packet )              // when packet to transmit is given and there is still TX credit left:
+    if(Transmit(TxChan, Packet, Rx_RSSI, MaxWait)) TX_Credit-=5;           // attempt to transmit the packet
+  ReceiveUntil(End); }                                                     // listen till the end of the time-slot
+#endif
 
 static void SetFreqPlanOGN(void)                             // set the RF TRX according to the selected frequency hopping plan
 { TRX.setBaseFrequency(RF_FreqPlan.BaseFreq);                // set the base frequency (recalculate to RFM69 internal synth. units)
@@ -272,22 +348,24 @@ static uint8_t StartRFchip(void)
   // if(TRX.readBusy()) Format_String(CONS_UART_Write, "StartRFchip() sx1262 BUSY after RESET(0)\n");
   //               else Format_String(CONS_UART_Write, "StartRFchip() sx1262 NOT busy after reset\n");
   TRX.setRegulator(1);
-  TRX.WaitWhileBusy_ms(5);
+  TRX.WaitWhileBusy_ms(10);
   TRX.setRFswitchDIO2(1);       // enable DIO0 as RF switch
-  TRX.WaitWhileBusy_ms(5);
-  // if(TRX.readBusy()) Format_String(CONS_UART_Write, "StartRFchip() sx1262 BUSY after setRFswitchDIO2()\n");
+  TRX.WaitWhileBusy_ms(10);
+  //if(TRX.readBusy()) Format_String(CONS_UART_Write, "StartRFchip() sx1262 BUSY after setRFswitchDIO2()\n");
   // WaitWhileBusy(100);
-  TRX.setTCXOctrlDIO3(1, 300);  // TCXO control
-  TRX.WaitWhileBusy_ms(5);
-  // if(TRX.readBusy()) Format_String(CONS_UART_Write, "StartRFchip() sx1262 BUSY after setTCXOctrlDIO3()\n");
+  TRX.setTCXOctrlDIO3(2);  // TCXO control: 2=1.8V
+  TRX.WaitWhileBusy_ms(10);
+  TRX.Calibrate(0x7F);          // 
+  TRX.WaitWhileBusy_ms(10);
+  //if(TRX.readBusy()) Format_String(CONS_UART_Write, "StartRFchip() sx1262 BUSY after setTCXOctrlDIO3()\n");
   // WaitWhileBusy(100);
   TRX.setModeStandby(0);
-  TRX.WaitWhileBusy_ms(5);
+  TRX.WaitWhileBusy_ms(10);
   // if(TRX.readBusy()) Format_String(CONS_UART_Write, "StartRFchip() sx1262 BUSY after setModeStandby()\n");
-  // WaitWhileBusy(100);
+  // TRX.WaitWhileBusy(100);
   // if(TRX.readBusy()) { Format_String(CONS_UART_Write, "StartRFchip() sx1262 still busy !\n"); }
   TRX.setFSK();
-  TRX.WaitWhileBusy_ms(5);
+  TRX.WaitWhileBusy_ms(10);
 #ifdef DEBUG_PRINT
   { uint8_t *SYNC = TRX.Regs_Read(REG_SYNCWORD0, 8);
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -295,10 +373,11 @@ static uint8_t StartRFchip(void)
     Format_Hex(CONS_UART_Write, TRX.getStatus());
     Format_String(CONS_UART_Write, " => 0x");
     for(int Idx=0; Idx<8; Idx++)
-    { Format_Hex(CONS_UART_Write, SYNC[Idx]); }
-    Format_String(CONS_UART_Write, "\n");
+    { Format_Hex(CONS_UART_Write, SYNC[Idx]); }             // SYNC after chip reset can serve as a detection method for sx1262
+    Format_String(CONS_UART_Write, "\n");                   // it should be: 0x9723522556536564
     xSemaphoreGive(CONS_Mutex); }
 #endif
+  TRX.StopOnPreamble(0);
 #else // WITH_SX1262                                        // not WITH_SX1262
   vTaskDelay(5);                                            // wait 10ms
 #endif
@@ -311,13 +390,13 @@ static uint8_t StartRFchip(void)
 // #ifdef WITH_RFM95
 //   TRX.WriteDefaultReg();
 // #endif
-  TRX.OGN_Configure(0, OGN_SYNC);                                // setup RF chip parameters and set to channel #0
+  TRX.FSK_Configure(0, OGN_SYNC, OGN_TxPacket<OGN_Packet>::Bytes); // setup RF chip parameters and set to channel #0
 #ifdef WITH_SX1262
   TRX.WaitWhileBusy_ms(5);
 #ifdef DEBUG_PRINT
   { uint8_t *SYNC = TRX.Regs_Read(REG_SYNCWORD0, 8);
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-    Format_String(CONS_UART_Write, "OGN_Configure() => 0x");
+    Format_String(CONS_UART_Write, "FSK_Configure() => 0x");
     Format_Hex(CONS_UART_Write, TRX.getStatus());
     Format_String(CONS_UART_Write, " => 0x");
     for(int Idx=0; Idx<8; Idx++)
@@ -325,7 +404,7 @@ static uint8_t StartRFchip(void)
     Format_String(CONS_UART_Write, "\n");
     xSemaphoreGive(CONS_Mutex); }
 #endif
-  TRX.Calibrate();
+  TRX.CalibrateImage();
   TRX.WaitWhileBusy_ms(20);
   if(TRX.readBusy()) Format_String(CONS_UART_Write, "StartRFchip() sx1262 BUSY after OGN_Configure() and Calibrate()\n");
 #endif
@@ -473,7 +552,7 @@ extern "C"
         WANdev.RxSilent++; if(WANdev.RxSilent>30) WANdev.Disconnect(); } // count silence when reception expected, if too many then disconnect
       TRX.setFSK();                                        // back to FSK
       SetFreqPlanOGN();                                    // OGN frequency plan
-      TRX.OGN_Configure(0, OGN_SYNC);                      // OGN config
+      TRX.FSK_Configure(0, OGN_SYNC, OGN_TxPacket<OGN_Packet>::Bytes); // OGN config
       SetRxChannel();
       TRX.setModeRX();                                     // switch to receive mode
       TRX.ClearIrqFlags();
@@ -570,7 +649,14 @@ extern "C"
 
     XorShift32(RX_Random);
     uint32_t TxTime = (RX_Random&0x3F)+1; TxTime*=6; TxTime+=50;               // random transmission time: (1..64)*6+50 [ms]
-
+#ifdef WITH_ADSL
+    bool ADSL_Slot = RX_Random&0x40;
+    ADSL_Packet *ADSL_TxPkt = ADSL_TxFIFO.getRead();
+    // if(ADSL_TxPkt)
+    // { Format_String(CONS_UART_Write, "ADSL:");
+    //   CONS_UART_Write('0'+ADSL_Slot);
+    //   Format_String(CONS_UART_Write, "\n"); }
+#endif
     const uint8_t *TxPktData0=0;
     const uint8_t *TxPktData1=0;
     const OGN_TxPacket<OGN_Packet> *TxPkt0 = RF_TxFIFO.getRead(0);             // get 1st packet from TxFIFO
@@ -583,7 +669,12 @@ extern "C"
     { if( (RX_Channel!=TxChan) && (TxPkt0->Packet.Header.Relay==0) )
       { const uint8_t *Tmp=TxPktData0; TxPktData0=TxPktData1; TxPktData1=Tmp; } // swap 1st and 2nd packet data
     }
-    TimeSlot(TxChan, 800-TimeSync_msTime(), TxPktData0, TRX.averRSSI, 0, TxTime); // run a Time-Slot till 0.800sec
+#ifdef WITH_ADSL
+    if(ADSL_Slot==0 && ADSL_TxPkt)
+      TimeSlot(TxChan, 800-TimeSync_msTime(), ADSL_TxPkt, TRX.averRSSI, 0, TxTime);
+    else
+#endif
+      TimeSlot(TxChan, 800-TimeSync_msTime(), TxPktData0, TRX.averRSSI, 0, TxTime); // run a Time-Slot till 0.800sec
 
     TRX.setModeStandby();
     TxChan = RF_FreqPlan.getChannel(RF_SlotTime, 1, 1);                        // transmit channel
@@ -596,7 +687,7 @@ extern "C"
       TRX.FNT_Configure();                                                     // configure for FANET
       // TRX.setChannel(0);                                                      // configure for FANET
       TRX.WriteTxPower(Parameters.TxPower);                                    // transmission power
-      TRX.setModeLoRaRXcont();                                               // continous receiver mode
+      TRX.setModeLoRaRXcont();                                                 // continous receiver mode
       vTaskDelay(2);
       for(uint8_t Wait=50; Wait; Wait--)                                       //
       { vTaskDelay(1);                                                         // every milisecond
@@ -628,7 +719,7 @@ extern "C"
         // uint8_t Mode=TRX.ReadMode();
         // if(Mode!=RF_OPMODE_LORA_TX) break; }
       TRX.setFSK();
-      TRX.OGN_Configure(0, OGN_SYNC);
+      TRX.FSK_Configure(0, OGN_SYNC, OGN_TxPacket<OGN_Packet>::Bytes);
     }
 #endif // WITH_FANET
 
@@ -638,18 +729,21 @@ extern "C"
 
     XorShift32(RX_Random);
     TxTime = (RX_Random&0x3F)+1; TxTime*=6;                                    // [ms] (1..64)*6 = 6..384ms
+    uint16_t SlotEnd = 1240;
 #ifdef WITH_LORAWAN
     bool WANtx = 0;
-    uint16_t SlotEnd = 1240;
     if(WAN_BackOff) WAN_BackOff--;
     else if(Parameters.TxPower!=(-32))                                         // decide to transmit in this slot
     { if(WANdev.State==0 || WANdev.State==2)                                   //
       { WANtx=1; SlotEnd=1220; }
     }
-    TimeSlot(TxChan, SlotEnd-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
-#else
-    TimeSlot(TxChan, 1240-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
 #endif
+#ifdef WITH_ADSL
+    if(ADSL_Slot==1 && ADSL_TxPkt)
+      TimeSlot(TxChan, SlotEnd-TimeSync_msTime(), ADSL_TxPkt, TRX.averRSSI, 0, TxTime);
+    else
+#endif
+      TimeSlot(TxChan, SlotEnd-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
 
 #ifdef WITH_PAW
    static uint8_t PAWtxBackOff = 4;
@@ -685,7 +779,7 @@ extern "C"
          if(Break>=2) break; }
 #endif
        TRX.setModeStandby();
-       TRX.OGN_Configure(0, OGN_SYNC);
+       TRX.FSK_Configure(0, OGN_SYNC, OGN_TxPacket<OGN_Packet>::Bytes);
        PAWtxBackOff = 2+(RX_Random%5); XorShift32(RX_Random);
        TX_Credit-=8; }
    }
@@ -746,13 +840,16 @@ extern "C"
       }
       TRX.setFSK();                                        // back to FSK
       SetFreqPlanOGN();                                    // OGN frequency plan
-      TRX.OGN_Configure(0, OGN_SYNC);                      // OGN config
+      TRX.FSK_Configure(0, OGN_SYNC, OGN_TxPacket<OGN_Packet>::Bytes);                      // OGN config
       SetRxChannel();
       TRX.setModeRX();                                   // switch to receive mode
       TRX.ClearIrqFlags();
     }
 #endif
 
+#ifdef WITH_ADSL
+    if(ADSL_TxPkt) ADSL_TxFIFO.Read();
+#endif
     if(TxPkt0) RF_TxFIFO.Read();
     if(TxPkt1) RF_TxFIFO.Read();
 

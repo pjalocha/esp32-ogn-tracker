@@ -27,7 +27,7 @@
 
 #define CMD_SETRFFREQUENCY              0x86  // [4] frequency [Fxtal/2^25]
 #define CMD_SETPACKETTYPE               0x8A  // [1] 0x00=GFSK, 0x01=LoRa (must be the first configuration command)
-#define CMD_GETPACKETTYPE               0x11  // [ ]
+#define CMD_GETPACKETTYPE               0x11  // [stat+1]
 #define CMD_SETTXPARAMS                 0x8E  // [2] TxPower: -17..+14 or -9..+22 [dBm] depending on PA config RampTime: 0..7: 10,20,40,80,200,800,1700,3400us
 #define CMD_SETMODULATIONPARAMS         0x8B  // [8] depends on the protocol: FSK or LoRa
 #define CMD_SETPACKETPARAMS             0x8C  // [9]
@@ -35,23 +35,30 @@
 #define CMD_SETBUFFERBASEADDRESS        0x8F  // [2] Tx-base address, Rx-base address
 #define CMD_SETLORASYMBNUMTIMEOUT       0xA0  // [1] timeout [symbols]
 
-#define CMD_GETSTATUS                   0xC0
+#define CMD_GETSTATUS                   0xC0  //
 #define CMD_GETRSSIINST                 0x15  // [stat+1] RX-RSSI at this moment
 #define CMD_GETRXBUFFERSTATUS           0x13  // [stat+2] RX-packet: length, buffer pointer
 #define CMD_GETPACKETSTATUS             0x14  // [stat+3] RX-packet: RSSI/SNR
-#define CMD_GETDEVICEERRORS             0x17
-#define CMD_CLEARDEVICEERRORS           0x07
+#define CMD_GETDEVICEERRORS             0x17  // [stat+2] rrrrrrrP rPXIAPRR
+#define CMD_CLEARDEVICEERRORS           0x07  // clear the above error
 #define CMD_GETSTATS                    0x10  // [stat+6] RX-statistics: packets, errors
 #define CMD_RESETSTATS                  0x00  // [stat+6] RX-statistics reset
 
 // registers
+#define REG_DIOXOUTPUTENABLE    0x0580
+#define REG_DIOXINPUTENABLE     0x0583
+#define REG_DIOXPULLUPCONTROL   0x0584
+#define REG_DIOXPULLDOWNCONTROL 0x0585
+
 #define REG_WHITENINGMSB        0x06B8
 #define REG_WHITENINGLSB        0x06B9
+
 #define REG_CRCINITVALMSB       0x06BC
 #define REG_CRCINITVALLSB       0x06BD
-#define REG_CRCPOLYVALMSB       0x06BE
+#define REG_CRCPOLYVALMSB       0x06BE  //
 #define REG_CRCPOLYVALLSB       0x06BF
-#define REG_SYNCWORD0           0x06C0
+
+#define REG_SYNCWORD0           0x06C0  //
 #define REG_SYNCWORD1           0x06C1
 #define REG_SYNCWORD2           0x06C2
 #define REG_SYNCWORD3           0x06C3
@@ -59,19 +66,31 @@
 #define REG_SYNCWORD5           0x06C5
 #define REG_SYNCWORD6           0x06C6
 #define REG_SYNCWORD7           0x06C7
+
 #define REG_NODEADDRESS         0x06CD
 #define REG_BROADCASTADDR       0x06CE
-#define REG_LORASYNCWORD        0x0740
-#define REG_LORASYNCWORDMSB     0x0740
-#define REG_LORASYNCWORDLSB     0x0741
-#define REG_RANDOMNUMBERGEN0    0x0819
+
+#define REG_IQPOLARITYSETUP     0x0736
+
+#define REG_LORASYNCWORD        0x0740  //
+#define REG_LORASYNCWORDMSB     0x0740  //
+#define REG_LORASYNCWORDLSB     0x0741  //
+
+#define REG_RANDOMNUMBERGEN0    0x0819  //
 #define REG_RANDOMNUMBERGEN1    0x081A
 #define REG_RANDOMNUMBERGEN2    0x081B
 #define REG_RANDOMNUMBERGEN3    0x081C
-#define REG_RXGAIN              0x08AC
+
+#define REG_RXGAIN              0x08AC  // 0x96 for max LNA gain, increase current by ~2mA for around ~3dB in sensivity
+
 #define REG_OCPCONFIG           0x08E7  // max. PA current ?
+
+#define REG_RTCCONTROL          0x0902
+
 #define REG_XTATRIM             0x0911
 #define REG_XTBTRIM             0x0912
+
+#define REG_EVENTMASK           0x0944
 
 // IRQ types
 #define IRQ_TXDONE              (1 << 0)
@@ -85,4 +104,14 @@
 #define IRQ_CADDETECTED         (1 << 8)
 #define IRQ_TIMEOUT             (1 << 9)
 #define IRQ_ALL                 0x3FF
+
+// Operating modes
+#define MODE_SLEEP              0         // The radio is in sleep mode
+#define MODE_STDBY_RC           1         // The radio is in standby mode with RC oscillator
+#define MODE_STDBY_XOSC         2         // The radio is in standby mode with XOSC oscillator
+#define MODE_FS                 3         // The radio is in frequency synthesis mode
+#define MODE_TX                 4         // The radio is in transmit mode
+#define MODE_RX                 5         // The radio is in receive mode
+#define MODE_RX_DC              6         // The radio is in receive duty cycle mode
+#define MODE_CAD                7         // The radio is in channel activity detection mode
 

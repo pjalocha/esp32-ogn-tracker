@@ -357,7 +357,9 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
     return; }
   bool DistOK = RxPacket->Packet.calcDistanceVector(LatDist, LonDist, GPS_Latitude, GPS_Longitude, GPS_LatCosine)>=0;
   if(DistOK)
-  { RxPacket->calcRelayRank(GPS_Altitude/10);                                         // calculate the relay-rank (priority for relay)
+  { RxPacket->LatDist=LatDist;
+    RxPacket->LonDist=LonDist;
+    RxPacket->calcRelayRank(GPS_Altitude/10);                                         // calculate the relay-rank (priority for relay)
     OGN_RxPacket<OGN_Packet> *PrevRxPacket = RelayQueue.addNew(RxPacketIdx);          // add to the relay queue and get the previous packet of same ID
 #ifdef WITH_POGNT
     { uint8_t Len=RxPacket->WritePOGNT(Line);                                           // print on the console as $POGNT
@@ -642,6 +644,18 @@ void vTaskPROC(void* pvParameters)
       if(TxBackOff) TxBackOff--;
       else
       { RF_TxFIFO.Write();                                                // complete the write into the TxFIFO
+#ifdef WITH_ADSL
+        ADSL_Packet *Packet = ADSL_TxFIFO.getWrite();
+        Packet->Init();
+        Packet->setAddress (Parameters.Address);
+        Packet->setAddrType(Parameters.AddrType);
+        Packet->setRelay(0);
+        Packet->setAcftType(Parameters.AcftType);
+        Position->Encode(*Packet);
+        Packet->Scramble();                              // this call hangs when -Os is used to compile
+        Packet->setCRC();
+        ADSL_TxFIFO.Write();
+#endif
         TxBackOff = 0;
         if(AverSpeed<10 && Parameters.AcftType!=3 && Parameters.AcftType!=0xD) TxBackOff += 3+(RX_Random&0x1);
         if(TX_Credit<=0) TxBackOff+=1; }
@@ -651,9 +665,9 @@ void vTaskPROC(void* pvParameters)
       if(FNTbackOff) FNTbackOff--;
       // if( (SlotTime&0x07)==(RX_Random&0x07) )                            // every 8sec
       else
-      { FANET_Packet *FNTpkt = FNT_TxFIFO.getWrite();
-        FNTpkt->setAddress(Parameters.Address);
-        Position->EncodeAirPos(*FNTpkt, Parameters.AcftType, !Parameters.Stealth);
+      { FANET_Packet *Packet = FNT_TxFIFO.getWrite();
+        Packet->setAddress(Parameters.Address);
+        Position->EncodeAirPos(*Packet, Parameters.AcftType, !Parameters.Stealth);
         XorShift32(RX_Random);
         FNT_TxFIFO.Write();
         FNTbackOff = 8+(RX_Random&0x1); }                                   // every 9 or 10sec

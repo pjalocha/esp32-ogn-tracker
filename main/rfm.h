@@ -276,6 +276,8 @@ SX1262 setup calls
 
 #include "manchester.h"
 
+// #define DEBUG_PRINT
+
 class RFM_TRX
 { public:                             // hardware access functions
 
@@ -302,7 +304,7 @@ class RFM_TRX
      return Loops; }                                      // return number of looks left or zero (=> still busy)
 
    uint16_t WaitWhileBusy_ms(uint16_t ms=100)
-   { WaitWhileBusy(50);
+   { WaitWhileBusy(100);
      for( ; ms; ms--)
      { if(!readBusy()) break;
        Delay_ms(1); }
@@ -320,7 +322,7 @@ class RFM_TRX
      Format_Hex(CONS_UART_Write, Cmd);
      Format_String(CONS_UART_Write, ", 0x");
      for(uint8_t Idx=0; Idx<Len; Idx++)
-       Format_Hex(CONS_UART_Write, Data[Idx]);
+     { CONS_UART_Write(' '); Format_Hex(CONS_UART_Write, Data[Idx]); }
      Format_String(CONS_UART_Write, ");\n");
 #endif
      return Block_Write(Data, Len, Cmd); }
@@ -336,7 +338,7 @@ class RFM_TRX
      Format_Hex(CONS_UART_Write, Cmd);
      Format_String(CONS_UART_Write, ") => 0x");
      for(uint8_t Idx=0; Idx<Len+2; Idx++)
-       Format_Hex(CONS_UART_Write, Block_Buffer[Idx]);
+     { CONS_UART_Write(' '); Format_Hex(CONS_UART_Write, Block_Buffer[Idx]); }
      Format_String(CONS_UART_Write, ";\n");
 #endif
      return  Block_Buffer+2;  }
@@ -349,7 +351,7 @@ class RFM_TRX
      Format_Hex(CONS_UART_Write, Addr);
      Format_String(CONS_UART_Write, ", 0x");
      for(uint8_t Idx=0; Idx<Len; Idx++)
-       Format_Hex(CONS_UART_Write, Data[Idx]);
+     { CONS_UART_Write(' '); Format_Hex(CONS_UART_Write, Data[Idx]); }
      Format_String(CONS_UART_Write, ");\n");
 #endif
      Block_Buffer[0] = CMD_WRITEREGISTER; Block_Buffer[1] = Addr>>8; Block_Buffer[2] = Addr; memcpy(Block_Buffer+3, Data, Len);
@@ -374,7 +376,7 @@ class RFM_TRX
      Format_Hex(CONS_UART_Write, Ofs);
      Format_String(CONS_UART_Write, ", 0x");
      for(uint8_t Idx=0; Idx<Len; Idx++)
-       Format_Hex(CONS_UART_Write, Data[Idx]);
+     { CONS_UART_Write(' '); Format_Hex(CONS_UART_Write, Data[Idx]); }
      Format_String(CONS_UART_Write, ");\n");
 #endif
      Block_Buffer[0] = CMD_WRITEBUFFER; Block_Buffer[1] = Ofs; memcpy(Block_Buffer+2, Data, Len);
@@ -522,9 +524,9 @@ class RFM_TRX
      Cmd_Write(CMD_SETRFFREQUENCY, Buff, 4); }
 
    void WriteFIFO(const uint8_t *Data, uint8_t Len)
-   { const uint8_t BaseOfs[2] = { 0x80, 0x00 };  // TX, RX offsets in the 256-byte buffer
+   { const uint8_t BaseOfs[2] = { 0x00, 0x00 };  // TX, RX offsets in the 256-byte buffer
      Cmd_Write(CMD_SETBUFFERBASEADDRESS, BaseOfs, 2);
-     Buff_Write(0x80, Data, Len); }
+     Buff_Write(0x00, Data, Len); }
 
    uint8_t *ReadFIFO(uint8_t Len)
    { uint8_t *BuffStat = Cmd_Read(CMD_GETRXBUFFERSTATUS, 2);        // length, offset
@@ -534,14 +536,13 @@ class RFM_TRX
    void FNT_WritePacket(const uint8_t *Data, uint8_t Len)
    { WriteFIFO(Data, Len); }
 
-   void OGN_WritePacket(const uint8_t *Data, uint8_t Len=26)         // write the packet data (26 bytes)
+   void FSK_WritePacket(const uint8_t *Data, uint8_t Len)            // write the packet data (26 bytes)
    { uint8_t Packet[2*Len];
      uint8_t PktIdx=0;
      for(uint8_t Idx=0; Idx<Len; Idx++)
      { uint8_t Byte=Data[Idx];
        Packet[PktIdx++]=ManchesterEncode[Byte>>4];                   // software manchester encode every byte
-       Packet[PktIdx++]=ManchesterEncode[Byte&0x0F];
-     }
+       Packet[PktIdx++]=ManchesterEncode[Byte&0x0F]; }
      WriteFIFO(Packet, 2*Len); }
 
    void PAW_WritePacket(const uint8_t *Data, uint8_t Len=24)
@@ -625,15 +626,14 @@ class RFM_TRX
        TransferByte(Data[Idx]);
      Deselect(); }
 
-   void OGN_WritePacket(const uint8_t *Data, uint8_t Len=26) const   // write the packet data (26 bytes)
+   void FSK_WritePacket(const uint8_t *Data, uint8_t Len=26) const   // write the packet data (26 bytes)
    { const uint8_t Addr=REG_FIFO;                                // write to FIFO
      Select();
      TransferByte(Addr | 0x80);
      for(uint8_t Idx=0; Idx<Len; Idx++)
      { uint8_t Byte=Data[Idx];
        TransferByte(ManchesterEncode[Byte>>4]);                  // software manchester encode every byte
-       TransferByte(ManchesterEncode[Byte&0x0F]);
-     }
+       TransferByte(ManchesterEncode[Byte&0x0F]); }
      Deselect(); }
 
    void PAW_WritePacket(const uint8_t *Data, uint8_t Len=24)
@@ -688,8 +688,10 @@ class RFM_TRX
 #endif
 
 #ifdef WITH_SX1262
-   void setTCXOctrlDIO3(uint8_t Volt=1, uint32_t Delay=320)                        // [0..7 => 1.6-3.3V] [1/64ms] p.82
-   { uint8_t Data[4] = { Volt, (uint8_t)(Delay>>16), (uint8_t)(Delay>>8), (uint8_t)Delay }; Cmd_Write(CMD_SETDIO3ASTCXOCTRL, Data, 4); }
+   void setTCXOctrlDIO3(uint8_t Volt=1, uint32_t Delay=5)                           // [0..7 => 1.6-3.3V] [ms] p.82
+   { Delay<<=6;                                                                     // [ms => 1/64ms]
+     uint8_t Data[4] = { Volt, (uint8_t)(Delay>>16), (uint8_t)(Delay>>8), (uint8_t)Delay };
+     Cmd_Write(CMD_SETDIO3ASTCXOCTRL, Data, 4); }
    void setRFswitchDIO2(uint8_t Mode=0) { Cmd_Write(CMD_SETDIO2ASRFSWITCHCTRL, &Mode, 1); } // enable DIO2 as RF switch
    void setRegulator(uint8_t Mode=0) { Cmd_Write(CMD_SETREGULATORMODE, &Mode, 1); } // 0=LDO, 1=DCDC+LDO
 
@@ -712,9 +714,15 @@ class RFM_TRX
      Cmd_Write(CMD_SETTXPARAMS, TxParm, 2); }                                       // 0x8E, Power, RampTime
    void WriteTxPowerMin(void) { WriteTxPower(-3); }
 
-   void Calibrate(void)                                                             // Calibrate receiver image rejection
+   void StopOnPreamble(uint8_t Enable)                                              // calbration of RC, PLL and ADC
+   { Cmd_Write(CMD_STOPTIMERONPREAMBLE, &Enable, 1); }
+
+   void Calibrate(uint8_t Mask)                                                     // calbration of RC, PLL and ADC
+   { Cmd_Write(CMD_CALIBRATE, &Mask, 1); }
+
+   void CalibrateImage(void)                                                        // Calibrate receiver image rejection
    { uint8_t CalParm[2] = { 0xD7, 0xDB }; // for 868MHz                             // { 0xE1, 0xE9 } for 915MHz
-     Cmd_Write(CMD_SETTXPARAMS, CalParm, 2); }
+     Cmd_Write(CMD_CALIBRATEIMAGE, CalParm, 2); }
 
    static void Pack3bytes(uint8_t *Byte, uint32_t Value) { Byte[0]=Value>>16; Byte[1]=Value>>8; Byte[2]=Value; }
 
@@ -747,8 +755,8 @@ class RFM_TRX
    { if(SyncTol>7) SyncTol=7;
      if(WriteSize>8) WriteSize=8;
      uint8_t Param[12];
-     Param[0] = 0;                                 //
-     Param[1] = 4;                                 // [bits] preamble length
+     Param[0] = 0;                                 //        preamble length MSB
+     Param[1] = 8;                                 // [bits] preamble length LSB
      Param[2] = 0x04;                              // preamble detect: 0x00:OFF, 0x04:8bits, 0x05:16bits, 0x06=24bits, 0x07=32bits
      Param[3] = WriteSize*8;                       // [bits] SYNC word length, write word at 0x06C0
      Param[4] = 0x00;                              // address filtering: OFF
@@ -764,7 +772,7 @@ class RFM_TRX
      uint8_t Param[12];
      Pack3bytes(Param, 10240);                     // data bitrate = 32*Xtal/100e3 for OGN 100kbps
      Param[3] = 0x09;                              // 0x00:no filter, 0x08:BT=0.3, 0x09:BT=0.5, 0x0A:BT=0.7, 0x0B:BT=1.0
-     Param[4] = 0x0A;                              // DSB RX bandwidth: 0x0A=232.3kHz, 0x19=312.2kHz, 0x1B=78.2kHz, 0x13=117.3kHz
+     Param[4] = 0x0A;                              // DSB RX bandwidth: 0x0A=232.3kHz, 0x19=312.2kHz, 0x1B=78.2kHz, 0x13=117.3kHz, 0x12=187.2kHz
      Pack3bytes(Param+5, 52429);                   // FSK deviation: 50e3*2^25/Xtal for OGN +/-50kHz
      Cmd_Write(CMD_SETMODULATIONPARAMS, Param, 8); // 0x8B, ModParam
      Param[0] = 0;                                 // [bits] MSB
@@ -801,13 +809,13 @@ class RFM_TRX
      setDioMode( /* IRQ_TXDONE | */ IRQ_RXDONE);
      Regs_Write(REG_SYNCWORD0, Sync, 8); }         // Write the SYNC word
 
-   void ClearIrqFlags(uint16_t Mask=IRQ_ALL) { uint8_t Data[2]; Data[0]=Mask>>8; Data[1]=Mask; Cmd_Write(CMD_CLEARIRQSTATUS, Data, 2); }
+   void ClearIrqFlags(uint16_t Mask=0xFFFF) { uint8_t Data[2]; Data[0]=Mask>>8; Data[1]=Mask; Cmd_Write(CMD_CLEARIRQSTATUS, Data, 2); }
    uint16_t ReadIrqFlags(void) { uint8_t *Stat=Cmd_Read(CMD_GETIRQSTATUS, 2); return (((uint16_t)(Stat[0]))<<8) | Stat[1]; }
 
    void setModeSleep(void) { uint8_t Config[3] = { 0, 0, 0 }; Cmd_Write(CMD_SETSLEEP, Config, 3); }
    void setModeStandby(uint8_t Mode=0) { uint8_t Config[1] = { Mode }; Cmd_Write(CMD_SETSTANDBY, Config, 1); }
-   void setModeTX(uint32_t Timeout=0) { uint8_t T[3]; Pack3bytes(T, Timeout); Cmd_Write(CMD_SETTX, T, 3); }
-   void setModeRX(uint32_t Timeout=0) { uint8_t T[3]; Pack3bytes(T, Timeout); Cmd_Write(CMD_SETRX, T, 3); }
+   void setModeTX(uint32_t Timeout=0) { Timeout<<=6; uint8_t T[3]; Pack3bytes(T, Timeout); Cmd_Write(CMD_SETTX, T, 3); }
+   void setModeRX(uint32_t Timeout=0) { Timeout<<=6; uint8_t T[3]; Pack3bytes(T, Timeout); Cmd_Write(CMD_SETRX, T, 3); }
    void setModeSynth(void) { Cmd_Write(CMD_SETFS, 0, 0); }
 
    void setDioMode(uint16_t Mask = IRQ_RXDONE)
@@ -1078,7 +1086,13 @@ class RFM_TRX
 
      return 0; }
 
-   void OGN_Configure(int16_t Channel, const uint8_t *Sync)
+   // void OGN_Configure(int16_t Channel, const uint8_t *Sync)
+   // { FSK_Configure(Channel, Sync, 2*26); }
+
+   // void ADSL_Configure(int16_t Channel, const uint8_t *Sync)
+   // { FSK_Configure(Channel, Sync, 2*24); }
+
+   void FSK_Configure(int16_t Channel, const uint8_t *Sync, uint8_t PktSize)
    { // WriteMode(RF_OPMODE_STANDBY);              // mode: STDBY, modulation: FSK, no LoRa
      // usleep(1000);
      WriteTxPower(0);
@@ -1093,8 +1107,8 @@ class RFM_TRX
      WriteByte(  0x85, REG_PREAMBLEDETECT);     // preamble detect: 1 byte, page 92 (or 0x85 ?)
      WriteByte(  0x00, REG_PACKETCONFIG1);      // Fixed size packet, no DC-free encoding, no CRC, no address filtering
      WriteByte(  0x40, REG_PACKETCONFIG2);      // Packet mode
-     WriteByte(  2*26, REG_PAYLOADLENGTH);      // Packet size = 26 bytes Manchester encoded into 52 bytes
-     WriteByte(    51, REG_FIFOTHRESH);         // TxStartCondition=FifoNotEmpty, FIFO threshold = 51 bytes
+     WriteByte(PktSize*2, REG_PAYLOADLENGTH);   // Packet size: Manchester encoded into twice as many bytes
+     WriteByte(PktSize*2-1, REG_FIFOTHRESH);    // TxStartCondition=FifoNotEmpty, FIFO threshold just below the packet size
      WriteWord(0x3030, REG_DIOMAPPING1);        // DIO signals: DIO0=00, DIO1=11, DIO2=00, DIO3=00, DIO4=00, DIO5=11, => p.64, 99
      WriteByte(  0x02, REG_RXBW);               // +/-125kHz Rx (single-side) bandwidth => p.27,67,83,90
      WriteByte(  0x02, REG_AFCBW);              // +/-125kHz AFC bandwidth
@@ -1165,6 +1179,8 @@ class RFM_TRX
      int8_t ReadTemp(void)     { chipTemp = 15-ReadByte(REG_TEMP); return chipTemp; } // [degC]
 #endif
 } ;
+
+// #undef DEBUG_PRINT
 
 #endif // __RFM_H__
 
