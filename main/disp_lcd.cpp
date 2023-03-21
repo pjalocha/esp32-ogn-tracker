@@ -495,7 +495,7 @@ static void LCD_UpdateRelayList(bool Redraw=0)
   uint8_t Lines=0;
   for( uint8_t Idx=0; Idx<RelayQueueSize; Idx++)
   { if(PosY>(LCD_HEIGHT-2*LCD_FontHeight())) break;
-    OGN_RxPacket<OGN_Packet> *Packet = RelayQueue.Packet+Idx; if(Packet->Rank==0) continue;
+    OGN_RxPacket<OGN_Packet> *Packet = RelayQueue.Packet+Idx; if(Packet->Alloc==0) continue;
     uint8_t Len=0;
     Line[Len++]='0'+Packet->Packet.Header.AddrType;
     Line[Len++]=':';
