@@ -42,7 +42,7 @@
 #define STR(macro) QUOTE(macro)
 
 #ifndef VERSION
-#define VERSION 0.0.0
+#define VERSION 0.1.3
 #endif
 
 static char Line[128];
@@ -687,8 +687,31 @@ void OLED_DrawStatusBar(u8g2_t *OLED, GPS_Position *GPS)   // status bar on top 
   u8g2_DrawStr(OLED, 52, 10, Line);
   Sec++; if(Sec>=3) Sec=0; }
 
+#ifdef WITH_AP
+void OLED_DrawNetwork(u8g2_t *OLED, GPS_Position *GPS)
+{ // u8g2_SetFont(OLED, u8g2_font_6x12_tr);
+  u8g2_SetFont(OLED, u8g2_font_7x13_tf);              // 5 lines, 12 pixels/line
+  uint8_t Len=Format_String(Line, "AP: ");
+  Len+=Format_String(Line+Len, (const char *)WIFI_Config.ap.ssid, 0, WIFI_Config.ap.ssid_len);
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 24, Line);
+  Len=Format_String(Line, "IP: ");
+  Len+=IP_Print(Line+Len, WIFI_IP.ip.addr);
+  // Len+=Format_String(Line+Len, "  CH");
+  // Len+=Format_UnsDec(Line+Len, WIFI_Config.ap.channel);
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 36, Line);
+/*
+  Len=Format_String(Line, "GW: ");
+  Len+=IP_Print(Line+Len, WIFI_IP.gw.addr);
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 48, Line);
+*/
+}
+#endif
+
 void OLED_DrawSystem(u8g2_t *OLED, GPS_Position *GPS)
-{
+{ // u8g2_SetFont(OLED, u8g2_font_6x12_tr);
   u8g2_SetFont(OLED, u8g2_font_7x13_tf);              // 5 lines, 12 pixels/line
   uint8_t Len=0;
 #ifdef WITH_MAVLINK

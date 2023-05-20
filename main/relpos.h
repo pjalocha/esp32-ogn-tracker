@@ -11,10 +11,11 @@
 
 #include "gdl90.h"
 #include "ogn.h"
+#include "adsl.h"
 
 // =======================================================================================================
 
-class Acft_RelPos             // 3-D relative position with speed and turn rate
+class Acft_RelPos                // 3-D relative position with speed and turn rate
 { public:
    int16_t T;                    // [0.5sec]
    int16_t X,Y,Z;                // [0.5m]
@@ -39,8 +40,13 @@ class Acft_RelPos             // 3-D relative position with speed and turn rate
 
   public:
    void Print(void) const
-   { printf("%+7.1fs: [%+7.1f,%+7.1f,%+7.1f]m %5.1fm/s %05.1fdeg %+5.1fm/s %+5.1fdeg/s [%3.1fm]",
-            0.5*T, 0.5*X, 0.5*Y, 0.5*Z, 0.5*Speed, (360.0/0x10000)*Heading, 0.5*Climb, (360.0/0x10000)*Turn, 0.5*Error);
+   { printf("%+7.1fs: [%+7.1f,%+7.1f,%+7.1f]m %5.1fm/s %05.1fdeg",
+            0.5*T, 0.5*X, 0.5*Y, 0.5*Z, 0.5*Speed, (360.0/0x10000)*Heading);
+     if(hasClimb) printf(" %+5.1fm/s", 0.5*Climb);
+             else printf(" ---.-m/s");
+     if(hasTurn)  printf(" %+5.1fdeg/s", (360.0/0x10000)*Turn);
+             else printf(" ---.-deg/s");
+     printf(" [%3.1fm]", 0.5*Error);
      // printf(" [%+6.2f,%+6.2f]m/s^2", 0.0625*Ax, 0.0625*Ay);
      // if(R) printf(" R:%+8.1fm [%+7.1f, %+7.1f]", 0.5*R, 0.5*Ox, 0.5*Oy);
      printf("\n"); }
@@ -189,17 +195,19 @@ class Acft_RelPos             // 3-D relative position with speed and turn rate
 
    void StepFwd(int16_t Time)                           // [0.5s] predict the position into the future
    { int16_t Vx, Vy;
-     int16_t Time1 = Time>>1;
-     int16_t Time2 = Time-Time1;
+     int16_t Time1 = Time>>1;                           // [s]
+     int16_t Time2 = Time-Time1;                        // [0.5s]
      getSpeedVector(Vx, Vy);
-     int16_t dX  = Time1*Vx; int16_t dY  = Time1*Vy;
-     Heading += (Time*Turn)>>1;
+     int16_t dX  = Time1*Vx;
+     int16_t dY  = Time1*Vy;
+     if(hasTurn) Heading += (Time*Turn)>>1;
      calcDir(); // calcAccel();
      getSpeedVector(Vx, Vy);
-             dX += Time2*Vx;         dY += Time2*Vy;
+     dX += Time2*Vx;
+     dY += Time2*Vy;
      X += dX/2;
      Y += dY/2;
-     Z += (Time*Climb)>>1;
+     if(hasClimb) Z += (Time*Climb)>>1;
      T += Time; }
 
    void StepFwdSecs(int16_t Secs)                       // [sec] predict the position Secs into the future
@@ -208,44 +216,44 @@ class Acft_RelPos             // 3-D relative position with speed and turn rate
      int16_t Secs2=Secs-Secs1;
      getSpeedVector(Vx, Vy);
      X += Secs1*Vx; Y += Secs1*Vy;
-     Heading += Secs*Turn;
+     if(hasTurn) Heading += Secs*Turn;
      calcDir(); // calcAccel();
      getSpeedVector(Vx, Vy);
      X += Secs2*Vx; Y += Secs2*Vy;
-     Z += Secs*Climb;
+     if(hasClimb) Z += Secs*Climb;
      T += 2*Secs; }
 
    void StepFwd4secs(void)                             // predict the position four second into the future
    { int16_t Vx, Vy;
      getSpeedVector(Vx, Vy);
      X += 2*Vx; Y += 2*Vy;
-     Heading += 4*Turn;
+     if(hasTurn) Heading += 4*Turn;
      calcDir(); // calcAccel();
      getSpeedVector(Vx, Vy);
      X += 2*Vx; Y += 2*Vy;
-     Z += 4*Climb;
+     if(hasClimb) Z += 4*Climb;
      T += 8; }
 
    void StepFwd2secs(void)                              // predict the position two seconds into the future
    { int16_t Vx, Vy;
      getSpeedVector(Vx, Vy);                            // get hor. speed vector from speed and dir. vector
      X += Vx; Y += Vy;                                  // incr. the hor. coordinates by half the speed
-     Heading += 2*Turn;                                 // increment the heading by the turning rate
+     if(hasTurn) Heading += 2*Turn;                     // increment the heading by the turning rate
      calcDir(); // calcAccel();                         // recalc. direction and acceleration
      getSpeedVector(Vx, Vy);                            // recalc. the speed vector
      X += Vx; Y += Vy;                                  // incr. horizotal coord. by half the speed vector
-     Z += 2*Climb;                                      // increment the rel. altitude by the climb rate
+     if(hasClimb) Z += 2*Climb;                         // increment the rel. altitude by the climb rate
      T += 4; }                                          // increment time by 2sec
 
    void StepFwd1sec(void)                               // predict the position one second into the future
    { int16_t Vx, Vy;
      getSpeedVector(Vx, Vy);
      X += Vx/2; Y += Vy/2;
-     Heading += Turn;
+     if(hasTurn) Heading += Turn;
      calcDir(); // calcAccel();
      getSpeedVector(Vx, Vy);
      X += Vx/2; Y += Vy/2;
-     Z += Climb;
+     if(hasClimb) Z += Climb;
      T += 2; }
 
    template <class OGNx_Packet>                         // zero the position, read differentials from an OGN packet
@@ -258,8 +266,42 @@ class Acft_RelPos             // 3-D relative position with speed and turn rate
      calcDir();
      Error = (2*Packet.DecodeDOP()+22)/5; }
 
+    int32_t Read(ADSL_Packet &Packet, uint32_t RxTime, uint32_t RefTime,
+                 int32_t RefLat, int32_t RefLon, int32_t RefAlt, uint16_t LatCos=3000, int16_t GeoidSepar=40, int32_t MaxDist=15000)
+   { Flags=0;
+     uint16_t msTime=0;
+     uint32_t PosTime=Packet.getTime(msTime, RxTime);
+     if(PosTime) T = PosTime-RefTime;                  // [sec]
+            else T =  RxTime-RefTime;
+     T<<=1; if(msTime>=500) T++;                       // [0.5sec]
+     int32_t LatDist, LonDist;                         // [1/60000deg]
+     if(Packet.calcDistanceVectorOGN(LatDist, LonDist, RefLat, RefLon, LatCos, MaxDist)<0) return -1; // [m, m, , , , m]
+     X = LatDist*2;                                    // [m]      => [0.5m] relative along latitude
+     Y = LonDist*2;                                    // [m]      => [0.5m] relative along longitude
+     Z = Packet.getAlt()-RefAlt-GeoidSepar; Z*=2;
+     Speed = Packet.getSpeed()/2;
+     Heading = Packet.getTrack()<<7;
+     if(Packet.hasClimb())
+     { Climb=Packet.getClimb()/4;
+       hasClimb=1; }
+     calcDir();
+     Error=Packet.getHorAccur();
+     return 0; }
+
+   void Write(ADSL_Packet &Packet, uint8_t RefTime, int32_t RefLat, int32_t RefLon, int32_t RefAlt, uint16_t LatCos=3000, int16_t GeoidSepar=40)
+   { int16_t Time=RefTime+(T>>1);
+     Packet.TimeStamp = ((Time%15)<<2) | ((T&1)<<1);
+     Packet.setDistanceVectorOGN(X>>1, Y>>1, RefLat, RefLon, LatCos);
+     Packet.setAlt(RefAlt+(Z>>1)+GeoidSepar);           //
+     Packet.setSpeed(Speed*2);                          // [0.5m/s] => [0.25m/s]
+     Packet.setTrack(Heading>>7);                       // [cordic]
+     Packet.setClimb(Climb*4);                          // [0.5m/s] => [0.125m/s]
+     Packet.setHorAccur(Error);
+     Packet.setVerAccur(Error+Error/2); }
+
    template <class OGNx_Packet>                          // read position from an OGN packet, use provided reference
-    int32_t Read(OGNx_Packet &Packet, uint32_t RxTime, uint32_t RefTime, int32_t RefLat, int32_t RefLon, int32_t RefAlt, uint16_t LatCos=3000, int32_t MaxDist=10000)
+    int32_t Read(OGNx_Packet &Packet, uint32_t RxTime, uint32_t RefTime,
+                 int32_t RefLat, int32_t RefLon, int32_t RefAlt, uint16_t LatCos=3000, int32_t MaxDist=15000)
    { Flags=0;
      uint32_t PosTime=Packet.getTime(RxTime);
      if(PosTime) T = PosTime-RefTime;                   // [sec]
@@ -267,8 +309,8 @@ class Acft_RelPos             // 3-D relative position with speed and turn rate
      T<<=1;                                             // [0.5sec]
      int32_t LatDist, LonDist;                          // [1/60000deg]
      if(Packet.calcDistanceVector(LatDist, LonDist, RefLat, RefLon, LatCos, MaxDist)<0) return -1; // [m, m, , , , m]
-     X = LatDist<<1;                                    // [m]      => [0.5m] relative along latitude
-     Y = LonDist<<1;                                    // [m]      => [0.5m] relative along longitude
+     X = LatDist*2;                                     // [m]      => [0.5m] relative along latitude
+     Y = LonDist*2;                                     // [m]      => [0.5m] relative along longitude
      Z = (Packet.DecodeAltitude()-RefAlt)<<1;           // [m]      => [0.5m] relative vertical
      if(Packet.hasBaro()) { dStdAlt=Packet.getBaroAltDiff()<<1; hasStdAlt=1; }
      Speed = (Packet.DecodeSpeed()+2)/5;                // [0.1m/s] => [0.5m/s]
@@ -277,7 +319,7 @@ class Acft_RelPos             // 3-D relative position with speed and turn rate
      { Climb = Packet.DecodeClimbRate()/5;              // [0.1m/s] => [0.5m/s]
        hasClimb = 1; }
      if(Packet.hasTurnRate())
-     { Turn = ((int32_t)Packet.DecodeTurnRate()*1165+32)>>6; // [0.1deg/s] => [360/0x10000deg/s] 
+     { Turn = ((int32_t)Packet.DecodeTurnRate()*1165+32)>>6; // [0.1deg/s] => [360/0x10000deg/s]
        hasTurn = 1; }
      calcDir();
      Error = (2*Packet.DecodeDOP()+22)/5;

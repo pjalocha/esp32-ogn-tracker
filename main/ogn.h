@@ -16,7 +16,7 @@
 #include "bitcount.h"
 #include "nmea.h"
 #include "ubx.h"
-#include "mavlink.h"
+// #include "mavlink.h"
 
 #include "ldpc.h"
 
@@ -64,12 +64,12 @@ template <class OGNx_Packet, class OGNy_Packet>
 // ---------------------------------------------------------------------------------------------------------------------
 
 template <class OGNx_Packet=OGN1_Packet>
- class OGN_TxPacket                                    // OGN packet with FEC code, like for transmission
+ class OGN_TxPacket                                    // OGN packet with FEC code, ready for transmission
 { public:
    static const int     Words =  7;
    static const int     Bytes = 26;
 
-   OGNx_Packet Packet;    // OGN packet
+   OGNx_Packet Packet;    // OGN packet [20 bytes = 160 bits]
 
    uint32_t FEC[2];       // Gallager code: 48 check bits for 160 user bits
 
@@ -83,7 +83,7 @@ template <class OGNx_Packet=OGN1_Packet>
      Len+=Format_Hex(Out+Len, (uint8_t)(Addr>>16));
      Len+=Format_Hex(Out+Len, (uint16_t)Addr);
      Out[Len++]=' ';
-     Len+=Format_UnsDec(Out+Len, (uint16_t)Packet.Position.Time, 2);
+     Len+=Format_UnsDec(Out+Len, (uint32_t)Packet.Position.Time, 2);
      Out[Len++]=' ';
      Len+=Format_Latitude(Out+Len, Packet.DecodeLatitude());
      Out[Len++]=' ';
@@ -383,7 +383,7 @@ template <class OGNx_Packet=OGN1_Packet>
    { uint8_t Len=0;
      Len+=Format_String(NMEA+Len, "$POGNT,");                             // sentence name
      if(Packet.Position.Time<60)
-       Len+=Format_UnsDec(NMEA+Len, (uint16_t)Packet.Position.Time, 2);   // [sec] time
+       Len+=Format_UnsDec(NMEA+Len, (uint32_t)Packet.Position.Time, 2);   // [sec] time
      NMEA[Len++]=',';
      NMEA[Len++]=HexDigit(Packet.Position.AcftType);                      // [0..F] aircraft-type: 1=glider, 2=tow plane, etc.
      NMEA[Len++]=',';
@@ -398,7 +398,7 @@ template <class OGNx_Packet=OGN1_Packet>
      NMEA[Len++]='0'+Packet.Position.FixQuality;                          // [] fix quality
      NMEA[Len++]='0'+Packet.Position.FixMode;                             // [] fix mode
      NMEA[Len++]=',';
-     Len+=Format_UnsDec(NMEA+Len, (uint16_t)(Packet.DecodeDOP()+10),2,1); // [] Dilution of Precision
+     Len+=Format_UnsDec(NMEA+Len, (uint32_t)(Packet.DecodeDOP()+10),2,1); // [] Dilution of Precision
      NMEA[Len++]=',';
      Len+=Format_Latitude(NMEA+Len, Packet.DecodeLatitude());        // [] Latitude
      NMEA[Len++]=',';
@@ -417,9 +417,9 @@ template <class OGNx_Packet=OGN1_Packet>
      NMEA[Len++]=',';
      Len+=Format_SignDec(NMEA+Len, Packet.DecodeTurnRate(), 2, 1);         // [deg/s] turning rate (by GPS)
      NMEA[Len++]=',';
-     Len+=Format_SignDec(NMEA+Len, -(int16_t)RxRSSI/2);            // [dBm] received signal level
+     Len+=Format_SignDec(NMEA+Len, -(int32_t)RxRSSI/2);            // [dBm] received signal level
      NMEA[Len++]=',';
-     Len+=Format_UnsDec(NMEA+Len, (uint16_t)RxErr);                // [bits] corrected transmisison errors
+     Len+=Format_UnsDec(NMEA+Len, (uint32_t)RxErr);                // [bits] corrected transmisison errors
      Len+=NMEA_AppendCheckCRNL(NMEA, Len);
      NMEA[Len]=0;
      return Len; }
@@ -477,9 +477,9 @@ template <class OGNx_Packet=OGN1_Packet>
      Len+=Format_Hex(Out+Len, (uint8_t)(Addr>>16));
      Len+=Format_Hex(Out+Len, (uint16_t)Addr);
      Out[Len++]=' ';
-     Len+=Format_SignDec(Out+Len, -(int16_t)RxRSSI/2); Out[Len++]='d'; Out[Len++]='B'; Out[Len++]='m';
+     Len+=Format_SignDec(Out+Len, -(int32_t)RxRSSI/2); Out[Len++]='d'; Out[Len++]='B'; Out[Len++]='m';
      Out[Len++]=' ';
-     Len+=Format_UnsDec(Out+Len, (uint16_t)Packet.Position.Time, 2);
+     Len+=Format_UnsDec(Out+Len, (uint32_t)Packet.Position.Time, 2);
      Out[Len++]='s'; Out[Len++]=' ';
      Len+=Format_Latitude(Out+Len, Packet.DecodeLatitude());
      Out[Len++]=' ';
@@ -487,9 +487,9 @@ template <class OGNx_Packet=OGN1_Packet>
      Out[Len++]=' ';
      Len+=Format_UnsDec(Out+Len, (uint32_t)Packet.DecodeAltitude()); Out[Len++]='m';
      Out[Len++]=' ';
-     Len+=Format_UnsDec(Out+Len, Packet.DecodeSpeed(), 2, 1); Out[Len++]='m'; Out[Len++]='/'; Out[Len++]='s';
+     Len+=Format_UnsDec(Out+Len, (uint32_t)Packet.DecodeSpeed(), 2, 1); Out[Len++]='m'; Out[Len++]='/'; Out[Len++]='s';
      Out[Len++]=' ';
-     Len+=Format_SignDec(Out+Len, Packet.DecodeClimbRate(), 2, 1); Out[Len++]='m'; Out[Len++]='/'; Out[Len++]='s';
+     Len+=Format_SignDec(Out+Len, (int32_t)Packet.DecodeClimbRate(), 2, 1); Out[Len++]='m'; Out[Len++]='/'; Out[Len++]='s';
      Out[Len++]=' ';
      Out[Len++]='r';
      Len+=Format_Hex(Out+Len, Rank);
@@ -663,7 +663,7 @@ template<class OGNx_Packet, uint8_t Size=8>
        { Out[Len++]='/'; Len+=Format_Hex(Out+Len, Packet[Idx].Packet.getAddressAndType() );   // print address-type and address
          Out[Len++]=':';
          if(Packet[Idx].Packet.Header.Encrypted) Len+=Format_String(Out+Len, "ee");
-         else Len+=Format_UnsDec(Out+Len, Packet[Idx].Packet.Position.Time, 2); // [sec] print time
+         else Len+=Format_UnsDec(Out+Len, (uint32_t)Packet[Idx].Packet.Position.Time, 2); // [sec] print time
        }
      }
      Out[Len++]=' '; Len+=Format_Hex(Out+Len, Sum);                             // sum of all Ranks
@@ -685,29 +685,29 @@ class GPS_Time
 
    uint8_t FormatDate(char *Out, char Sep='.') const
    { uint8_t Len=0;
-     Len+=Format_UnsDec(Out+Len, Day, 2);
+     Len+=Format_UnsDec(Out+Len, (uint32_t)Day, 2);
      Out[Len++]=Sep;
-     Len+=Format_UnsDec(Out+Len, Month, 2);
+     Len+=Format_UnsDec(Out+Len, (uint32_t)Month, 2);
      Out[Len++]=Sep;
-     Len+=Format_UnsDec(Out+Len, Year, 2);
+     Len+=Format_UnsDec(Out+Len, (uint32_t)Year, 2);
      Out[Len]=0; return Len; }
 
    uint8_t FormatTime(char *Out, char Sep=':') const
    { uint8_t Len=0;
-     Len+=Format_UnsDec(Out+Len, Hour, 2);
+     Len+=Format_UnsDec(Out+Len, (uint32_t)Hour, 2);
      Out[Len++]=Sep;
-     Len+=Format_UnsDec(Out+Len, Min, 2);
+     Len+=Format_UnsDec(Out+Len, (uint32_t)Min, 2);
      Out[Len++]=Sep;
-     Len+=Format_UnsDec(Out+Len, Sec, 2);
+     Len+=Format_UnsDec(Out+Len, (uint32_t)Sec, 2);
      Out[Len++]='.';
-     Len+=Format_UnsDec(Out+Len, mSec, 3);
+     Len+=Format_UnsDec(Out+Len, (uint32_t)mSec, 3);
      Out[Len]=0; return Len; }
 
    bool isTimeValid(void) const                      // is the GPS time-of-day valid
    { return (Hour>=0) && (Min>=0) && (Sec>=0); }     // all data must have been correctly read: negative means not correctly read)
 
    bool isDateValid(void) const                      // is the GPS date valid ?
-   { return (Year>=0) && (Month>=0) && (Day>=0); }
+   { return (Year<70) && (Year>0) && (Month>0) && (Day>0); } // MTK GPS can produce fake date with year 1980, so we treat it as invalid
 
    int8_t incrTimeFrac(int16_t msFrac)                 // [ms]
    { mSec+=msFrac;
@@ -805,6 +805,8 @@ class GPS_Time
      Days -= 365*Year + (Year/4);
      Month = Days/31;
      Day   = Days-(uint16_t)Month*31+1; Month++;
+     uint8_t MaxDay=MonthDays();
+     if(Day>MaxDay) { Day-=MaxDay; Month++; }
      uint32_t CheckTime = getUnixTime();
      if(CheckTime<Time) incrDate((Time-CheckTime)/SecsPerDay); }
 
@@ -1042,28 +1044,28 @@ class GPS_Position: public GPS_Time
      Out[Len++]=isTimeValid() ?'T':'_';
      Out[Len++]=isDateValid() ?'D':'_';
 
-     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, (uint16_t)Hour, 2);
-     Out[Len++]=':'; Len+=Format_UnsDec(Out+Len, (uint16_t)Min,  2);
-     Out[Len++]=':'; Len+=Format_UnsDec(Out+Len, (uint16_t)Sec,  2);
-     Out[Len++]='.'; Len+=Format_UnsDec(Out+Len, (uint16_t)mSec, 3);
-     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, (uint16_t)FixQuality);
-     Out[Len++]='/'; Len+=Format_UnsDec(Out+Len, (uint16_t)FixMode);
-     Out[Len++]='/'; Len+=Format_UnsDec(Out+Len, (uint16_t)Satellites, 2);
-     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, PDOP, 2, 1);
-     Out[Len++]='/'; Len+=Format_UnsDec(Out+Len, HDOP, 2, 1);
-     Out[Len++]='/'; Len+=Format_UnsDec(Out+Len, VDOP, 2, 1);
+     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, (uint32_t)Hour, 2);
+     Out[Len++]=':'; Len+=Format_UnsDec(Out+Len, (uint32_t)Min,  2);
+     Out[Len++]=':'; Len+=Format_UnsDec(Out+Len, (uint32_t)Sec,  2);
+     Out[Len++]='.'; Len+=Format_UnsDec(Out+Len, (uint32_t)mSec, 3);
+     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, (uint32_t)FixQuality);
+     Out[Len++]='/'; Len+=Format_UnsDec(Out+Len, (uint32_t)FixMode);
+     Out[Len++]='/'; Len+=Format_UnsDec(Out+Len, (uint32_t)Satellites, 2);
+     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, (uint32_t)PDOP, 2, 1);
+     Out[Len++]='/'; Len+=Format_UnsDec(Out+Len, (uint32_t)HDOP, 2, 1);
+     Out[Len++]='/'; Len+=Format_UnsDec(Out+Len, (uint32_t)VDOP, 2, 1);
      Out[Len++]=' ';
      Out[Len++]='['; Len+=Format_SignDec(Out+Len, Latitude/6, 7, 5);
      Out[Len++]=','; Len+=Format_SignDec(Out+Len, Longitude/6, 8, 5);
      Out[Len++]=']'; Out[Len++]='d'; Out[Len++]='e'; Out[Len++]='g';
      Out[Len++]=' '; Len+=Format_SignDec(Out+Len, Altitude, 4, 1); Out[Len++]='m';
-     Out[Len++]='/'; Len+=Format_SignDec(Out+Len, GeoidSeparation, 4, 1); Out[Len++]='m';
-     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, Speed,     2, 1); Out[Len++]='m'; Out[Len++]='/'; Out[Len++]='s';
-     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, Heading,   4, 1); Out[Len++]='d'; Out[Len++]='e'; Out[Len++]='g';
-     Out[Len++]=' '; Len+=Format_SignDec(Out+Len, ClimbRate, 2, 1); Out[Len++]='m'; Out[Len++]='/'; Out[Len++]='s';
-     Out[Len++]=' '; Len+=Format_SignDec(Out+Len, TurnRate, 2, 1); Out[Len++]='d'; Out[Len++]='e'; Out[Len++]='g'; Out[Len++]='/'; Out[Len++]='s';
+     Out[Len++]='/'; Len+=Format_SignDec(Out+Len, (int32_t)GeoidSeparation, 4, 1); Out[Len++]='m';
+     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, (uint32_t)Speed,     2, 1); Out[Len++]='m'; Out[Len++]='/'; Out[Len++]='s';
+     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, (uint32_t)Heading,   4, 1); Out[Len++]='d'; Out[Len++]='e'; Out[Len++]='g';
+     Out[Len++]=' '; Len+=Format_SignDec(Out+Len, (int32_t)ClimbRate, 2, 1); Out[Len++]='m'; Out[Len++]='/'; Out[Len++]='s';
+     Out[Len++]=' '; Len+=Format_SignDec(Out+Len, (int32_t)TurnRate, 2, 1); Out[Len++]='d'; Out[Len++]='e'; Out[Len++]='g'; Out[Len++]='/'; Out[Len++]='s';
      if(hasBaro)
-     { Out[Len++]=' '; Len+=Format_SignDec(Out+Len, Temperature, 2, 1); Out[Len++]='C';
+     { Out[Len++]=' '; Len+=Format_SignDec(Out+Len, (int32_t)Temperature, 2, 1); Out[Len++]='C';
        Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, Pressure/4        ); Out[Len++]='P'; Out[Len++]='a';
        Out[Len++]=' '; Len+=Format_SignDec(Out+Len, StdAltitude, 2, 1); Out[Len++]='m'; }
      Out[Len++]='\n'; Out[Len++]=0; return Len; }
@@ -1150,41 +1152,106 @@ class GPS_Position: public GPS_Time
      ReadAltitude(*RxMsg.ParmPtr(9), (const char *)RxMsg.ParmPtr(8));                     // Altitude
      ReadGeoidSepar(*RxMsg.ParmPtr(11), (const char *)RxMsg.ParmPtr(10));                 // Geoid separation
      calcLatitudeCosine();
-     return 1; }
+     NMEAframes++; return 1; }
 
-   uint8_t WriteGGA(char *GGA)
-   { uint8_t Len=0;
-     Len+=Format_String(GGA+Len, "$GPGGA,");
-     Len+=Format_UnsDec(GGA+Len, (uint16_t)Hour, 2);
-     Len+=Format_UnsDec(GGA+Len, (uint16_t)Min, 2);
-     Len+=Format_UnsDec(GGA+Len, (uint16_t)Sec, 2);
-     GGA[Len++]='.';
-     Len+=Format_UnsDec(GGA+Len, (uint16_t)mSec, 3);
-     GGA[Len++]=',';
-     Len+=Format_Latitude(GGA+Len, Latitude);
-     GGA[Len]=GGA[Len-1]; GGA[Len-1]=','; Len++;
-     GGA[Len++]=',';
-     Len+=Format_Longitude(GGA+Len, Longitude);
-     GGA[Len]=GGA[Len-1]; GGA[Len-1]=','; Len++;
-     GGA[Len++]=',';
-     GGA[Len++]='0'+FixQuality;
-     GGA[Len++]=',';
-     Len+=Format_UnsDec(GGA+Len, (uint16_t)Satellites);
-     GGA[Len++]=',';
-     Len+=Format_UnsDec(GGA+Len, (uint16_t)HDOP, 2, 1);
-     GGA[Len++]=',';
-     Len+=Format_SignDec(GGA+Len, Altitude, 3, 1);
-     GGA[Len++]=',';
-     GGA[Len++]='M';
-     GGA[Len++]=',';
-     Len+=Format_SignDec(GGA+Len, GeoidSeparation, 3, 1);
-     GGA[Len++]=',';
-     GGA[Len++]='M';
-     GGA[Len++]=',';
-     GGA[Len++]=',';
-     Len += NMEA_AppendCheckCRNL(GGA, Len);
-     GGA[Len]=0;
-     return Len; }
+   uint8_t WritePGRMZ(char *NMEA)
+   { uint8_t Len=Format_String(NMEA, "$PGRMZ,");
+     if(hasBaro) Len+=Format_SignDec(NMEA+Len, MetersToFeet(StdAltitude)/10, 1, 0, 1);
+     Len+=Format_String(NMEA+Len, ",f,");                // normally f for feet, but metres and m works with XcSoar
+     NMEA[Len++]='0'+FixMode;                            // 1 = no fix, 2 = 2D, 3 = 3D
+     Len+=NMEA_AppendCheckCRNL(NMEA, Len);
+     NMEA[Len]=0; return Len; }
+
+   uint8_t WriteGSA(char *NMEA) const
+   { uint8_t Len=Format_String(NMEA+Len, "$GPGSA,A,");
+     NMEA[Len++]='0'+FixMode;
+     Len+=Format_String(NMEA+Len, ",,,,,,,,,,,,,");
+     if(isValid()) Len+=Format_UnsDec(NMEA+Len, (uint32_t)PDOP, 2, 1);
+     NMEA[Len++]=',';
+     if(isValid()) Len+=Format_UnsDec(NMEA+Len, (uint32_t)HDOP, 2, 1);
+     NMEA[Len++]=',';
+     if(isValid()) Len+=Format_UnsDec(NMEA+Len, (uint32_t)VDOP, 2, 1);
+     Len += NMEA_AppendCheckCRNL(NMEA, Len);
+     NMEA[Len]=0; return Len; }
+
+   uint8_t WriteRMC(char *NMEA) const
+   { uint8_t Len=Format_String(NMEA+Len, "$GPRMC,");
+     if(isTimeValid())
+     { Len+=Format_UnsDec(NMEA+Len, (uint32_t)Hour, 2);
+       Len+=Format_UnsDec(NMEA+Len, (uint32_t)Min, 2);
+       Len+=Format_UnsDec(NMEA+Len, (uint32_t)Sec, 2);
+       NMEA[Len++]='.';
+       Len+=Format_UnsDec(NMEA+Len, (uint32_t)mSec, 3);
+       Len--; }
+     NMEA[Len++]=',';
+     NMEA[Len++] = isValid()?'A':'V';
+     NMEA[Len++]=',';
+     if(isValid())
+     { Len+=Format_Latitude(NMEA+Len, Latitude);
+       // NMEA[Len+1]=NMEA[Len-1]; NMEA[Len-1]='0'; NMEA[Len]=','; Len+=2; }
+       NMEA[Len]=NMEA[Len-1]; NMEA[Len-1]=','; Len++; }
+     else NMEA[Len++]=',';
+     NMEA[Len++]=',';
+     if(isValid())
+     { Len+=Format_Longitude(NMEA+Len, Longitude);
+       // NMEA[Len+1]=NMEA[Len-1]; NMEA[Len-1]='0'; NMEA[Len]=','; Len+=2; }
+       NMEA[Len]=NMEA[Len-1]; NMEA[Len-1]=','; Len++; }
+     else NMEA[Len++]=',';
+     NMEA[Len++]=',';
+     if(isValid()) Len+=Format_UnsDec(NMEA+Len, ((uint32_t)Speed*1985+512)>>10, 2, 1);  // [0.1m/s] => [0.1kt]
+     NMEA[Len++]=',';
+     if(isValid()) Len+=Format_UnsDec(NMEA+Len, (uint32_t)Heading, 2, 1);
+     NMEA[Len++]=',';
+     if(isDateValid())
+     { Len+=Format_UnsDec(NMEA+Len, (uint32_t)Day, 2);
+       Len+=Format_UnsDec(NMEA+Len, (uint32_t)Month, 2);
+       Len+=Format_UnsDec(NMEA+Len, (uint32_t)Year, 2); }
+     NMEA[Len++]=',';
+     NMEA[Len++]=',';
+     NMEA[Len++]=',';
+     NMEA[Len++]=isValid()?'A':'N';
+     Len += NMEA_AppendCheckCRNL(NMEA, Len);
+     NMEA[Len]=0; return Len; }
+
+   uint8_t WriteGGA(char *NMEA) const
+   { uint8_t Len=Format_String(NMEA+Len, "$GPGGA,");
+     if(isTimeValid())
+     { Len+=Format_UnsDec(NMEA+Len, (uint32_t)Hour, 2);
+       Len+=Format_UnsDec(NMEA+Len, (uint32_t)Min, 2);
+       Len+=Format_UnsDec(NMEA+Len, (uint32_t)Sec, 2);
+       NMEA[Len++]='.';
+       Len+=Format_UnsDec(NMEA+Len, (uint32_t)mSec, 3);
+       Len--; }
+     NMEA[Len++]=',';
+     if(isValid())
+     { Len+=Format_Latitude(NMEA+Len, Latitude);
+       // NMEA[Len+1]=NMEA[Len-1]; NMEA[Len-1]='0'; NMEA[Len]=','; Len+=2; }
+       NMEA[Len]=NMEA[Len-1]; NMEA[Len-1]=','; Len++; }
+     else NMEA[Len++]=',';
+     NMEA[Len++]=',';
+     if(isValid())
+     { Len+=Format_Longitude(NMEA+Len, Longitude);
+       // NMEA[Len+1]=NMEA[Len-1]; NMEA[Len-1]='0'; NMEA[Len]=','; Len+=2; }
+       NMEA[Len]=NMEA[Len-1]; NMEA[Len-1]=','; Len++; }
+     else NMEA[Len++]=',';
+     NMEA[Len++]=',';
+     if(isValid()) NMEA[Len++]='0'+FixQuality;
+     NMEA[Len++]=',';
+     if(isValid()) Len+=Format_UnsDec(NMEA+Len, (uint32_t)Satellites);
+     NMEA[Len++]=',';
+     if(isValid()) Len+=Format_UnsDec(NMEA+Len, (uint32_t)HDOP, 2, 1);
+     NMEA[Len++]=',';
+     if(isValid()) Len+=Format_SignDec(NMEA+Len, Altitude, 3, 1, 1);
+     NMEA[Len++]=',';
+     NMEA[Len++]='M';
+     NMEA[Len++]=',';
+     if(isValid()) Len+=Format_SignDec(NMEA+Len, GeoidSeparation, 3, 1, 1);
+     NMEA[Len++]=',';
+     NMEA[Len++]='M';
+     NMEA[Len++]=',';
+     NMEA[Len++]=',';
+     Len += NMEA_AppendCheckCRNL(NMEA, Len);
+     NMEA[Len]=0; return Len; }
 
    int8_t ReadGGA(const char *GGA)
    { if( (memcmp(GGA, "$GPGGA", 6)!=0) && (memcmp(GGA, "$GNGGA", 6)!=0) ) return -1;                                           // check if the right sequence
@@ -1200,7 +1267,7 @@ class GPS_Position: public GPS_Time
      ReadAltitude(GGA[Index[9]], GGA+Index[8]);                                           // Altitude
      ReadGeoidSepar(GGA[Index[11]], GGA+Index[10]);                                       // Geoid separation
      calcLatitudeCosine();
-     return 1; }
+     NMEAframes++; return 1; }
 
    int8_t ReadGSA(NMEA_RxMsg &RxMsg)
    { if(RxMsg.Parms<17) return -1;
@@ -1208,7 +1275,7 @@ class GPS_Position: public GPS_Time
      ReadPDOP((const char *)RxMsg.ParmPtr(14));                                           // total dilution of precision
      ReadHDOP((const char *)RxMsg.ParmPtr(15));                                           // horizontal dilution of precision
      ReadVDOP((const char *)RxMsg.ParmPtr(16));                                           // vertical dilution of precision
-     return 1; }
+     NMEAframes++; return 1; }
 
    int8_t ReadGSA(const char *GSA)
    { if( (memcmp(GSA, "$GPGSA", 6)!=0) && (memcmp(GSA, "$GNGSA", 6)!=0) ) return -1;      // check if the right sequence
@@ -1217,7 +1284,7 @@ class GPS_Position: public GPS_Time
      ReadPDOP(GSA+Index[14]);
      ReadHDOP(GSA+Index[15]);
      ReadVDOP(GSA+Index[16]);
-     return 1; }
+     NMEAframes++; return 1; }
 /*
    int8_t ReadGSV(NMEA_RxMsg &RxMsg)
    { //
@@ -1238,7 +1305,7 @@ class GPS_Position: public GPS_Time
      ReadSpeed((const char *)RxMsg.ParmPtr(6));                                           // Speed
      ReadHeading((const char *)RxMsg.ParmPtr(7));                                         // Heading
      calcLatitudeCosine();
-     return 1; }
+     NMEAframes++; return 1; }
 
    int8_t ReadRMC(const char *RMC)
    { if( (memcmp(RMC, "$GPRMC", 6)!=0) && (memcmp(RMC, "$GNRMC", 6)!=0) ) return -1;      // check if the right sequence
@@ -1250,7 +1317,7 @@ class GPS_Position: public GPS_Time
      ReadSpeed(RMC+Index[6]);
      ReadHeading(RMC+Index[7]);
      calcLatitudeCosine();
-     return 1; }
+     NMEAframes++; return 1; }
 /*
    int32_t calcTimeDiff(GPS_Position &RefPos) const
    { int32_t TimeDiff = ((int32_t)Min*6000+(int16_t)Sec*100+FracSec) - ((int32_t)RefPos.Min*6000+(int16_t)RefPos.Sec*100+RefPos.FracSec);
@@ -1302,7 +1369,7 @@ class GPS_Position: public GPS_Time
      //         useBaro, Sec, mSec, hasBaro, RefPos.hasBaro, TimeDiff, 0.1*Altitude, 0.1*StdAltitude, 0.1*ClimbRate);
      hasClimb=1; hasTurn=1; hasAccel=1;
      return TimeDiff; } // [ms]
-
+/*
    void Write(MAV_GPS_RAW_INT *MAV) const
    { MAV->time_usec = (int64_t)1000000*getUnixTime()+1000*mSec;  // [usec]
      MAV->lat = ((int64_t)50*Latitude+1)/3;
@@ -1346,7 +1413,7 @@ class GPS_Position: public GPS_Time
      Pressure = 100*4*MAV->press_abs;
      Temperature = MAV->temperature/10;
      hasBaro=1; }
-
+*/
    static int32_t getCordic(int32_t Coord) { return ((int64_t)Coord*83399993+(1<<21))>>22; } // [0.0001/60 deg] => [cordic]
    int32_t getCordicLatitude (void) const { return getCordic(Latitude ); }
    int32_t getCordicLongitude(void) const { return getCordic(Longitude); }
@@ -1355,7 +1422,7 @@ class GPS_Position: public GPS_Time
    //  180    0x066FF300      0x80000000   0x7FFFBC00
    static int32_t getFANETcordic(int32_t Coord) { return ((int64_t)Coord*83399317+(1<<21))>>22; } // [0.0001/60 deg] => [FANET cordic]
 
-   void EncodeAirPos(FANET_Packet &Packet, uint8_t AcftType=1, bool Track=1)
+   void EncodeAirPos(FANET_Packet &Packet, uint8_t AcftType=1, bool Track=1) const
    { int32_t Alt = Altitude; if(Alt<0) Alt=0; else Alt=(Alt+5)/10;
      int32_t Lat = getFANETcordic(Latitude);                                     // Latitude:  [0.0001/60deg] => [cordic]
      int32_t Lon = getFANETcordic(Longitude);                                    // Longitude: [0.0001/60deg] => [cordic]
@@ -1380,13 +1447,18 @@ class GPS_Position: public GPS_Time
      Report.setHeading((HeadAngle+0x80)>>8);                                // [8-bit cordic]
      Report.setMiscInd(0x2);                                                //
      Report.setSpeed((SpeedKts+5)/10);                                      // [knot]
-     Report.setClimbRate(6*MetersToFeet(ClimbRate));
-   }
+     Report.setClimbRate(6*MetersToFeet(ClimbRate)); }
+
+   void Encode(GDL90_GEOMALT &GeomAlt) const
+   { GeomAlt.Clear();
+     int32_t Alt = MetersToFeet(Altitude+GeoidSeparation);                 // [0.1feet]
+     GeomAlt.setAltitude((Alt+25)/50);                                     // [5feet]
+     GeomAlt.setFOM((HDOP*3+5)/10); }                                      // [m]
 
   void Encode(ADSL_Packet &Packet) const
   { Packet.setAlt((Altitude+GeoidSeparation+5)/10);
-    Packet.setLat(Packet.OGNtoFNT(Latitude));
-    Packet.setLon(Packet.OGNtoFNT(Longitude));
+    Packet.setLatOGN(Latitude);
+    Packet.setLonOGN(Longitude);
     Packet.TimeStamp = (Sec*4+mSec/250)&0x3F;
     Packet.setSpeed(((uint32_t)Speed*4+5)/10);
     Packet.setClimb(((int32_t)ClimbRate*8+5)/10);
@@ -1395,8 +1467,8 @@ class GPS_Position: public GPS_Time
     Packet.setTrack(((uint32_t)Heading*32+112)/225);
     Packet.Integrity[0]=0; Packet.Integrity[1]=0;
     if((FixQuality>0)&&(FixMode>=2))
-    { Packet.setHorPrec((HDOP*2+5)/10);
-      Packet.setVerPrec((VDOP*3+5)/10); }
+    { Packet.setHorAccur((HDOP*2+5)/10);
+      Packet.setVerAccur((VDOP*3+5)/10); }
   }
 
   // template <class OGNx_Packet>
@@ -1615,27 +1687,27 @@ class GPS_Position: public GPS_Time
      char LonW = Out[Len-2];
      Out[Len-2]=Out[Len-3]; Out[Len-3]=Out[Len-4]; Out[Len-4]='.';
      Out[Len++]=Icon[1];
-     Len+=Format_UnsDec(Out+Len, Heading/10, 3);                              // [deg] Heading
+     Len+=Format_UnsDec(Out+Len, (uint32_t)Heading/10, 3);                              // [deg] Heading
      Out[Len++]='/';
      Len+=Format_UnsDec(Out+Len, ((uint32_t)Speed*199+512)>>10, 3);           // [kt] speed
-     Out[Len++] = '/'; Out[Len++] = 'A'; Out[Len++] = '='; Len+=Format_UnsDec(Out+Len, (MetersToFeet(Altitude)+5)/10, 6); // [feet] altitude
+     Out[Len++] = '/'; Out[Len++] = 'A'; Out[Len++] = '='; Len+=Format_UnsDec(Out+Len, ((uint32_t)MetersToFeet(Altitude)+5)/10, 6); // [feet] altitude
      Out[Len++]=' '; Out[Len++]='!'; Out[Len++]='W'; Out[Len++]=LatW; Out[Len++]=LonW; Out[Len++]='!'; // more accurate Lat/Lon
      Out[Len++]=' '; Out[Len++]='i'; Out[Len++]='d'; Len+=Format_Hex(Out+Len, ID); // ID
 
      Out[Len++] = ' '; Len+=Format_SignDec(Out+Len, ((int32_t)ClimbRate*10079+256)>>9, 3); Out[Len++] = 'f'; Out[Len++] = 'p'; Out[Len++] = 'm'; // [fpm]
-     Out[Len++] = ' '; Len+=Format_SignDec(Out+Len, TurnRate/3, 2, 1); Out[Len++] = 'r'; Out[Len++] = 'o'; Out[Len++] = 't'; // [ROT]
+     Out[Len++] = ' '; Len+=Format_SignDec(Out+Len, (int32_t)TurnRate/3, 2, 1); Out[Len++] = 'r'; Out[Len++] = 'o'; Out[Len++] = 't'; // [ROT]
 
      if(hasBaro)
      { int32_t Alt=(StdAltitude+5)/10;                                       // [m] standard pressure altitude
        if(Alt<0) Alt=0;
        Out[Len++] = ' '; Out[Len++] = 'F'; Out[Len++] = 'L';
-       Len+=Format_UnsDec(Out+Len, MetersToFeet((uint32_t)Alt), 5, 2); }     // [feet] "Flight Level"
+       Len+=Format_UnsDec(Out+Len, (uint32_t)MetersToFeet((uint32_t)Alt), 5, 2); }     // [feet] "Flight Level"
 
      uint16_t DOP=PDOP; if(DOP==0) DOP=HDOP;
      uint16_t HorPrec=(DOP*2+5)/10; if(HorPrec>63) HorPrec=63;               // [m]
      uint16_t VerPrec=(DOP*3+5)/10; if(VerPrec>63) VerPrec=63;               // [m]
      Out[Len++] = ' ';  Out[Len++] = 'g'; Out[Len++] = 'p'; Out[Len++] = 's';
-     Len+=Format_UnsDec(Out+Len, HorPrec); Out[Len++] = 'x'; Len+=Format_UnsDec(Out+Len, VerPrec);
+     Len+=Format_UnsDec(Out+Len, (uint32_t)HorPrec); Out[Len++] = 'x'; Len+=Format_UnsDec(Out+Len, (uint32_t)VerPrec);
 
      Out[Len]=0; return Len; }
 
@@ -1643,16 +1715,16 @@ class GPS_Position: public GPS_Time
    { int Len=0;
      bool Neg = Coord<0; if(Neg) Coord=(-Coord);
      int32_t Deg = Coord/600000;
-     Len+=Format_UnsDec(Out+Len, Deg, DegSize);
+     Len+=Format_UnsDec(Out+Len, (uint32_t)Deg, DegSize);
      Coord-=Deg*600000; Coord/=10;
-     Len+=Format_UnsDec(Out+Len, Coord, 5);
+     Len+=Format_UnsDec(Out+Len, (uint32_t)Coord, 5);
      Out[Len++]=SignChar[Neg];
      return Len; }
 
    int WriteHHMMSS(char *Out) const
-   { Format_UnsDec(Out  , Hour, 2);
-     Format_UnsDec(Out+2, Min , 2);
-     Format_UnsDec(Out+4, Sec , 2);
+   { Format_UnsDec(Out  , (uint32_t)Hour, 2);
+     Format_UnsDec(Out+2, (uint32_t)Min , 2);
+     Format_UnsDec(Out+4, (uint32_t)Sec , 2);
      return 6; }
 
    int WriteIGC(char *Out) const                                  // write IGC B-record

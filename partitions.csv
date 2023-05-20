@@ -8,4 +8,4 @@ factory,app,factory,0x10000,1800K,
 # SPIFFS in Flash
 # intlog,data,spiffs,,0x1F0000,
 # FAT in Flash
-intlog,data,fat,,0x1F0000,
+intlog,data,fat,,0x210000,

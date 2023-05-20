@@ -4,12 +4,84 @@
 #include "format.h"
 #include "ognconv.h"
 
-// #pragma GCC optimize("O2")  // XXTEA does not run at default -0s optimization - reason not understood
+// ==============================================================================================
+// Coordinate scales:
+// - uBlox GPS and FLARM:       LSB = 1e-7 deg
+// - OGN-Tracker:               LSB = 0.0001/60 deg
+// - FANET/ADS-L pseudo-cordic: LSB =
+// - True cordic:               2^32 = 360 deg
+
+int32_t Coord_FNTtoOGN(int32_t Coord) { return ((int64_t)Coord*27000219 +(1<<28))>>29; }    // [FANET cordic] => [0.0001/60 deg]
+int32_t Coord_OGNtoFNT(int32_t Coord) { return ((int64_t)Coord*83399317 +(1<<21))>>22; }    // [0.0001/60 deg] => [FANET cordic]
+
+int32_t Coord_FNTtoUBX(int32_t Coord) { return ((int64_t)Coord*900007296+(1<<29))>>30; }    // [FANET cordic ] => [1e-7 deg]
+int32_t Coord_UBXtoFNT(int32_t Coord) { return ((int64_t)Coord*5003959  +(1<<21))>>22; }    // [1e-7 deg]      => [FANET cordic]
+
+int32_t Coord_CRDtoOGN(int32_t Coord) { return ((int64_t)Coord*421875   +(1<<22))>>23; }    // [32-bit cordic] => [0.0001/60 deg]
+int32_t Coord_OGNtoCRD(int32_t Coord) { return ((int64_t)Coord*83399993 +(1<<21))>>22; }    // [0.0001/60 deg] => [32-bit cordic]
 
 // ==============================================================================================
 
 int32_t FeetToMeters(int32_t Altitude) { return (Altitude*312+512)>>10; }  // [feet] => [m]
 int32_t MetersToFeet(int32_t Altitude) { return (Altitude*3360+512)>>10; } // [m] => [feet]
+
+// ==============================================================================================
+
+uint8_t AcftType_OGNtoADSB(uint8_t AcftType)
+                         // no-inf0, glider, tow, heli, parachute, drop-plane, hang-glider, para-glider, powered, jet, UFO, balloon, Zeppelin, UAV, ground vehicle, fixed object
+{ const uint8_t AcftCat[16] = { 0x00, 0xB1, 0xA1, 0xA7, 0xB3,      0xA1,       0xB4,        0xB4,        0xA1,   0xA2, 0x00, 0xB2,    0xB2,    0xB6, 0xC3, 0xC4 };
+  return AcftCat[AcftType]; }
+
+uint8_t AcftType_FNTtoADSB(uint8_t AcftType)
+                            // no-info, para-glider, hang-glider, balloon, glider, powered, heli, UAV
+{ const uint8_t AcftCat[8] = { 0,          0xB4,         0xB4,      0xB2,    0xB1,   0xA1,  0xA7, 0xB6 } ;
+  return AcftCat[AcftType]; }
+
+uint8_t AcftType_ADSBtoOGN(uint8_t AcftCat)
+{ // if(AcftCat&0x38) return 0;
+  uint8_t Upp = AcftCat>>4;
+  uint8_t Low = AcftCat&7;
+  if(Upp==0xA)
+  { if(Low==1) return 8;
+    if(Low==7) return 3;
+    return 9; }
+  if(Upp=0xB)
+  { const uint8_t Map[8] = { 0, 0xB, 1, 4, 7, 0, 0xD, 0 };
+    return Map[Low]; }
+  if(Upp==0xC)
+  { if(Low>=4) return 0xF;
+    if(Low==3) return 0xE;
+    return 0; }
+  return 0; }
+
+uint8_t AcftType_OGNtoGDL(uint8_t AcftType)
+                         // no-info, glider, tow, heli, parachute, drop-plane, hang-glider, para-glider, powered, jet, UFO, balloon, Zeppelin, UAV, ground vehicle, static-object
+{ const uint8_t AcftCat[16] = { 0,      9,   1,    7,        11,          1,          12,          12,       1,   2,   0,      10,       10,   14,  18,     19 } ;
+  return AcftCat[AcftType]; }
+
+uint8_t AcftType_OGNtoADSL(uint8_t AcftType)                // OGN to ADS-L aircraft-type
+{ const uint8_t Map[16] = { 0, 4, 1, 3,                     // unknown, glider, tow-plane, helicopter
+                            8, 1, 7, 7,                     // sky-diver, drop plane, hang-glider, para-glider
+                            1, 2, 0, 5,                     // motor airplane, jet, UFO, balloon
+                            5,11, 0, 0 } ;                  // airship, UAV, ground vehicle, static object
+  return Map[AcftType]; }
+
+uint8_t AcftType_ADSLtoOGN(uint8_t AcftCat)                 // ADS-L to OGN aircraft-type
+{ const uint8_t Map[32] = { 0, 8, 9, 3, 1,12, 2, 7,
+                            4,13, 3,13,13,13, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0 } ;
+  return Map[AcftCat]; }
+
+uint8_t AcftType_FNTtoOGN(uint8_t AcftType)
+                              // no-info, para-glider, hang-glider, balloon, glider, powered, heli, UAV
+{ const uint8_t OGNtype[8] = {   0,       7,           6,           0xB,     1,      8,       3,    0xD } ;
+  return OGNtype[AcftType]; }
+
+uint8_t AcftType_FNTtoADSL(uint8_t AcftType)
+                            // no-info, para-glider, hang-glider, balloon, glider, powered, heli, UAV
+{ const uint8_t AcftCat[8] = { 0,          12,          12,       10,      9,      1,       7,    14 } ;
+  return AcftCat[AcftType]; }
 
 // ==============================================================================================
 
@@ -161,7 +233,8 @@ void TEA_Encrypt (uint32_t* Data, const uint32_t *Key, int Loops)
   { sum += delta;
     v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
     v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3); }  // end cycle
-  Data[0]=v0; Data[1]=v1; }
+  Data[0]=v0; Data[1]=v1;
+}
 
 void TEA_Decrypt (uint32_t* Data, const uint32_t *Key, int Loops)
 { uint32_t v0=Data[0], v1=Data[1];                           // set up
@@ -171,7 +244,8 @@ void TEA_Decrypt (uint32_t* Data, const uint32_t *Key, int Loops)
   { v1 -= ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3);
     v0 -= ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
     sum -= delta; }                                          // end cycle
-  Data[0]=v0; Data[1]=v1; }
+  Data[0]=v0; Data[1]=v1;
+}
 
 void TEA_Encrypt_Key0 (uint32_t* Data, int Loops)
 { uint32_t v0=Data[0], v1=Data[1];                          // set up
@@ -180,7 +254,8 @@ void TEA_Encrypt_Key0 (uint32_t* Data, int Loops)
   { sum += delta;
     v0 += (v1<<4) ^ (v1 + sum) ^ (v1>>5);
     v1 += (v0<<4) ^ (v0 + sum) ^ (v0>>5); }                 // end cycle
-  Data[0]=v0; Data[1]=v1; }
+  Data[0]=v0; Data[1]=v1;
+}
 
 void TEA_Decrypt_Key0 (uint32_t* Data, int Loops)
 { uint32_t v0=Data[0], v1=Data[1];                           // set up
@@ -189,22 +264,23 @@ void TEA_Decrypt_Key0 (uint32_t* Data, int Loops)
   { v1 -= (v0<<4) ^ (v0 + sum) ^ (v0>>5);
     v0 -= (v1<<4) ^ (v1 + sum) ^ (v1>>5);
     sum -= delta; }                                          // end cycle
-  Data[0]=v0; Data[1]=v1; }
+  Data[0]=v0; Data[1]=v1;
+}
 
 // ==============================================================================================
 // XXTEA encryption/decryption
 
-static uint32_t XXTEA_MX(uint32_t E, uint32_t Y, uint32_t Z, uint32_t P, uint32_t Sum, const uint32_t Key[4])
-{ return (((Z>>5) ^ (Y<<2)) + ((Y>>3) ^ (Z<<4))) ^ ((Sum^Y) + (Key[(P&3)^E] ^ Z)); }
+static uint32_t XXTEA_MX(uint8_t E, uint32_t Y, uint32_t Z, uint8_t P, uint32_t Sum, const uint32_t Key[4])
+{ return ((((Z>>5) ^ (Y<<2)) + ((Y>>3) ^ (Z<<4))) ^ ((Sum^Y) + (Key[(P&3)^E] ^ Z))); }
 
-void XXTEA_Encrypt(uint32_t *Data, uint32_t Words, const uint32_t Key[4], uint32_t Loops)
+void XXTEA_Encrypt(uint32_t *Data, uint8_t Words, const uint32_t Key[4], uint8_t Loops)
 { const uint32_t Delta = 0x9e3779b9;
   uint32_t Sum = 0;
   uint32_t Z = Data[Words-1]; uint32_t Y;
   for( ; Loops; Loops--)
   { Sum += Delta;
-    uint32_t E = (Sum>>2)&3;
-    for (uint32_t P=0; P<(Words-1); P++)
+    uint8_t E = (Sum>>2)&3;
+    for (uint8_t P=0; P<(Words-1); P++)
     { Y = Data[P+1];
       Z = Data[P] += XXTEA_MX(E, Y, Z, P, Sum, Key); }
     Y = Data[0];
@@ -212,13 +288,13 @@ void XXTEA_Encrypt(uint32_t *Data, uint32_t Words, const uint32_t Key[4], uint32
   }
 }
 
-void XXTEA_Decrypt(uint32_t *Data, uint32_t Words, const uint32_t Key[4], uint32_t Loops)
+void XXTEA_Decrypt(uint32_t *Data, uint8_t Words, const uint32_t Key[4], uint8_t Loops)
 { const uint32_t Delta = 0x9e3779b9;
   uint32_t Sum = Loops*Delta;
   uint32_t Y = Data[0]; uint32_t Z;
   for( ; Loops; Loops--)
-  { uint32_t E = (Sum>>2)&3;
-    for (uint32_t P=Words-1; P; P--)
+  { uint8_t E = (Sum>>2)&3;
+    for (uint8_t P=Words-1; P; P--)
     { Z = Data[P-1];
       Y = Data[P] -= XXTEA_MX(E, Y, Z, P, Sum, Key); }
     Z = Data[Words-1];
@@ -228,27 +304,27 @@ void XXTEA_Decrypt(uint32_t *Data, uint32_t Words, const uint32_t Key[4], uint32
 }
 
 static uint32_t XXTEA_MX_KEY0(uint32_t Y, uint32_t Z, uint32_t Sum)
-{ return (((Z>>5) ^ (Y<<2)) + ((Y>>3) ^ (Z<<4))) ^ ((Sum^Y) + Z); }
+{ return ((((Z>>5) ^ (Y<<2)) + ((Y>>3) ^ (Z<<4))) ^ ((Sum^Y) + Z)); }
 
-void XXTEA_Encrypt_Key0(uint32_t *Data, uint32_t Words, uint32_t Loops)
+void XXTEA_Encrypt_Key0(uint32_t *Data, uint8_t Words, uint8_t Loops)
 { const uint32_t Delta = 0x9e3779b9;
   uint32_t Sum = 0;
   uint32_t Z = Data[Words-1]; uint32_t Y;
   for( ; Loops; Loops--)
   { Sum += Delta;
-    for (uint32_t P=0; P<(Words-1); P++)
+    for (uint8_t P=0; P<(Words-1); P++)
     { Y = Data[P+1];
       Z = Data[P] += XXTEA_MX_KEY0(Y, Z, Sum); }
     Y = Data[0];
     Z = Data[Words-1] += XXTEA_MX_KEY0(Y, Z, Sum); }
 }
 
-void XXTEA_Decrypt_Key0(uint32_t *Data, uint32_t Words, uint32_t Loops)
+void XXTEA_Decrypt_Key0(uint32_t *Data, uint8_t Words, uint8_t Loops)
 { const uint32_t Delta = 0x9e3779b9;
   uint32_t Sum = Loops*Delta;
   uint32_t Y = Data[0]; uint32_t Z;
   for( ; Loops; Loops--)
-  { for (uint32_t P=Words-1; P; P--)
+  { for (uint8_t P=Words-1; P; P--)
     { Z = Data[P-1];
       Y = Data[P] -= XXTEA_MX_KEY0(Y, Z, Sum); }
     Z = Data[Words-1];

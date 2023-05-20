@@ -270,7 +270,7 @@ uint16_t StratuxPort;
 
     FreqPlan       =    DEFAULT_FreqPlan; // [0..5]
     PPSdelay       =    DEFAULT_PPSdelay; // [ms]
-    PageMask       =    0xFF;
+    PageMask       =    0xFFFF;
     InitialPage    =       0;
     AltitudeUnit   =       0;  // meter
     SpeedUnit      =       0;  // km/h

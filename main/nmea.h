@@ -35,8 +35,13 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
        if(Len==0)                            // if data is empty
        { if(Byte!='$') return;               // then ignore all bytes but '$'
          Data[Len++]=Byte;                   // start storing the frame
-         setLoading(); Check=0x00; Parms=0;  // set state to "isLoading", clear checksum
-       } else                                // if not empty (being loaded)
+         setLoading(); Check=0x00; Parms=0; } // set state to "isLoading", clear checksum
+/*
+       if(Byte=='$')                         // should '$' sign restart an ongoing NMEA sentence ?
+       { Len=0; Data[Len++]=Byte;
+         setLoading(); Check=0x00; Parms=0; }
+*/
+       else
        { if((Byte=='\r')||(Byte=='\n'))      // if CR (or NL ?) then frame is complete
          { setComplete(); if(Len<MaxLen) Data[Len]=0;
            return; }

@@ -12,6 +12,8 @@ uint16_t GDL90_CRC16(uint8_t Byte, uint16_t CRC);                        // pass
 uint16_t GDL90_CRC16(const uint8_t *Data, uint8_t Len, uint16_t CRC=0);  // pass a packet of bytes through the CRC
 
 int GDL90_Send(void (*Output)(char), uint8_t ID, const uint8_t *Data, int Len);  // transmit GDL90 packet with proper framing and CRC
+int GDL90_Send(uint8_t *Out, uint8_t ID, const uint8_t *Data, int Len);
+inline int GDL90_Send(char *Out, uint8_t ID, const uint8_t *Data, int Len) { return GDL90_Send((uint8_t *)Out, ID, Data, Len); }
 
 // =================================================================================
 
@@ -55,6 +57,13 @@ class GDL90_HEARTBEAT        // Heart-beat packet to be send at every UTC second
    void Clear(void)
    { Status1=0; Status2=0; TimeStamp=0; MsgCount[0]=0; MsgCount[1]=0; }
 
+   void Print(void) const
+   { uint32_t Time=getTimeStamp();
+     int Hour=Time/3600; Time-=Hour*3600;
+     int Min =Time/60; Time-=Min*60;
+     int Sec =Time;
+     printf("GDL90_HEARTBEAT: %02d:%02d:%02dZ %02X:%02X %4d:%4d\n", Hour, Min, Sec, Status1, Status2, getUplinkCount(), getDownlinkCount()); }
+
    void setTimeStamp(uint32_t Time)
    { Time%=86400; TimeStamp=Time; TimeStampMSB=Time>>16; }
 
@@ -68,8 +77,80 @@ class GDL90_HEARTBEAT        // Heart-beat packet to be send at every UTC second
    void setDownlinkCount(uint8_t Count) { MsgCount[0] = (MsgCount[0]&0xFC) | (Count>>8); MsgCount[1] = Count; }
 
    int Send(void (*Output)(char)) const { return GDL90_Send(Output, 0, (const uint8_t *)this, Size); }
+   int Send(char  *Output       ) const { return GDL90_Send(Output, 0, (const uint8_t *)this, Size); }
 
 } __attribute__((packed));
+
+class STX_HEARTBEAT
+{ public:
+   static const int Size=1;
+   union
+   { uint8_t Status;
+     struct
+     { bool  AHRS     : 1;
+       bool  GPS      : 1;
+       uint8_t ProtVer: 6;
+     } ;
+   } ;
+
+  public:
+   void Print(void) const
+   { printf("STX_HEARTBEAT: AHRS:%d GPS:%d v%d\n", AHRS, GPS, ProtVer); }
+
+} ;
+
+class STX_AHRS
+{ public:
+   static const int Size=23;
+   uint8_t Data[Size];
+
+  public:
+   void Print(void) const
+   { printf("STX_AHRS:\n"); }
+
+} ;
+
+class STX_STATUS
+{ public:
+   static const int Size=28;
+   union
+   { uint8_t Data[Size];
+     struct
+     { char X;
+       uint8_t MsgType;
+       uint8_t MsgVer;
+       uint8_t Firmware[4];
+       uint8_t Hardware[4];
+       union
+       { uint8_t ValidFlags[2];
+       } ;
+       union
+       { uint8_t ConnFlags[2];
+       } ;
+       uint8_t SatLocked;
+       uint8_t SatConnected;
+       uint8_t TrafficTargets978[2];
+       uint8_t TrafficTargets1090[2];
+       uint8_t TraffcRate978[2];
+       uint8_t TraffcRate1090[2];
+       uint8_t CPUtemperature[2];
+       uint8_t ADSBtowers;
+       // 6x ADSBtowers bytes for coordinates
+     } ;
+   } ;
+
+  public:
+   static uint16_t getTwoBytes(const uint8_t *Data) { uint16_t Val=Data[0]; return (Val<<8) | Data[1]; }
+   // uint16_t getTargets(void) const { return getTwoBytes(TrafficTargets); }
+   float getCPUtemp(void) const
+   { uint16_t Temp=getTwoBytes(CPUtemperature);
+     if(Temp&0x8000) return -0.1f*(Temp&0x7FFF);
+                else return +0.1f*Temp; }
+
+   void Print(void) const
+   { printf("STX_STATUS: %d/%dsats v%d.%d %+5.1fdegC\n", SatLocked, SatConnected, Firmware[0], Firmware[1], getCPUtemp()); }
+
+} ;
 
 // class GSL90_CONFIG    // Initialization, ID=117
 // { public:
@@ -82,16 +163,30 @@ class GDL90_GEOMALT     // Geometrical altitude: ID = 11 (GPS ref. to Ellipsoid)
    uint8_t Data[Size];
 
   public:
+   void Clear(void) { for(int Idx=0; Idx<Size; Idx++) Data[Idx]=0; }
+
    void setAltitude(int32_t Alt)  // [5 feet] GPS altitude (ref. to Ellipsoid)
    { if(Alt>0x7FFF) Alt=0x7FFF;
      else if(Alt<(-0x8000)) Alt=(-0x8000);
      Data[0]=Alt>>8; Data[1]=Alt&0x0FF; }
+   int32_t getAltitude(void) const { int16_t Alt=Data[0]; Alt<<=8; Alt|=Data[1]; return Alt; }
+
    void setWarning(bool Warn)     // [bool]
    { if(Warn) Data[2]|=0x80;
          else Data[2]&=0x7F; }
+   bool getWarning(void) const { return Data[2]&0x80; }
+
    void setFOM(uint16_t FOM)      // [m] vertical Figure of Merit (accuracy ?)
    { Data[2] = (Data[2]&0x80) | (FOM>>8);
      Data[3] = FOM&0xFF; }
+
+   uint16_t getFOM(void) const { uint16_t FOM=Data[2]&0x7F; FOM<<=8; FOM|=Data[3]; return FOM; }
+
+   int Send(void (*Output)(char)) const { return GDL90_Send(Output, 11, Data, Size); }
+   int Send(char  *Output       ) const { return GDL90_Send(Output, 11, Data, Size); }
+
+   void Print(void) const
+   { printf("GDL90_GEOMALT: %dft (%dm) Warn:%d\n", getAltitude()*5, getFOM(), getWarning()); }
 
 } ;
 
@@ -126,7 +221,7 @@ class GDL90_REPORT  // Position report: Traffic: ID = 20, Ownship: ID = 10
    static uint32_t get3bytes(const uint8_t *Byte) { uint32_t Word=Byte[0]; Word=(Word<<8) | Byte[1]; Word=(Word<<8) | Byte[2]; return Word; } // 3-byte value
    static void     set3bytes(uint8_t *Byte, uint32_t Word) { Byte[0]=Word>>16; Byte[1]=Word>>8; Byte[2]=Word; }
 
-   void Clear(void) { for(int Idx=0; Idx<27; Idx++) Data[Idx]=0; }                              // clear all data (Lat/Lon = invalid)
+   void Clear(void) { for(int Idx=0; Idx<Size; Idx++) Data[Idx]=0; }                            // clear all data (Lat/Lon = invalid)
 
    uint8_t getAlertStatus(void) const { return Data[0]>>4; }                                    // 0 = no alert, 1 = alert
    void    setAlertStatus(uint8_t Status) { Data[0] = (Data[0]&0x0F) | (Status<<4); }
@@ -162,20 +257,25 @@ class GDL90_REPORT  // Position report: Traffic: ID = 20, Ownship: ID = 10
    uint16_t getSpeed(void) const { uint16_t Speed=Data[13]; Speed=(Speed<<4) | (Data[14]>>4); return Speed; }  // [knot]
    void     setSpeed(uint16_t Speed) { if(Speed>0xFFE) Speed=0xFFE; Data[13] = Speed>>4; Data[14] = (Data[14]&0x0F) | (Speed<<4); } // [knot]
    void     clrSpeed(void) { Data[13] = 0xFF; Data[14] = (Data[14]&0x0F) | 0xF0; }                               // Speed = invalid
+   bool     hasSpeed(void) const { return Data[13]!=0xFF || (Data[14]&0xF0)!=0xF0; }
 
    int32_t getClimbRate(void) const
-   { int16_t Climb=Data[14]&0x0F; Climb=(Climb<<8)|Data[15]; Climb<<=4; return (int32_t)Climb*4; }               // [fpm]
+   { int16_t Climb=Data[14]&0x0F; Climb=(Climb<<8)|Data[15]; Climb<<=4; return (int32_t)Climb<<2; }              // [fpm]
    void    setClimbRate(int32_t Climb)                                                                           // [fpm]
    { Climb = (Climb+32)>>6; if(Climb<(-510)) Climb=(-510); else if(Climb>510) Climb=510;                         // full 12-bit range is not being used
      Data[15] = Climb&0xFF; Data[14] = (Data[14]&0xF0) | ((Climb>>8)&0x0F); }
    void    clrClimbRate(void) { Data[15]=0x00; Data[14] = (Data[14]&0xF0) | 0x08; }                              // set vertical rate = not available
+   bool    hasClimbRate(void) const { return Data[15]!=0x00 || (Data[14]&0x0F)!=0x08; }
 
    uint8_t getHeading(void) const { return Data[16]; }                                                            // [cyclic]
    void    setHeading(uint8_t Heading) { Data[16]=Heading; }                                                      // [cyclic]
 
    uint8_t getAcftCat(void) const { return Data[17]; }      // 1=light, 2=small, 3=large, 4=high vortex, 5=heavy, 6=high-G, 7=rotor, 9=glider, 10=airship, 11=parachute, 12=ULM/para/hang, 14=UAV, 15=space, 17=surf, 18=service
+   uint8_t getAcftCatADSB(void) const { uint8_t Cat=getAcftCat(); Cat = (((Cat&0x18)<<1)+0xA0) | (Cat&7); return Cat; }
+
    void    setAcftCat(uint8_t Cat) { Data[17]=Cat; }
-   void    setAcftType(uint8_t AcftType)                    // set OGN-type aricrraft-type
+   void    setAcftCatADSB(uint8_t Cat) { if(Cat>=0xA0) Cat-=0xA0; Cat = ((Cat>>1)&0x18) | (Cat&7); setAcftCat(Cat); }
+   void    setAcftTypeOGN(uint8_t AcftType)                 // set OGN-type aircraft-type
    {                            // 0, 1, 2, 3,  4,  5,  6,  7,  8,  9, A, B, C, D, E, F
      const uint8_t OGNtype[16] = { 0, 9, 1, 7, 11,  1, 12, 12,  1,  3,15,10,10,14,18,19 } ; // conversion table from OGN aricraft-type
      setAcftCat(OGNtype[AcftType&0x0F]); }
@@ -199,13 +299,17 @@ class GDL90_REPORT  // Position report: Traffic: ID = 20, Ownship: ID = 10
    void    setPriority(uint8_t Prior) { Data[26] = (Data[26]&0x0F) | (Prior<<4); }
 
   int Send(void (*Output)(char), uint8_t ID=10) const { return GDL90_Send(Output, ID, Data, Size); }
+  int Send(char  *Output       , uint8_t ID=10) const { return GDL90_Send(Output, ID, Data, Size); }
 
   void Print(void) const
-  { printf("%X:%06X %02X/%8s %X/%X %dft %+dfpm [%+09.5f,%+010.5f] %03.0f/%dkt\n",
-       getAddrType(), getAddress(), getAcftCat(), getAcftCall(),
-       getNIC(), getNACp(), getAltitude(), getClimbRate(),
+  { printf("%X:%06X %02X/%8s NIC:%X NACp:%X %5dft",
+       getAddrType(), getAddress(), getAcftCatADSB(), getAcftCall(),
+       getNIC(), getNACp(), getAltitude());
+    if(hasClimbRate()) printf(" %+4dfpm", getClimbRate());
+    printf(" [%+09.5f,%+010.5f] %03.0f/%dkt MI:%X Alrt:%X Prio:%X\n",
        (90.0/0x40000000)*getLatitude(), (90.0/0x40000000)*getLongitude(),
-       (360.0/256)*getHeading(), getSpeed()); }
+       (360.0/256)*getHeading(), getSpeed(),
+       getMiscInd(), getAlertStatus(), getPriority()); }
 
 } ;
 
@@ -213,7 +317,7 @@ class GDL90_REPORT  // Position report: Traffic: ID = 20, Ownship: ID = 10
 
 class GDL90_RxMsg // receiver for the MAV messages
 { public:
-   static const uint8_t MaxBytes = 32; // max. number of bytes
+   static const uint8_t MaxBytes = 60; // max. number of bytes
    static const uint8_t SYNC   = 0x7E; // GDL90 sync byte
    static const uint8_t ESC    = 0x7D; // GDL90 escape byte
 
@@ -223,8 +327,24 @@ class GDL90_RxMsg // receiver for the MAV messages
   public:
    void Clear(void) { Len=0; Byte[Len]=0; }
 
-   void Print(void)
-   { printf("GDL90[%d] ", Len);
+   uint8_t getID(void) const { return Byte[0]; }
+
+   bool isHeartBeat(void)    const { return getID()== 0   && Len== 9; }  // regular GDL90 heart-beat sent at 1Hz
+   bool isGeomAlt(void)      const { return getID()==11   && Len== 7; }  // own height-above-Ellipsoid
+   bool isOwnReport(void)    const { return getID()==10   && Len==30; }  // own position
+   bool isTrafReport(void)   const { return getID()==20   && Len==30; }  // other aircraft position
+   bool isForeFlight(void)   const { return getID()==0x65; }             // ForeFlight: can be software ID or AHRS
+   bool isSkyLink(void)      const { return getID()==0x31; }             // SkyLink:
+   bool isStxHeartBeat(void) const { return getID()==0xCC && Len== 4; }  // Stratux heart-beat
+   bool isStxAHRS(void)      const { return getID()==0x4C && Len==26; }  // Stratux AHRS
+   bool isStxStatus(void)    const                                       // Stratux status
+   { if(getID()!='S') return 0;
+     if(Len<31) return 0;
+     uint8_t Towers=Byte[31];
+     return Len == 31+Towers*6; }
+
+   void Print(void) const
+   { printf("GDL90[%2d:%3d] ", Len, Byte[0]);
      for(int Idx=0; Idx<Len; Idx++)
        printf("%02X", Byte[Idx]);
      printf("\n"); }
@@ -232,11 +352,11 @@ class GDL90_RxMsg // receiver for the MAV messages
    uint8_t ProcessByte(uint8_t RxByte)                       // process a single byte: add to the message or reject
    { // printf("Process[%2d] 0x%02X\n", Len, RxByte);
      if(Len==0)                                              // if the very first byte
-     { if(RxByte==SYNC) { Byte[Len]=RxByte; return 1; }      // is SYNC then store it
-       else if(Byte[Len]==SYNC)
-       { Byte[Len]=RxByte; if(RxByte==ESC) return 1;
+     { if(RxByte==SYNC) { Byte[Len]=RxByte; return 1; }      // if SYNC then store it
+       else if(Byte[Len]==SYNC)                              // if the packet before was SYNC
+       { Byte[Len]=RxByte; if(RxByte==ESC) return 1;         // store the byte
          Len++; Byte[Len]=0; return 1; }
-       else if(Byte[Len]==ESC)
+       else if(Byte[Len]==ESC)                               // if the previous byte was ESC
        { RxByte^=0x20; Byte[Len++]=RxByte; Byte[Len]=0; return 1; }
        else return 0; }
      if(RxByte==SYNC)                                        // if not the very first byte and SYNC then the packet is possibly complete
@@ -245,7 +365,7 @@ class GDL90_RxMsg // receiver for the MAV messages
        for(int Idx=0; Idx<(Len-2); Idx++)
        { CRC=GDL90_CRC16(Byte[Idx], CRC); }
        if( (CRC&0xFF)!=Byte[Len-2] || (CRC>>8)!=Byte[Len-1] ) { Clear(); return 0; }
-       return 2; }
+       return 2; }                                           // packet complete and good CRC
      if(Byte[Len]==ESC) { RxByte^=0x20; }                    // if after an ESC then xor with 0x20
      Byte[Len]=RxByte; if(RxByte==ESC) return 1;
      Len++;                                                  // advance

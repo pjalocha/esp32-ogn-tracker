@@ -1,20 +1,21 @@
 #ifndef __ADSL_H__
 #define __ADSL_H__
 
-// #include <stdlib.h>
+#include <stdlib.h>
+#include <math.h>
 // #include <string.h>
 // #include "radiodemod.h"
 // #include "intmath.h"
 #include "ognconv.h"
-// #include "bitcount.h"
+#include "bitcount.h"
 // #include "format.h"
 // #include "crc1021.h"
 
 class ADSL_Packet
 { public:
 
-   const static uint8_t TxBytes = 27; // including SYNC, Length and 24-bit CRC
-   const static uint8_t SYNC1 = 0x72;
+   const static uint8_t TxBytes = 27; // including SYNC, Length, actual packet content (1+20 bytes) and 3-byte CRC
+   const static uint8_t SYNC1 = 0x72; // two SYNC bytes - Lemgth byte can be considered the 3rd SYNC byte as it is fixed
    const static uint8_t SYNC2 = 0x4B;
 
    uint8_t SYNC[2];          // two bytes for correct alignment: can contain the last two SYNC bytes
@@ -51,11 +52,15 @@ class ADSL_Packet
    } ;
    uint8_t CRC[3];           // 24-bit (is aligned to 32-bit)
 
-   // uint8_t Spare;
-   // uint32_t Time;            // [sec] receive time or other estimate
+// --------------------------------------------------------------------------------------------------------
 
   public:
-   void Init(void) { SYNC[0]=SYNC1; SYNC[1]=SYNC2; Length=TxBytes-3; Version=0x00; Type=0x02; }
+   void Init(void)
+   { SYNC[0]=SYNC1; SYNC[1]=SYNC2;
+     Length=TxBytes-3; Version=0x00;
+     for(int Idx=0; Idx<5; Idx++)
+       Word[Idx]=0;
+     Type=0x02; }
 
    void Print(void) const
    { printf(" v%02X %4.1fs: %02X:%06X [%+09.5f,%+010.5f]deg %dm %+4.1fm/s %05.1fdeg %3.1fm/s\n",
@@ -82,11 +87,16 @@ class ADSL_Packet
    static void     set3bytes(uint8_t *Byte, uint32_t Word) { Byte[0]=Word; Byte[1]=Word>>8; Byte[2]=Word>>16; }
 
    static uint32_t get4bytes(const uint8_t *Byte)
-   { uint32_t Word =Byte[3]; Word<<=8;
-              Word|=Byte[2]; Word<<=8;
-              Word|=Byte[1]; Word<<=8;
-              Word|=Byte[0];
-     return Word; }
+   { uint32_t A = Byte[0];
+     uint32_t B = Byte[1];
+     uint32_t C = Byte[2];
+     uint32_t D = Byte[3];
+     return A | (B<<8) | (C<<16) | (D<<24); }
+   // { uint32_t Word =Byte[3]; Word<<=8;
+   //            Word|=Byte[2]; Word<<=8;
+   //            Word|=Byte[1]; Word<<=8;
+   //            Word|=Byte[0];
+   //   return Word; }
    static void     set4bytes(uint8_t *Byte, uint32_t Word) { Byte[0]=Word; Byte[1]=Word>>8; Byte[2]=Word>>16; Byte[3]=Word>>24; }
 
    uint32_t getAddress(void) const
@@ -100,7 +110,7 @@ class ADSL_Packet
    uint8_t  getAddrTable(void) const { return Address[0]&0x3F; }
     void    setAddrTable(uint8_t Table) { Address[0] = (Address[0]&0xC0) | Table; }
 
-   uint8_t getAddrType(void) const
+   uint8_t getAddrTypeOGN(void) const
    { uint8_t Table=getAddrTable();
      if(Table==0x05) return 1;         // ICAO
      if(Table==0x06) return 2;         // FLARM
@@ -108,51 +118,72 @@ class ADSL_Packet
      if(Table==0x08) return 2;         // FANET => FLARM ?
      return 0; }
 
-   void setAddrType(uint8_t AddrType)
+   void setAddrTypeOGN(uint8_t AddrType)
    { if(AddrType==0) setAddrTable(0);
      else setAddrTable(AddrType+4); }
 
-   void setAcftType(uint8_t AcftType)
+   void setAcftTypeOGN(uint8_t AcftType)                       // set OGN aircraft-type
    { const uint8_t Map[16] = { 0, 4, 1, 3,                     // unknown, glider, tow-plane, helicopter
                                8, 1, 7, 7,                     // sky-diver, drop plane, hang-glider, para-glider
                                1, 2, 0, 5,                     // motor airplane, jet, UFO, balloon
                                5,11, 0, 0 } ;                  // airship, UAV, ground vehicle, static object
      if(AcftType<16) AcftCat=Map[AcftType];
                 else AcftCat=0; }
-   uint8_t getAcftType(void) const
+   uint8_t getAcftTypeOGN(void) const                          // get OGN aircraft-type
    { const uint8_t Map[32] = { 0, 8, 9, 3, 1,12, 2, 7,
                                4,13, 3,13,13,13, 0, 0,
                                0, 0, 0, 0, 0, 0, 0, 0,
                                0, 0, 0, 0, 0, 0, 0, 0 } ;
      return Map[AcftCat]; }
 
-   uint8_t getHorPrec(void) const
+// --------------------------------------------------------------------------------------------------------
+
+   uint32_t getTime(uint16_t &msTime, uint32_t RefTime, int FwdMargin=3) const
+   { msTime=250*(TimeStamp&3);
+     if(TimeStamp>=60) return 0;
+     int Sec=RefTime%15;
+     int DiffSec=(TimeStamp>>2)-Sec;
+     if(DiffSec>FwdMargin) DiffSec-=15;
+     else if(DiffSec<=(-15+FwdMargin)) DiffSec+=15;
+     return RefTime+DiffSec; }           // get out the correct position timestamp
+
+   uint8_t getHorAccur(void) const
    { const uint8_t Map[8] = { 63, 63, 63, 63, 63, 30, 10, 3 } ;
      return Map[HorizAccuracy]; }
-   void setHorPrec(uint8_t Prec)
+   void setHorAccur(uint8_t Prec)
    {      if(Prec<= 3) HorizAccuracy=7;
      else if(Prec<=10) HorizAccuracy=6;
      else if(Prec<=30) HorizAccuracy=5;
      else HorizAccuracy=4;
      VelAccuracy = HorizAccuracy-4; }
 
-   uint8_t getVerPrec(void) const
+   uint8_t getVerAccur(void) const                // [m] vertical accuracy
    { const uint8_t Map[8] = { 63, 63, 45, 15 } ;
      return Map[VertAccuracy]; }
-   void setVerPrec(uint8_t Prec)
+   void setVerAccur(uint8_t Prec)
    {      if(Prec<=15) HorizAccuracy=3;
      else if(Prec<=45) HorizAccuracy=2;
      else HorizAccuracy=1; }
 
-   static int32_t FNTtoUBX(int32_t Coord) { return ((int64_t)900007296*Coord+0x20000000)>>30; } // [FANET-cordic ] => [1e-7 deg]
-   static int32_t OGNtoFNT(int32_t Coord) { return ((int64_t)Coord*83399317+(1<<21))>>22; }     // [0.0001/60 deg] => [FANET cordic]
-   static int32_t UBXtoFNT(int32_t Coord) { return ((int64_t)Coord*5003959 +(1<<21))>>22; }     // [1e-7 deg]      => [FANET cordic]
+   static int32_t FNTtoOGN(int32_t Coord) { return ((int64_t)Coord*27000219 +(1<<28))>>29; }    // [FANET cordic] => [0.0001/60 deg]
+   static int32_t OGNtoFNT(int32_t Coord) { return ((int64_t)Coord*83399317 +(1<<21))>>22; }    // [0.0001/60 deg] => [FANET cordic]
+   static int32_t FNTtoUBX(int32_t Coord) { return ((int64_t)Coord*900007296+(1<<29))>>30; }    // [FANET-cordic ] => [1e-7 deg]
+   static int32_t UBXtoFNT(int32_t Coord) { return ((int64_t)Coord*5003959  +(1<<21))>>22; }    // [1e-7 deg]      => [FANET cordic]
    static float   FNTtoFloat(int32_t Coord)                             // convert from FANET cordic units to float degrees
    { const float Conv = 90.0007295677/0x40000000;                       // FANET cordic conversion factor (not exactly cordic)
      return Conv*Coord; }
 
+    int32_t getLatOGN(void) const { return FNTtoOGN(getLat()); }
+    int32_t getLonOGN(void) const { return FNTtoOGN(getLon()); }
+
+    int32_t getLatUBX(void) const { return FNTtoUBX(getLat()); }
+    int32_t getLonUBX(void) const { return FNTtoUBX(getLon()); }
+
     int32_t getLat(void) const { int32_t Lat=get3bytes(Position  ); Lat<<=8; Lat>>=1; return Lat; } // FANET-cordic
     int32_t getLon(void) const { int32_t Lon=get3bytes(Position+3); Lon<<=8; return Lon; }          // FANET-cordic
+
+    void setLatOGN(int32_t Lat)  { setLat(OGNtoFNT(Lat)); }
+    void setLonOGN(int32_t Lon)  { setLon(OGNtoFNT(Lon)); }
 
     void    setLat(int32_t Lat)  { Lat = (Lat+0x40)>>7; set3bytes(Position  , Lat); }           // FANET-cordic
     void    setLon(int32_t Lon)  { Lon = (Lon+0x80)>>8; set3bytes(Position+3, Lon); }           // FANET-cordic
@@ -187,11 +218,33 @@ class ADSL_Packet
    { Position[9] = (Position[9]&0x7F) | ((Word&0x01)<<7);
      Position[10] = Word>>1; }
 
+// --------------------------------------------------------------------------------------------------------
+
+   // calculate distance vector [LatDist, LonDist] from a given reference [RefLat, Reflon]
+   int calcDistanceVectorOGN(int32_t &LatDist, int32_t &LonDist, int32_t RefLat, int32_t RefLon, uint16_t LatCos=3000, int32_t MaxDist=0x7FFF)
+   { LatDist = ((getLatOGN()-RefLat)*1517+0x1000)>>13;           // convert from 1/600000deg to meters (40000000m = 360deg) => x 5/27 = 1517/(1<<13)
+     if(abs(LatDist)>MaxDist) return -1;
+     LonDist = ((getLonOGN()-RefLon)*1517+0x1000)>>13;
+     if(abs(LonDist)>(4*MaxDist)) return -1;
+             LonDist = (LonDist*LatCos+0x800)>>12;
+     if(abs(LonDist)>MaxDist) return -1;
+     return 1; }
+
+   // sets position [Lat, Lon] according to given distance vector [LatDist, LonDist] from a reference point [RefLat, RefLon]
+   void setDistanceVectorOGN(int32_t LatDist, int32_t LonDist, int32_t RefLat, int32_t RefLon, uint16_t LatCos=3000)
+   { setLatOGN(RefLat+(LatDist*27)/5);
+     LonDist = (LonDist<<12)/LatCos;                                  // LonDist/=cosine(Latitude)
+     setLonOGN(RefLon+(LonDist*27)/5); }
+
+// --------------------------------------------------------------------------------------------------------
+
    void Scramble(void)
    { XXTEA_Encrypt_Key0(Word, 5, 6); }
 
    void Descramble(void)
    { XXTEA_Decrypt_Key0(Word, 5, 6); }
+
+// --------------------------------------------------------------------------------------------------------
 
    static uint32_t PolyPass(uint32_t CRC, uint8_t Byte)     // pass a single byte through the CRC polynomial
    { const uint32_t Poly = 0xFFFA0480;
@@ -220,6 +273,54 @@ class ADSL_Packet
 
     uint32_t checkCRC(void) const
     { return checkPI((const uint8_t *)&Version, TxBytes-3); }
+
+    static int Correct(uint8_t *PktData, uint8_t *PktErr, const int MaxBadBits=6) // correct the manchester-decoded packet with dead/weak bits marked
+    { const int Bytes=TxBytes-3;
+      uint32_t CRC = checkPI(PktData, Bytes); if(CRC==0) return 0;
+      uint8_t ErrBit=FindCRCsyndrome(CRC);
+      if(ErrBit!=0xFF) { FlipBit(PktData, ErrBit); return 1; }
+
+      uint8_t BadBitIdx[MaxBadBits];                                    // bad bit index
+      uint8_t BadBitMask[MaxBadBits];                                   // bad bit mask
+      uint32_t Syndrome[MaxBadBits];                                   // bad bit mask
+      uint8_t BadBits=0;                                                // count the bad bits
+      for(uint8_t ByteIdx=0; ByteIdx<Bytes; ByteIdx++)                  // loop over bytes
+      { uint8_t Byte=PktErr[ByteIdx];
+        uint8_t Mask=0x80;
+        for(uint8_t BitIdx=0; BitIdx<8; BitIdx++)                       // loop over bits
+        { if(Byte&Mask)
+          { if(BadBits<MaxBadBits)
+            { BadBitIdx[BadBits]=ByteIdx;                               // store the bad bit index
+              BadBitMask[BadBits]=Mask;
+              Syndrome[BadBits]=CRCsyndrome(ByteIdx*8+BitIdx); }
+            BadBits++;
+          }
+          Mask>>=1;
+        }
+        if(BadBits>MaxBadBits) break;
+      }
+      if(BadBits>MaxBadBits) return -1;                                 // return failure when too many bad bits
+
+      uint8_t Loops = 1<<BadBits; uint8_t PrevGrayIdx=0;
+      for(uint8_t Idx=1; Idx<Loops; Idx++)                              // loop through all combination of bad bit flips
+      { uint8_t GrayIdx= Idx ^ (Idx>>1);                                // use Gray code to change flip just one bit at a time
+        uint8_t BitExp = GrayIdx^PrevGrayIdx;
+        uint8_t Bit=0; while(BitExp>>=1) Bit++;
+        PktData[BadBitIdx[Bit]]^=BadBitMask[Bit];
+        CRC^=Syndrome[Bit]; if(CRC==0) return Count1s(GrayIdx);
+        uint8_t ErrBit=FindCRCsyndrome(CRC);
+        if(ErrBit!=0xFF)
+        { FlipBit(PktData, ErrBit);
+          return Count1s(GrayIdx)+1; }
+        PrevGrayIdx=GrayIdx; }
+
+      return -1; }
+
+    static void FlipBit(uint8_t *Byte, int BitIdx)
+    { int ByteIdx=BitIdx>>3;
+      BitIdx&=7; BitIdx=7-BitIdx;
+      uint8_t Mask=1; Mask<<=BitIdx;
+      Byte[ByteIdx]^=Mask; }
 
     static uint32_t CRCsyndrome(uint8_t Bit)
     { const uint16_t PacketBytes = TxBytes-3;
@@ -293,5 +394,19 @@ class ADSL_Packet
       return 0xFF; }
 
 } __attribute__((packed));
+
+class ADSL_RxPacket: public ADSL_Packet
+{ public:
+   uint32_t  sTime;         // [ s] reception time
+   uint16_t msTime;         // [ms]
+    int8_t RSSI;            // [dBm]
+   uint8_t BitErr;          // number of bit errors
+
+  public:
+   void setTime(double RxTime) { sTime=floor(RxTime); msTime=floor(1000.0*(RxTime-sTime)); }
+   double getTime(void) const { return (double)sTime+0.001*msTime; }
+   uint32_t SlotTime(void) const { uint32_t Slot=sTime; if(msTime<=300) Slot--; return Slot; }
+
+};
 
 #endif // __ADSL_H__

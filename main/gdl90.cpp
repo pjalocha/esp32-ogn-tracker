@@ -104,16 +104,35 @@ static int GDL90_SendEsc(void (*Output)(char), uint8_t Byte)   // shall we escap
   (*Output)((char)Byte); return 1; }
 
 int GDL90_Send(void (*Output)(char), uint8_t ID, const uint8_t *Data, int Len)
-{ int Count=0; uint16_t CRC=0;
-  (*Output)((char)GDL90_Flag); Count++;
+{ int OutLen=0; uint16_t CRC=0;
+  (*Output)((char)GDL90_Flag); OutLen++;
   CRC=GDL90_CRC16(ID, CRC);
-  Count+=GDL90_SendEsc(Output, ID);
+  OutLen+=GDL90_SendEsc(Output, ID);
   for( int Idx=0; Idx<Len; Idx++)
   { uint8_t Byte=Data[Idx];
     CRC=GDL90_CRC16(Byte, CRC);
-    Count+=GDL90_SendEsc(Output, Byte); }
-  Count+=GDL90_SendEsc(Output, CRC&0xFF);
-  Count+=GDL90_SendEsc(Output, CRC>>8);
-  (*Output)((char)GDL90_Flag); Count++;
-  return Count; }
+    OutLen+=GDL90_SendEsc(Output, Byte); }
+  OutLen+=GDL90_SendEsc(Output, CRC&0xFF);
+  OutLen+=GDL90_SendEsc(Output, CRC>>8);
+  (*Output)((char)GDL90_Flag); OutLen++;
+  return OutLen; }
+
+static int GDL90_SendEsc(uint8_t *Out, uint8_t Byte)   // shall we escape control characters as well ?
+{ // if(Byte<0x20 || Byte==GDL90_Flag || Byte==GDL90_Esc) { Out[0]=GDL90_Esc; Byte^=0x20; Out[]=Byte; return 2; }
+  if(Byte==GDL90_Flag || Byte==GDL90_Esc) { Out[0]=GDL90_Esc; Byte^=0x20; Out[1]=Byte; return 2; } // ESCape some characters
+  Out[0]=Byte; return 1; }
+
+int GDL90_Send(uint8_t *Out, uint8_t ID, const uint8_t *Data, int Len)
+{ int OutLen=0; uint16_t CRC=0;
+  Out[OutLen++]=GDL90_Flag;
+  CRC=GDL90_CRC16(ID, CRC);
+  OutLen+=GDL90_SendEsc(Out+OutLen, ID);
+  for( int Idx=0; Idx<Len; Idx++)
+  { uint8_t Byte=Data[Idx];
+    CRC=GDL90_CRC16(Byte, CRC);
+    OutLen+=GDL90_SendEsc(Out+OutLen, Byte); }
+  OutLen+=GDL90_SendEsc(Out+OutLen, CRC&0xFF);
+  OutLen+=GDL90_SendEsc(Out+OutLen, CRC>>8);
+  Out[OutLen++]=GDL90_Flag;
+  return OutLen; }
 

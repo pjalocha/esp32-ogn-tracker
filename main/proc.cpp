@@ -35,7 +35,7 @@ GDL90_REPORT GDL_REPORT;
 
 #ifdef WITH_LOOKOUT                   // traffic awareness and warnings
 #include "lookout.h"
-LookOut Look;
+LookOut<32> Look;
 #ifdef WITH_SOUND
 const char *Dir[16] = { "N", "NNE", "NE", "NEE", "E", "SEE", "SE", "SSE", "S", "SSW", "SW", "SWW", "W", "NWW", "NW", "NNW" };
 const char *RelDir[8] = { "A", "AR", "R", "BR", "B", "BL", "L", "AL" };
@@ -648,9 +648,9 @@ void vTaskPROC(void* pvParameters)
         ADSL_Packet *Packet = ADSL_TxFIFO.getWrite();
         Packet->Init();
         Packet->setAddress (Parameters.Address);
-        Packet->setAddrType(Parameters.AddrType);
+        Packet->setAddrTypeOGN(Parameters.AddrType);
         Packet->setRelay(0);
-        Packet->setAcftType(Parameters.AcftType);
+        Packet->setAcftTypeOGN(Parameters.AcftType);
         Position->Encode(*Packet);
         Packet->Scramble();                              // this call hangs when -Os is used to compile
         Packet->setCRC();

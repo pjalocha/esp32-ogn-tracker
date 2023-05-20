@@ -137,7 +137,7 @@ void app_main(void)
 
 #ifdef WITH_SDLOG
     Log_Mutex = xSemaphoreCreateMutex();
-    xTaskCreate(vTaskSDLOG, "SDLOG", 3000, 0, tskIDLE_PRIORITY+1, 0);
+    xTaskCreate(vTaskSDLOG, "SDLOG", 4000, 0, tskIDLE_PRIORITY+1, 0);
 #endif
 
 #ifdef WITH_LOG

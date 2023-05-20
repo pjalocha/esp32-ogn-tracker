@@ -2,7 +2,7 @@
 
 #ifdef WITH_LOOKOUT                   // traffic awareness and warnings
 #include "lookout.h"
-extern LookOut Look;
+extern LookOut<32> Look;
 #endif
 
 extern uint32_t BatteryVoltage;       // [1/256 mV] averaged

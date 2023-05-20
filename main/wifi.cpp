@@ -3,11 +3,11 @@
 #include "wifi.h"
 #include "format.h"
 
-wifi_config_t WIFI_Config;        // WIFI config: ESSID, etc.
+wifi_config_t           WIFI_Config;            // WIFI config: ESSID, etc.
 tcpip_adapter_ip_info_t WIFI_IP = { 0, 0, 0 };  // WIFI local IP address, mask and gateway
-WIFI_State_t WIFI_State;
+WIFI_State_t            WIFI_State = { 0 };
 
-bool WIFI_isConnected(void) { return WIFI_IP.ip.addr!=0; }  // return "connected" status when IP from DHCP is there
+bool WIFI_isConnected(void) { return WIFI_IP.ip.addr!=0; }   // return "connected" status when IP from DHCP is there
 bool WIFI_isAP(void) { return WIFI_Config.ap.ssid_len!=0; }  // return if AP mode enabled
 
 static esp_err_t WIFI_event_handler(void *ctx, system_event_t *event)
@@ -49,10 +49,9 @@ static esp_err_t WIFI_event_handler(void *ctx, system_event_t *event)
   return ESP_OK; }
 
 esp_err_t WIFI_Init(void)
-{ 
-
-  //Fab501 test to change IP to 192.168.1.1 for comptability with SkyDemon
-  
+{
+/* this produces as error during startup
+  // Fab501 test to change IP to 192.168.1.1 for comptability with SkyDemon
     esp_netif_init();
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_t* wifiAP = esp_netif_create_default_wifi_ap();
@@ -63,8 +62,8 @@ esp_err_t WIFI_Init(void)
     esp_netif_dhcps_stop(wifiAP);
     esp_netif_set_ip_info(wifiAP, &ipInfo);
     esp_netif_dhcps_start(wifiAP);
-
-  // end of Fab501 changes 
+  // end of Fab501 changes
+*/
   esp_err_t Err;
   tcpip_adapter_init();
   Err = esp_event_loop_init(WIFI_event_handler, NULL); if(Err!=ESP_OK) return Err;
@@ -90,11 +89,6 @@ esp_err_t WIFI_StartAP(const char *SSID, const char *Pass, int MaxConnections)
       else WIFI_Config.ap.password[0]=0;
   WIFI_Config.ap.max_connection = MaxConnections;
   WIFI_Config.ap.authmode = (Pass && Pass[0]) ? WIFI_AUTH_WPA_WPA2_PSK:WIFI_AUTH_OPEN;
-  // tcpip_adapter_ip_info_t IPinfo;                             // attempt to change the IP range to 192.168.1.1 but does not work
-  // IP4_ADDR(&IPinfo.ip, 192,168,1,1);
-  // IP4_ADDR(&IPinfo.gw, 192,168,1,1);
-  // IP4_ADDR(&IPinfo.netmask, 255,255,255,0);
-  // tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_AP, &IPinfo);
   Err = esp_wifi_set_mode(WIFI_MODE_AP); if(Err!=ESP_OK) return Err;                   // which one should come first: set_mode or set_config ?
 #if ESP_IDF_VERSION_MINOR<3
   Err = esp_wifi_set_config(ESP_IF_WIFI_AP, &WIFI_Config); if(Err!=ESP_OK) return Err; // v4.1
@@ -102,6 +96,13 @@ esp_err_t WIFI_StartAP(const char *SSID, const char *Pass, int MaxConnections)
   Err = esp_wifi_set_config(WIFI_IF_AP, &WIFI_Config); if(Err!=ESP_OK) return Err; // v4.3
 #endif
   Err = esp_wifi_start();
+  // IP4_ADDR(&IPinfo.ip, 192,168,1,1);
+  // IP4_ADDR(&IPinfo.gw, 192,168,1,1);
+  // IP4_ADDR(&IPinfo.netmask, 255,255,255,0);
+  // esp_netif_dhcps_stop(TCPIP_ADAPTER_IF_AP);
+  // esp_netif_set_ip_info(TCPIP_ADAPTER_IF_AP, &WIFI_IP);
+  // esp_netif_dhcps_start(TCPIP_ADAPTER_IF_AP);
+  tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_AP, &WIFI_IP);
   return Err; }
 
 esp_err_t WIFI_Stop(void)
@@ -185,7 +186,7 @@ void IP_Print(void (*Output)(char), uint32_t IP)
     IP>>=8; }
 }
 
-uint8_t AP_Print(char *Out, wifi_ap_record_t *AP)                  // print numbers for a found Wi-Fi Access Point
+uint8_t AP_Print(char *Out, wifi_ap_record_t *AP)                  // print numbers for a discovered Wi-Fi Access Point
 { uint8_t Len=0;
   for(uint8_t Idx=0; Idx<6; Idx++)
   { Len+=Format_Hex(Out+Len, AP->bssid[Idx]); Out[Len++]=':'; }
