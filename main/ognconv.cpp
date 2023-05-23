@@ -45,7 +45,7 @@ uint8_t AcftType_ADSBtoOGN(uint8_t AcftCat)
   { if(Low==1) return 8;
     if(Low==7) return 3;
     return 9; }
-  if(Upp=0xB)
+  if(Upp==0xB)
   { const uint8_t Map[8] = { 0, 0xB, 1, 4, 7, 0, 0xD, 0 };
     return Map[Low]; }
   if(Upp==0xC)

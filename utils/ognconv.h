@@ -3,8 +3,26 @@
 
 #include <stdint.h>
 
+int32_t Coord_FNTtoOGN(int32_t Coord);
+int32_t Coord_OGNtoFNT(int32_t Coord);
+
+int32_t Coord_FNTtoUBX(int32_t Coord);
+int32_t Coord_UBXtoFNT(int32_t Coord);
+
+int32_t Coord_CRDtoOGN(int32_t Coord);
+int32_t Coord_OGNtoCRD(int32_t Coord);
+
 int32_t FeetToMeters(int32_t Altitude);                               //
 int32_t MetersToFeet(int32_t Altitude);                               //
+
+uint8_t AcftType_OGNtoADSB(uint8_t AcftType);
+uint8_t AcftType_FNTtoADSB(uint8_t AcftType);
+uint8_t AcftType_ADSBtoOGN(uint8_t AcftCat);
+uint8_t AcftType_OGNtoGDL(uint8_t AcftType);
+uint8_t AcftType_OGNtoADSL(uint8_t AcftType);
+uint8_t AcftType_ADSLtoOGN(uint8_t AcftCat);
+uint8_t AcftType_FNTtoOGN(uint8_t AcftType);
+uint8_t AcftType_FNTtoADSL(uint8_t AcftType);
 
 uint16_t EncodeUR2V8(uint16_t Value);                                 // Encode unsigned 12bit (0..3832) as 10bit
 uint16_t DecodeUR2V8(uint16_t Value);                                 // Decode 10bit 0..0x3FF
@@ -76,8 +94,13 @@ void TEA_Decrypt_Key0 (uint32_t* Data, int Loops);
 void XXTEA_Encrypt(uint32_t *Data, uint8_t Words, const uint32_t Key[4], uint8_t Loops);
 void XXTEA_Decrypt(uint32_t *Data, uint8_t Words, const uint32_t Key[4], uint8_t Loops);
 
+void XXTEA_Encrypt_Key0(uint32_t *Data, uint8_t Words, uint8_t Loops);
+void XXTEA_Decrypt_Key0(uint32_t *Data, uint8_t Words, uint8_t Loops);
+
 void XorShift32(uint32_t &Seed);      // simple random number generator
-void xorshift64(uint64_t &Seed);
+void XorShift64(uint64_t &Seed);
+uint64_t inline XorShift64star(uint64_t &Seed)
+{ XorShift64(Seed); return Seed*UINT64_C(0x2545f4914f6cdd1d); }
 
 uint8_t EncodeAscii85(    char *Ascii, uint32_t    Word );  // Encode 32-bit Word into 5-char Ascii-85 string
 uint8_t DecodeAscii85(uint32_t &Word,  const char *Ascii);  // Decode 5-char Ascii-85 to 32-bit Word
