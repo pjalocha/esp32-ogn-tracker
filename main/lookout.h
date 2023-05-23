@@ -133,9 +133,9 @@ class LookOut_Target           // describes a flying aircrafts
      // Len+=Format_UnsDec(NMEA+Len, (uint32_t)Pos.Speed*5, 2, 1);              // [approx. m/s] ground speed
      Len+=Format_UnsDec(NMEA+Len, (uint32_t)Pos.Speed/2, 1);              // [approx. m/s] ground speed - without decimal
      NMEA[Len++]=',';
-     if(Pos.hasClimb) Len+=Format_SignDec(NMEA+Len, (int32_t)Pos.Climb*5, 2, 1, 1);             // [m/s] climb/sink rate - with decimal part
+     if(Pos.hasClimb) Len+=Format_SignDec(NMEA+Len, (int32_t)Pos.Climb*5, 2, 1, 1); // [m/s] climb/sink rate - with decimal part
      NMEA[Len++]=',';
-     NMEA[Len++]=AcftType;                                         // [0..F] aircraft-type: 1=glider, 2=tow plane, etc.
+     NMEA[Len++]=HexDigit(AcftType);                                // [0..F] aircraft-type: 1=glider, 2=tow plane, etc.
      Len+=NMEA_AppendCheckCRNL(NMEA, Len);
      NMEA[Len]=0;
      return Len; }                                                 // return number of formatted characters
