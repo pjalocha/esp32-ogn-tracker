@@ -812,15 +812,15 @@ void OLED_DrawSystem(u8g2_t *OLED, GPS_Position *GPS)
 void OLED_DrawID(u8g2_t *OLED, GPS_Position *GPS)
 { u8g2_SetFont(OLED, u8g2_font_9x15_tr);
   Parameters.Print(Line); Line[10]=0;
-  u8g2_DrawStr(OLED, 26, 28, Line);
+  u8g2_DrawStr(OLED, 26, 25, Line);
   // u8g2_SetFont(OLED, u8g2_font_10x20_tr);
   u8g2_SetFont(OLED, u8g2_font_7x13_tf);
-  u8g2_DrawStr(OLED, 0, 27, "ID:");
+  u8g2_DrawStr(OLED, 0, 24, "ID:");
   if(Parameters.Pilot[0] || Parameters.Reg[0])
-  { strcpy(Line, "Reg: "); strcat(Line, Parameters.Reg);
-    u8g2_DrawStr(OLED, 0, 54, Line);
-    strcpy(Line, "Pilot: "); strcat(Line, Parameters.Pilot);
-    u8g2_DrawStr(OLED, 0, 42, Line); }
+  { strcpy(Line, "Pilot: "); strcat(Line, Parameters.Pilot);
+    u8g2_DrawStr(OLED, 0, 37, Line);
+    strcpy(Line, "Reg: "); strcat(Line, Parameters.Reg);
+    u8g2_DrawStr(OLED, 0, 49, Line); }
   else
   {
 #ifdef WITH_FollowMe
@@ -828,9 +828,18 @@ void OLED_DrawID(u8g2_t *OLED, GPS_Position *GPS)
   u8g2_DrawStr(OLED, 20, 56, "by AVIONIX");
 #endif
   }
-  u8g2_SetFont(OLED, u8g2_font_5x8_tr);
-  u8g2_DrawStr(OLED, 96, 62, "v" STR(VERSION));
-}
+  // u8g2_SetFont(OLED, u8g2_font_5x8_tr);
+  u8g2_SetFont(OLED, u8g2_font_6x12_tr);
+  // u8g2_DrawStr(OLED, 96, 62, "v" STR(VERSION));
+  uint64_t ID=getUniqueID();
+  uint8_t Len=Format_String(Line, "#");
+  Len+=Format_Hex(Line+Len, (uint16_t)(ID>>32));
+  Len+=Format_Hex(Line+Len, (uint32_t)ID);
+  // Line[Len++]=' ';
+  // Line[Len++]='v';
+  Len+=Format_String(Line+Len, " v"STR(VERSION));
+  Line[Len]=0;
+  u8g2_DrawStr(OLED, 0, 62, Line); }
 
 void OLED_DrawAltitudeAndSpeed(u8g2_t *OLED, GPS_Position *GPS)
 { uint8_t Len;
