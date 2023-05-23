@@ -73,7 +73,7 @@ class FlightMonitor
      { int Det=FlightThresh(Position, MinSpeed/2);             // check in-flight criteria with half the limit
        if(Det<=0)                                              // if fail
        { HoldTime++;                                           // count the holding time
-         if(HoldTime>=2*MinHold)                               // if over twice the limit
+         if(HoldTime>=MinHold*4)                               // if over four times the limit
          { Landing=Position; HoldTime=0;                       // then declare landing, store landing position
            // char Name[16]; ShortName(Name, "XXX");
            // printf("Landing #%d: %s\n", TakeoffCount, Name);
