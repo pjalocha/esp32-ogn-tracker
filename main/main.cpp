@@ -123,7 +123,18 @@ void app_main(void)
 #endif
 #endif
 
+#ifdef WITH_AP
+#ifdef WITH_AP_BUTTON
+    bool StartAP = Button_isPressed() && Parameters.APname[0]; // start WiFi AP when button pressed during startup and APname non-empty
+#else
+    bool StartAP = Parameters.APname[0]; // start WiFi AP when APname non-empty
+#endif
+#else  // WITH_AP
+    const bool StartAP=0;
+#endif // WITH_AP
+
 #if defined(WITH_BT_SPP) || defined(WITH_BLE_SPP)
+    if(!StartAP)
     { int32_t Err=BT_SPP_Init();                // start BT SPP
 // #ifdef DEBUG_PRINT
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -166,16 +177,9 @@ void app_main(void)
 #endif
 
 #ifdef WITH_AP
-#ifdef WITH_AP_BUTTON
-    bool StartAP = Button_isPressed() && Parameters.APname[0]; // start WiFi AP when button pressed during startup and APname non-empty
-#else
-    bool StartAP = Parameters.APname[0]; // start WiFi AP when APname non-empty
-#endif
     if(StartAP)
       xTaskCreate(vTaskAP,  "AP",  3000, 0, tskIDLE_PRIORITY+3, 0);
-#else  // WITH_AP
-    const bool StartAP=0;
-#endif // WITH_AP
+#endif
 #ifdef WITH_APRS
     if(!StartAP)
       xTaskCreate(vTaskAPRS,  "APRS",  4000, 0, tskIDLE_PRIORITY+2, 0);

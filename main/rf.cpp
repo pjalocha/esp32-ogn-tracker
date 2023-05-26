@@ -64,7 +64,7 @@ static uint8_t RX_Channel=0;                // (hopping) channel currently being
 static void SetTxChannel(uint8_t TxChan=RX_Channel, const uint8_t *SYNC=OGN_SYNC)         // default channel to transmit is same as the receive channel
 {
 #ifdef WITH_SX1262
-  TRX.OGN_Configure(TxChan&0x7F, SYNC);
+  TRX.FSK_Configure(TxChan&0x7F, SYNC, OGN_TxPacket<OGN_Packet>::Bytes);
   TRX.WaitWhileBusy_ms(2);
   TRX.WriteTxPower(Parameters.TxPower);
   TRX.WaitWhileBusy_ms(2);
@@ -83,7 +83,7 @@ static void SetTxChannel(uint8_t TxChan=RX_Channel, const uint8_t *SYNC=OGN_SYNC
 static void SetRxChannel(uint8_t RxChan=RX_Channel, const uint8_t *SYNC=OGN_SYNC)
 {
 #ifdef WITH_SX1262
-  // TRX.OGN_Configure(RxChan&0x7F, SYNC);
+  // TRX.FSK_Configure(RxChan&0x7F, SYNC);
   TRX.setChannel(RxChan&0x7F);
   TRX.FSK_WriteSYNC(7, 7, SYNC);                                // Shorter SYNC for RX
 #else
@@ -221,7 +221,7 @@ static uint8_t Transmit(uint8_t TxChan, const uint8_t *PacketByte, uint8_t Thres
   SetTxChannel(TxChan);
 
 #ifdef WITH_SX1262
-  TRX.OGN_WritePacket(PacketByte);
+  TRX.FSK_WritePacket(PacketByte, OGN_TxPacket<OGN_Packet>::Bytes);
   uint16_t PreFlags=TRX.ReadIrqFlags();
   TRX.ClearIrqFlags();
   TRX.WaitWhileBusy_ms(10);
@@ -376,11 +376,11 @@ static uint8_t StartRFchip(void)
     { Format_Hex(CONS_UART_Write, SYNC[Idx]); }             // SYNC after chip reset can serve as a detection method for sx1262
     Format_String(CONS_UART_Write, "\n");                   // it should be: 0x9723522556536564
     xSemaphoreGive(CONS_Mutex); }
-#endif
+#endif // DEBUG_PRINT
   TRX.StopOnPreamble(0);
 #else // WITH_SX1262                                        // not WITH_SX1262
   vTaskDelay(5);                                            // wait 10ms
-#endif
+#endif // WITH_SX1262
   SetFreqPlanOGN();                                         // set TRX base frequency and channel separation after the frequency hopping plan
 #ifdef DEBUG_PRINT
   xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
@@ -406,7 +406,7 @@ static uint8_t StartRFchip(void)
 #endif
   TRX.CalibrateImage();
   TRX.WaitWhileBusy_ms(20);
-  if(TRX.readBusy()) Format_String(CONS_UART_Write, "StartRFchip() sx1262 BUSY after OGN_Configure() and Calibrate()\n");
+  if(TRX.readBusy()) Format_String(CONS_UART_Write, "StartRFchip() sx1262 BUSY after FSK_Configure() and Calibrate()\n");
 #endif
   TRX.setModeStandby();                                        // set RF chip mode to STANDBY
   uint8_t Version = TRX.ReadVersion();

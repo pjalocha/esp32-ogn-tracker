@@ -767,7 +767,7 @@ class RFM_TRX
      Cmd_Write(CMD_SETPACKETPARAMS, Param, 9);     // 0x8C, PacketParam
      Regs_Write(REG_SYNCWORD0, SyncData+(8-WriteSize), WriteSize); } // Write the SYNC word
 
-   void OGN_Configure(int16_t Channel, const uint8_t *SyncData)
+   void FSK_Configure(int16_t Channel, const uint8_t *SyncData, uint8_t PktSize)
    { setChannel(Channel);
      uint8_t Param[12];
      Pack3bytes(Param, 10240);                     // data bitrate = 32*Xtal/100e3 for OGN 100kbps
@@ -781,7 +781,7 @@ class RFM_TRX
      Param[3] = 8*8;                               // [bits] SYNC word length, write word at 0x06C0
      Param[4] = 0x00;                              // address filtering: OFF
      Param[5] = 0x00;                              // fixed packet size
-     Param[6] = 2*26;                              // 26 bytes, software Manchester
+     Param[6] = PktSize*2;                         // 26 bytes, software Manchester
      Param[7] = 0x01;                              // no CRC
      Param[8] = 0x00;                              // no whitening
      Cmd_Write(CMD_SETPACKETPARAMS, Param, 9);     // 0x8C, PacketParam
@@ -887,7 +887,7 @@ class RFM_TRX
 
    void WriteTxPowerMin(void) { WriteTxPower_W(-18); } // set minimal Tx power and setup for reception
 
-   void OGN_Configure(int16_t Channel, const uint8_t *Sync)
+   void FSK_Configure(int16_t Channel, const uint8_t *Sync)
    { WriteMode(RF_OPMODE_STANDBY);          // mode = STDBY
      ClearIrqFlags();
      WriteByte(  0x02, REG_DATAMODUL);      // [0x00] Packet mode, FSK, 0x02: BT=0.5, 0x01: BT=1.0, 0x03: BT=0.3
@@ -1086,7 +1086,7 @@ class RFM_TRX
 
      return 0; }
 
-   // void OGN_Configure(int16_t Channel, const uint8_t *Sync)
+   // void FSK_Configure(int16_t Channel, const uint8_t *Sync)
    // { FSK_Configure(Channel, Sync, 2*26); }
 
    // void ADSL_Configure(int16_t Channel, const uint8_t *Sync)
