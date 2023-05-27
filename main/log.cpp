@@ -197,6 +197,7 @@ int FlashLog_ListFile(const char *FileName, uint32_t FileTime)    // print the c
     uint32_t Time = Packet.getTime(FileTime);                    // [sec] get exact time from short time in the packet and the file start time
     uint8_t Len=Packet.Packet.WriteAPRS(Line, Time);             // print the packet in the APRS format
     if(Len==0) continue;                                         // if cannot be printed for whatever reason
+    Line[Len++]='\n'; Line[Len]=0;
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
     Format_String(CONS_UART_Write, Line, 0, Len);                // send the APRS to the console
     xSemaphoreGive(CONS_Mutex);
