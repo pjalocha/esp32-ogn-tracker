@@ -4,10 +4,10 @@
 #include <stdint.h>
 
 uint8_t NMEA_Check(uint8_t *NMEA, uint8_t Len);
-uint8_t NMEA_AppendCheck(uint8_t *NMEA, uint8_t Len);
-inline uint8_t NMEA_AppendCheck(char *NMEA, uint8_t Len) { return NMEA_AppendCheck((uint8_t*)NMEA, Len); }
-uint8_t NMEA_AppendCheckCRNL(uint8_t *NMEA, uint8_t Len);
-inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_AppendCheckCRNL((uint8_t*)NMEA, Len); }
+       uint8_t NMEA_AppendCheck(uint8_t *NMEA, uint8_t Len);
+inline uint8_t NMEA_AppendCheck(char    *NMEA, uint8_t Len) { return NMEA_AppendCheck((uint8_t *)NMEA, Len); }
+       uint8_t NMEA_AppendCheckCRNL(uint8_t *NMEA, uint8_t Len);
+inline uint8_t NMEA_AppendCheckCRNL(char    *NMEA, uint8_t Len) { return NMEA_AppendCheckCRNL((uint8_t *)NMEA, Len); }
 
  class NMEA_RxMsg                    // receiver for the NMEA sentences
 { public:
@@ -255,6 +255,16 @@ inline uint8_t NMEA_AppendCheckCRNL(char *NMEA, uint8_t Len) { return NMEA_Appen
    uint8_t isPOGNL(void)                         // log file list request
      { if(!isPOGN()) return 0;
        return Data[5]=='L'; }
+
+   uint8_t isPFLA(void) const                    // FLARM dedicated NMEA sentence
+     { if(Data[1]!='P') return 0;
+       if(Data[2]!='F') return 0;
+       if(Data[3]!='L') return 0;
+       return Data[4]=='A'; }
+
+   uint8_t isPFLAC(void)                         // FLARM configuration NMEA
+     { if(!isPFLA()) return 0;
+       return Data[5]=='C'; }
 
 } ;
 

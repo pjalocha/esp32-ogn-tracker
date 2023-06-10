@@ -720,13 +720,13 @@ static void GPS_NMEA(void)                                                 // wh
   { if(Parameters.Verbose)
     { xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_String(CONS_UART_Write, (const char *)NMEA.Data, 0, NMEA.Len);
-      Format_String(CONS_UART_Write, "\n");
+      CONS_UART_Write('\r'); CONS_UART_Write('\n');
       xSemaphoreGive(CONS_Mutex); }
 #ifdef WITH_SDLOG
     if(Log_Free()>=128)
     { xSemaphoreTake(Log_Mutex, portMAX_DELAY);
       Format_String(Log_Write, (const char *)NMEA.Data, 0, NMEA.Len);
-      Log_Write('\n');
+      Log_Write('\r'); Log_Write('\n');
       xSemaphoreGive(Log_Mutex); }
 #endif
   }

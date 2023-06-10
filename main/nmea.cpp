@@ -14,6 +14,6 @@ uint8_t NMEA_AppendCheck(uint8_t *NMEA, uint8_t Len)
   return 3; }                                                               // return number of characters added
 
 uint8_t NMEA_AppendCheckCRNL(uint8_t *NMEA, uint8_t Len)
-{ uint8_t CheckLen=NMEA_AppendCheck(NMEA, Len);                             // add *XY
+{ uint8_t CheckLen=NMEA_AppendCheck(NMEA, Len);                             // add *XY, return number of added characters (=3)
   Len+=CheckLen; NMEA[Len++]='\r'; NMEA[Len++]='\n'; NMEA[Len]=0;           // add CR, LF, NL
-  return CheckLen+2; }
+  return CheckLen+2; }                                                      // return number of added characters (3+2=5)

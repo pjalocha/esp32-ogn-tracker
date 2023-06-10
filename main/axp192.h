@@ -11,7 +11,7 @@ class AXP192
    static const uint8_t REG_STATUS          = 0x00; // bit #2 = charge/discharge, bit #0 = power-on triggered by Vbus/ACin
    static const uint8_t REG_MODE_CHGSTATUS  = 0x01; // charge mode and status
    static const uint8_t REG_ID              = 0x03;
-   static const uint8_t REG_DATA_SAVE       = 0x06; // 4 bytes which can be saved as long as the battery ot backup is applied
+   static const uint8_t REG_DATA_SAVE       = 0x06; // 4 bytes which can be saved as long as the battery or backup is applied
    static const uint8_t REG_EXTEN_DC2_CTL   = 0x10; // [bit mask] control outputs ON/OFF
    static const uint8_t REG_LDO23_DC13_CTL  = 0x12; // [bit mask] control outputs ON/OFF
    static const uint8_t REG_DC2_VOLTAGE     = 0x23;
@@ -94,12 +94,17 @@ class AXP192
      if( (!Error) && (ID==AXP192_ID) ) { ADDR=AXP192_ADDR; return 0; } // 0 => no error and correct ID
      return 1; }                             // 1 => error or incorrect chip ID
 
-   uint8_t readStatus(void)
+   uint8_t readStatus(void)                  // read power supply status: bit #0 = boot triggered by power input
    { uint8_t Byte=0; Error=I2C_Read(Bus, ADDR, REG_STATUS, Byte); return Byte; }
 
+   uint8_t readSave(uint8_t Idx=0)           // read one of the 4 general purpose storage bytes
+   { uint8_t Byte=0; Error=I2C_Read(Bus, ADDR, REG_DATA_SAVE+Idx, Byte); return Byte; }
+
+   uint8_t writeSave(uint8_t Byte, uint8_t Idx=0) // write the general-purpose storage byte
+   { Error=I2C_Write(Bus, ADDR, REG_DATA_SAVE+Idx, Byte); return Error; }
+
    uint8_t setPOK(uint8_t Byte=0xDC)
-   { Error=I2C_Write(Bus, ADDR, REG_POK_SET, Byte);
-     return Error; }
+   { Error=I2C_Write(Bus, ADDR, REG_POK_SET, Byte); return Error; }
 
    uint8_t setPowerOutput(uint8_t Channel, bool ON=1)    // Channel: 3=LDO3, 2=LDO2, 1=DC-DC3, 0=DC-DC1
    { uint8_t Byte;
@@ -110,7 +115,7 @@ class AXP192
      Error=I2C_Write(Bus, ADDR, REG_LDO23_DC13_CTL, Byte);
      return Error; }
 
-   uint8_t setDCDC1(uint16_t mV) // [mV] set voltage on DCDC1 output
+   uint8_t setDCDC1(uint16_t mV)                         // [mV] set voltage on DCDC1 output
    { if(mV>3500) mV=3500;
      else if(mV<700) mV=700;
      uint8_t Byte = (mV-700+12)/25;

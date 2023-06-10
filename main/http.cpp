@@ -1193,6 +1193,7 @@ static esp_err_t SendLog_IGC(httpd_req_t *Req, const char *FileName, uint32_t Fi
     Len+=Format_String(Line+Len, "LGNE ");                       // attach APRS as LGNE record
     char *APRS=Line+Len;
     Len+=Packet.Packet.WriteAPRS(Line+Len, Time);                // packet in the APRS format
+    Line[Len++]='\n'; Line[Len]=0;
     bool Own = Packet.Packet.Header.Address==Parameters.Address && Packet.Packet.Header.AddrType==Parameters.AddrType; // 
     if(Own && !Packet.Packet.Header.NonPos && !Packet.Packet.Header.Encrypted)
       Len+=APRS2IGC(Line+Len, APRS, GPS_GeoidSepar);             // IGC B-record
@@ -1231,6 +1232,7 @@ static esp_err_t SendLog_APRS(httpd_req_t *Req, const char *FileName, uint32_t F
     if(!Packet.isCorrect()) continue;
     uint32_t Time = Packet.getTime(FileTime);                    // [sec] get exact time from short time in the packet and the file start time
     Len+=Packet.Packet.WriteAPRS(Line+Len, Time);                // print the packet in the APRS format
+    Line[Len++]='\n'; Line[Len]=0;
     if(Len>850) { httpd_resp_send_chunk(Req, Line, Len); Len=0; }
     vTaskDelay(1); }
   fclose(File);

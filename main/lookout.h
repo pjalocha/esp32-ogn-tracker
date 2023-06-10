@@ -263,9 +263,9 @@ template <const uint8_t MaxTgts=32>
      NMEA[Len++]=',';
      if(Tgt)                                               // [m] relative horizontal distance
      { Len+=Format_UnsDec(NMEA+Len, (uint32_t)Tgt->HorDist>>1, 1); }
-     NMEA[Len++]=',';
      if(Tgt)                                               // ID
-     { uint32_t Addr=Tgt->ID;
+     { NMEA[Len++]=',';                                    //
+       uint32_t Addr=Tgt->ID;
        Len+=Format_Hex(NMEA+Len, (uint8_t)(Addr>>16));     // 24-bit address: RND, ICAO, FLARM, OGN
        Len+=Format_Hex(NMEA+Len, (uint16_t)Addr); }
 // #ifdef WITH_SKYDEMON

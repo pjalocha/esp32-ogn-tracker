@@ -614,6 +614,7 @@ void vTaskPROC(void* pvParameters)
       PosPacket.Packet.Position.Stealth = Parameters.Stealth;
 #ifdef DEBUG_PRINT
       { uint8_t Len=PosPacket.Packet.WriteAPRS(Line, PosTime);         // print on the console as APRS message
+        Line[Len++]='\n'; Line[Len]=0;
         xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
         Format_String(CONS_UART_Write, Line, 0, Len);
         xSemaphoreGive(CONS_Mutex); }
@@ -657,7 +658,8 @@ void vTaskPROC(void* pvParameters)
         ADSL_TxFIFO.Write();
 #endif
         TxBackOff = 0;
-        if(AverSpeed<10 && Parameters.AcftType!=3 && Parameters.AcftType!=0xD) TxBackOff += 3+(RX_Random&0x1);
+        bool FloatAcft = Parameters.AcftType==3 || ( Parameters.AcftType>=0xB && Parameters.AcftType<=0xD);
+        if(AverSpeed<10 && !FloatAcft) TxBackOff += 3+(RX_Random&0x1);
         if(TX_Credit<=0) TxBackOff+=1; }
       Position->Sent=1;
 #ifdef WITH_FANET

@@ -211,7 +211,7 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      // Out[Len++]=HexDigit(Position.AcftType); Out[Len++]=':';
      // Len+=Format_SignDec(Out+Len, -(int16_t)RxRSSI/2); Out[Len++]='d'; Out[Len++]='B'; Out[Len++]='m';
      // Out[Len++]=' ';
-     Len+=Format_UnsDec(Out+Len, (uint16_t)Position.Time, 2);
+     Len+=Format_UnsDec(Out+Len, (uint32_t)Position.Time, 2);
      Len+=Format_String(Out+Len, "s [");
      Len+=Format_SignDec(Out+Len, DecodeLatitude()/6, 7, 5);
      Out[Len++]=',';
@@ -223,9 +223,9 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      // Out[Len++]=' ';
      Len+=Format_UnsDec(Out+Len, (uint32_t)DecodeAltitude()); Out[Len++]='m';
      Out[Len++]=' ';
-     Len+=Format_UnsDec(Out+Len, DecodeSpeed(), 2, 1); Out[Len++]='m'; Out[Len++]='/'; Out[Len++]='s';
+     Len+=Format_UnsDec(Out+Len, (uint32_t)DecodeSpeed(), 2, 1); Out[Len++]='m'; Out[Len++]='/'; Out[Len++]='s';
      Out[Len++]=' ';
-     Len+=Format_SignDec(Out+Len, DecodeClimbRate(), 2, 1); Out[Len++]='m'; Out[Len++]='/'; Out[Len++]='s';
+     Len+=Format_SignDec(Out+Len, (int32_t)DecodeClimbRate(), 2, 1); Out[Len++]='m'; Out[Len++]='/'; Out[Len++]='s';
      Out[Len]=0;
      return Len; }
 
@@ -233,20 +233,20 @@ class OGN1_Packet          // Packet structure for the OGN tracker
    { int Len=0;
      Out[Len++]=' '; Out[Len++]='h'; Len+=Format_Hex(Out+Len, (uint8_t)Status.Hardware);
      Out[Len++]=' '; Out[Len++]='v'; Len+=Format_Hex(Out+Len, (uint8_t)Status.Firmware);
-     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, Status.Satellites); Out[Len++]='s'; Out[Len++]='a'; Out[Len++]='t';
+     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, (uint32_t)Status.Satellites); Out[Len++]='s'; Out[Len++]='a'; Out[Len++]='t';
      Out[Len++]='/'; Out[Len++]='0'+Status.FixQuality;
-     Out[Len++]='/'; Len+=Format_UnsDec(Out+Len, Status.SatSNR+8); Out[Len++]='d'; Out[Len++]='B';
-     Out[Len++]=' '; Len+=Format_SignDec(Out+Len, DecodeAltitude(), 1, 0, 1); Out[Len++]='m';
+     Out[Len++]='/'; Len+=Format_UnsDec(Out+Len, (uint32_t)Status.SatSNR+8); Out[Len++]='d'; Out[Len++]='B';
+     Out[Len++]=' '; Len+=Format_SignDec(Out+Len, (int32_t)DecodeAltitude(), 1, 0, 1); Out[Len++]='m';
      if(Status.Pressure>0)
      { Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, (((uint32_t)Status.Pressure<<3)+5)/10, 2, 1); Out[Len++]='h'; Out[Len++]='P'; Out[Len++]='a'; }
      if(hasTemperature())
-     { Out[Len++]=' '; Len+=Format_SignDec(Out+Len, DecodeTemperature(), 2, 1); Out[Len++]='d'; Out[Len++]='e'; Out[Len++]='g'; Out[Len++]='C'; }
+     { Out[Len++]=' '; Len+=Format_SignDec(Out+Len, (int32_t)DecodeTemperature(), 2, 1); Out[Len++]='d'; Out[Len++]='e'; Out[Len++]='g'; Out[Len++]='C'; }
      if(hasHumidity())
-     { Out[Len++]=' '; Len+=Format_SignDec(Out+Len, DecodeHumidity(), 2, 1); Out[Len++]='%'; }
-     Out[Len++]=' '; Len+=Format_SignDec(Out+Len, ((uint32_t)DecodeVoltage()*100+32)>>6, 3, 2); Out[Len++]='V';
-     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, Status.TxPower+4);
-     Out[Len++]='/'; Out[Len++]='-'; Len+=Format_UnsDec(Out+Len, 5*Status.RadioNoise, 2, 1); Out[Len++]='d'; Out[Len++]='B'; Out[Len++]='m';
-     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, (1<<Status.RxRate)-1); Out[Len++]='/'; Out[Len++]='m'; Out[Len++]='i'; Out[Len++]='n';
+     { Out[Len++]=' '; Len+=Format_SignDec(Out+Len, (int32_t)DecodeHumidity(), 2, 1); Out[Len++]='%'; }
+     Out[Len++]=' '; Len+=Format_SignDec(Out+Len, ((int32_t)DecodeVoltage()*100+32)>>6, 3, 2); Out[Len++]='V';
+     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, (uint32_t)Status.TxPower+4);
+     Out[Len++]='/'; Out[Len++]='-'; Len+=Format_UnsDec(Out+Len, (uint32_t)Status.RadioNoise*5, 2, 1); Out[Len++]='d'; Out[Len++]='B'; Out[Len++]='m';
+     Out[Len++]=' '; Len+=Format_UnsDec(Out+Len, ((uint32_t)1<<Status.RxRate)-1); Out[Len++]='/'; Out[Len++]='m'; Out[Len++]='i'; Out[Len++]='n';
      Out[Len]=0; return Len; }
 /*
    int WriteDeviceStatus(char *Out) const
@@ -360,6 +360,10 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      Len+=Format_Hex(JSON+Len, (uint16_t)(Header.Address));
      JSON[Len++]='\"';
      JSON[Len++]=',';
+     if(Header.Relay)
+     { Len+=Format_String(JSON+Len, "\"relay\":");
+       JSON[Len++]='0'+Header.Relay;
+       JSON[Len++]=','; }
      Len+=Format_String(JSON+Len, "\"addr_type\":");
      JSON[Len++] = HexDigit(Header.AddrType);
      if(!Header.Encrypted && !Header.NonPos)                       // if non-encrypted position
@@ -385,21 +389,44 @@ class OGN1_Packet          // Packet structure for the OGN tracker
          Len+=Format_String(JSON+Len, ",\"alt_std_m\":");
          Len+=Format_SignDec(JSON+Len, Altitude, 1, 0, 1); }
        Len+=Format_String(JSON+Len, ",\"track_deg\":");
-       Len+=Format_UnsDec(JSON+Len, DecodeHeading(), 2, 1);
+       Len+=Format_UnsDec(JSON+Len, (uint32_t)DecodeHeading(), 2, 1);
        Len+=Format_String(JSON+Len, ",\"speed_mps\":");
-       Len+=Format_UnsDec(JSON+Len, DecodeSpeed(), 2, 1);
+       Len+=Format_UnsDec(JSON+Len, (uint32_t)DecodeSpeed(), 2, 1);
        if(hasClimbRate())
        { Len+=Format_String(JSON+Len, ",\"climb_mps\":");
-         Len+=Format_SignDec(JSON+Len, DecodeClimbRate(), 2, 1, 1); }
+         Len+=Format_SignDec(JSON+Len, (int32_t)DecodeClimbRate(), 2, 1, 1); }
        if(hasTurnRate())
        { Len+=Format_String(JSON+Len, ",\"turn_dps\":");
-         Len+=Format_SignDec(JSON+Len, DecodeTurnRate(), 2, 1, 1); }
+         Len+=Format_SignDec(JSON+Len, (int32_t)DecodeTurnRate(), 2, 1, 1); }
        Len+=Format_String(JSON+Len, ",\"DOP\":");
-       Len+=Format_UnsDec(JSON+Len, 10+DecodeDOP(), 2, 1); }
+       Len+=Format_UnsDec(JSON+Len, (uint32_t)DecodeDOP()+10, 2, 1); }
      else if(!Header.Encrypted && Header.NonPos)                         // non-encrypted status and info
      { if(isStatus())                                                    // status
-       { }
-       else if(isInfo())                                                 // info
+       { Len+=Format_String(JSON+Len, ",\"battery_V\":");
+         Len+=Format_UnsDec(JSON+Len, ((uint32_t)DecodeVoltage()*100+32)>>6, 3, 2);
+         if(hasTemperature())
+         { Len+=Format_String(JSON+Len, ",\"temperature_deg\":");
+           Len+=Format_SignDec(JSON+Len, (int32_t)DecodeTemperature(), 2, 1, 1); }
+         if(Status.Pressure>0)
+         { Len+=Format_String(JSON+Len, ",\"pressure_hPa\":");
+           Len+=Format_UnsDec(JSON+Len, ((uint32_t)Status.Pressure<<3), 3, 2); }
+         if(Status.FixQuality)
+         { int32_t Altitude=DecodeAltitude();
+           Len+=Format_String(JSON+Len, ",\"alt_msl_m\":");
+           Len+=Format_UnsDec(JSON+Len, (uint32_t)Altitude); }
+         Len+=Format_String(JSON+Len, ",\"GPS_fix\":");
+                            JSON[Len++] = '0'+Status.FixQuality;
+         Len+=Format_String(JSON+Len, ",\"GPS_sats\":");
+         Len+=Format_UnsDec(JSON+Len, (uint32_t)Status.Satellites);
+         Len+=Format_String(JSON+Len, ",\"GPS_SNR_dB\":");
+         Len+=Format_UnsDec(JSON+Len, (uint32_t)Status.SatSNR+8);
+         Len+=Format_String(JSON+Len, ",\"Tx_power_dBm\":");
+         Len+=Format_UnsDec(JSON+Len, (uint32_t)Status.TxPower+4);
+         Len+=Format_String(JSON+Len, ",\"Rx_rate_min\":");
+         Len+=Format_UnsDec(JSON+Len, ((uint32_t)1<<Status.RxRate)-1);
+         Len+=Format_String(JSON+Len, ",\"Rx_noise_dBm\":-");
+         Len+=Format_UnsDec(JSON+Len, (uint32_t)Status.RadioNoise*5, 2, 1); }
+       else if(isInfo() && goodInfoCheck())                              // info
        { char Value[16];
          uint8_t InfoType;
          uint8_t Idx=0;
@@ -663,10 +690,10 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      Msg[Len++] = NegLon ? 'W':'E';
      Msg[Len++] = Icon[1];
 
-     Len+=Format_UnsDec(Msg+Len, (DecodeHeading()+5)/10, 3);
+     Len+=Format_UnsDec(Msg+Len, ((uint32_t)DecodeHeading()+5)/10, 3);
      Msg[Len++] = '/';
      Len+=Format_UnsDec(Msg+Len, ((uint32_t)DecodeSpeed()*199+512)>>10, 3);
-     Msg[Len++] = '/'; Msg[Len++] = 'A'; Msg[Len++] = '='; Len+=Format_UnsDec(Msg+Len, MetersToFeet(DecodeAltitude()), 6);
+     Msg[Len++] = '/'; Msg[Len++] = 'A'; Msg[Len++] = '='; Len+=Format_UnsDec(Msg+Len, (uint32_t)MetersToFeet(DecodeAltitude()), 6);
 
      Msg[Len++] = ' ';
      Msg[Len++] = '!';
@@ -681,19 +708,19 @@ class OGN1_Packet          // Packet structure for the OGN tracker
      { Msg[Len++] = ' '; Len+=Format_SignDec(Msg+Len, ((int32_t)DecodeClimbRate()*10079+256)>>9, 3); Msg[Len++] = 'f'; Msg[Len++] = 'p'; Msg[Len++] = 'm'; }
 
      if(hasTurnRate())
-     { Msg[Len++] = ' '; Len+=Format_SignDec(Msg+Len, DecodeTurnRate()/3, 2, 1); Msg[Len++] = 'r'; Msg[Len++] = 'o'; Msg[Len++] = 't'; }
+     { Msg[Len++] = ' '; Len+=Format_SignDec(Msg+Len, (int32_t)DecodeTurnRate()/3, 2, 1); Msg[Len++] = 'r'; Msg[Len++] = 'o'; Msg[Len++] = 't'; }
 
      if(hasBaro())
      { int32_t Alt = DecodeStdAltitude();
        if(Alt<0) Alt=0;
        Msg[Len++] = ' '; Msg[Len++] = 'F'; Msg[Len++] = 'L';
-       Len+=Format_UnsDec(Msg+Len, MetersToFeet((uint32_t)Alt), 5, 2); }
+       Len+=Format_UnsDec(Msg+Len, (uint32_t)MetersToFeet((uint32_t)Alt), 5, 2); }
 
      uint16_t DOP=10+DecodeDOP();
      uint16_t HorPrec=(DOP*2+5)/10; if(HorPrec>63) HorPrec=63;
      uint16_t VerPrec=(DOP*3+5)/10; if(VerPrec>63) VerPrec=63;
      Msg[Len++] = ' ';  Msg[Len++] = 'g'; Msg[Len++] = 'p'; Msg[Len++] = 's';
-     Len+=Format_UnsDec(Msg+Len, HorPrec); Msg[Len++] = 'x'; Len+=Format_UnsDec(Msg+Len, VerPrec);
+     Len+=Format_UnsDec(Msg+Len, (uint32_t)HorPrec); Msg[Len++] = 'x'; Len+=Format_UnsDec(Msg+Len, (uint32_t)VerPrec);
 
      // Msg[Len++]='\n';
      Msg[Len]=0;
@@ -703,9 +730,11 @@ class OGN1_Packet          // Packet structure for the OGN tracker
 
    // calculate distance vector [LatDist, LonDist] from a given reference [RefLat, Reflon]
    int calcDistanceVector(int32_t &LatDist, int32_t &LonDist, int32_t RefLat, int32_t RefLon, uint16_t LatCos=3000, int32_t MaxDist=0x7FFF)
-   { LatDist = ((DecodeLatitude()-RefLat)*1517+0x1000)>>13;           // convert from 1/600000deg to meters (40000000m = 360deg) => x 5/27 = 1517/(1<<13)
+   { LatDist = DecodeLatitude()-RefLat; if(abs(LatDist)>1080000) return -1; // to prevent overflow, corresponds to about 200km
+     LatDist = (LatDist*1517+0x1000)>>13;              // convert from 1/600000deg to meters (40000000m = 360deg) => x 5/27 = 1517/(1<<13)
      if(abs(LatDist)>MaxDist) return -1;
-     LonDist = ((DecodeLongitude()-RefLon)*1517+0x1000)>>13;
+     LonDist = DecodeLongitude()-RefLon; if(abs(LatDist)>1080000) return -1;
+     LonDist = (LonDist*1517+0x1000)>>13;
      if(abs(LonDist)>(4*MaxDist)) return -1;
              LonDist = (LonDist*LatCos+0x800)>>12;
      if(abs(LonDist)>MaxDist) return -1;

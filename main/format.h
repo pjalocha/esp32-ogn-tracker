@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define WITH_AUTOCR
+// #define WITH_AUTOCR
 
 char HexDigit(uint8_t Val);
 
