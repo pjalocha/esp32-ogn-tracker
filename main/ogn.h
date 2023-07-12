@@ -683,13 +683,24 @@ class GPS_Time
    void setDefaultDate() { Year=00; Month=1; Day=1; } // default Date is 01-JAN-2000
    void setDefaultTime() { Hour=0;  Min=0;   Sec=0; mSec=0; } // default Time is 00:00:00.00
 
-   uint8_t FormatDate(char *Out, char Sep='.') const
+   uint8_t FormatDate_DDMMYY(char *Out, char Sep='.') const
    { uint8_t Len=0;
      Len+=Format_UnsDec(Out+Len, (uint32_t)Day, 2);
      Out[Len++]=Sep;
      Len+=Format_UnsDec(Out+Len, (uint32_t)Month, 2);
      Out[Len++]=Sep;
      Len+=Format_UnsDec(Out+Len, (uint32_t)Year, 2);
+     Out[Len]=0; return Len; }
+
+   uint8_t FormatDate_YYYYMMDD(char *Out, char Sep='.') const
+   { uint8_t Len=0;
+     Out[Len++]='2';
+     Out[Len++]='0';
+     Len+=Format_UnsDec(Out+Len, Year, 2);
+     Out[Len++]=Sep;
+     Len+=Format_UnsDec(Out+Len, Month, 2);
+     Out[Len++]=Sep;
+     Len+=Format_UnsDec(Out+Len, Day, 2);
      Out[Len]=0; return Len; }
 
    uint8_t FormatTime(char *Out, char Sep=':') const
@@ -815,6 +826,9 @@ class GPS_Time
     setUnixTime(Time);
     mSec = Time_ms-(uint64_t)Time*1000; }
 
+  void setUnixTime(double Time)
+  { setUnixTime_ms((uint64_t)floor(Time*1e3)); }
+
   uint64_t getUnixTime_ms(void) const
   { return (uint64_t)getUnixTime()*1000 + mSec; }
 
@@ -920,8 +934,11 @@ class GPS_Position: public GPS_Time
     } ;
   } ;
 
-   // uint16_t SatSNRsum;          // sum of cSNR from GPGSV
-   // uint8_t SatSNRcount;         // count of satellites from GPGSV
+   uint16_t SatSNRsum;          // [dB] temporary sum of cSNR from GPGSV
+   uint8_t SatSNRcount;         // temporary count of satellites from GPGSV
+   uint8_t SatSNRgsv;           // temporary number of GSV
+   uint8_t SatSNR;              // [0.25dB] average satellites SNR
+   uint8_t SatSNRnum;           // [sats] number of satellites
 
    int8_t FixQuality;           // 0 = none, 1 = GPS, 2 = Differential GPS (can be WAAS)
    int8_t FixMode;              // 0 = not set (from GSA) 1 = none, 2 = 2-D, 3 = 3-D
@@ -966,7 +983,7 @@ class GPS_Position: public GPS_Time
    void Clear(void)
    { Flags=0; FixQuality=0; FixMode=0;
      PDOP=0; HDOP=0; VDOP=0;
-     // SatSNRsum=0; SatSNRcount=0;
+     SatSNRsum=0; SatSNRcount=0; SatSNR=0; SatSNRnum=0; SatSNRgsv=0;
      setDefaultDate(); setDefaultTime();
      Latitude=0; Longitude=0; LatitudeCosine=3000;
      Altitude=0; GeoidSeparation=0;
@@ -1122,10 +1139,10 @@ class GPS_Position: public GPS_Time
 
    int8_t ReadNMEA(const char *NMEA)
    { int Err=0;
-     Err=ReadGGA(NMEA); if(Err!=(-1)) return Err;
+     Err=ReadGSV(NMEA); if(Err!=(-1)) return Err;
+     Err=ReadGGA(NMEA); if(Err!=(-1)) { calcSatSNR(); return Err; }
      Err=ReadGSA(NMEA); if(Err!=(-1)) return Err;
-     Err=ReadRMC(NMEA); if(Err!=(-1)) return Err;
-     // Err=ReadGSV(NMEA); if(Err!=(-1)) return Err;
+     Err=ReadRMC(NMEA); if(Err!=(-1)) { calcSatSNR(); return Err; }
      return 0; }
 
    int8_t ReadPGRMZ(NMEA_RxMsg &RxMsg)
@@ -1285,17 +1302,33 @@ class GPS_Position: public GPS_Time
      ReadHDOP(GSA+Index[15]);
      ReadVDOP(GSA+Index[16]);
      NMEAframes++; return 1; }
-/*
+
    int8_t ReadGSV(NMEA_RxMsg &RxMsg)
    { //
      return 1; }
 
    int8_t ReadGSV(const char *GSV)
-   { if( (memcmp(GSV, "$GPGSV", 6)!=0) && (memcmp(GSV, "$GNGSV", 6)!=0) ) return -1;      // check if the right sequence
-     uint8_t Index[24]; if(IndexNMEA(Index, GSV)<20) return -2;                           // index parameters and check the sum
-     //
-     return 1; }
-*/
+   { if(GSV[0]!='$') return -1;
+     if(memcmp(GSV+3, "GSV", 3)!=0) return -1;
+     if(GSV[1]!='G' && GSV[1]!='B') return -1;
+     uint8_t Index[24]; int8_t Parms=IndexNMEA(Index, GSV);
+     if(Parms<3) return -2;                                                               // index parameters and check the sum
+     for( int Parm=3; Parm<Parms; )                                                 // up to 4 sats per packet
+     {  int8_t PRN =Read_Dec2(GSV+Index[Parm++]); if(PRN<=0) break;      // PRN number
+        int8_t Elev=Read_Dec2(GSV+Index[Parm++]); if(Elev<0) break;      // [deg] elevation
+       int16_t Azim=Read_Dec3(GSV+Index[Parm++]); if(Azim<0) break;      // [deg] azimuth
+        int8_t SNR =Read_Dec2(GSV+Index[Parm++]); if(SNR<=0) continue;   // [dB] SNR or absent when not tracked
+       SatSNRsum+=SNR; SatSNRcount++; }
+     SatSNRgsv++; return 1; }
+
+   void calcSatSNR(void)
+   { if(SatSNRgsv==0) return;
+     if(SatSNRcount) SatSNR=(SatSNRsum*4+SatSNRcount/2)/SatSNRcount;
+                else SatSNR=0;
+     SatSNRnum=SatSNRcount;
+     SatSNRcount=0; SatSNRsum=0;
+     SatSNRgsv=0; }
+
    int ReadRMC(NMEA_RxMsg &RxMsg)
    { if(RxMsg.Parms<11) return -2;                                                        // no less than 12 parameters
      hasGPS = ReadTime((const char *)RxMsg.ParmPtr(0))>0;                                 // read time and check if same as the GGA says

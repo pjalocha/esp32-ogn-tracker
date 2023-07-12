@@ -476,7 +476,8 @@ void vTaskCTRL(void* pvParameters)
       xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
       Format_String(CONS_UART_Write, "Power-Off Request\n");
       xSemaphoreGive(CONS_Mutex);
-      // vTaskDelay(1000);
+      Parameters.PowerON=0;
+      Parameters.WriteToNVS();
       AXP.setLED(4);
 #ifdef WITH_OLED
       OLED_DisplayON(0);

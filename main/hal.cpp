@@ -1678,7 +1678,12 @@ void IO_Configuration(void)
 #endif
   AXP.checkID();
   AXP.setPOK(0xDC);                      // power-on = 11 = 1sec, long-press = 01 = 1.5sec, power-off = enable, PWROK delay = 64ms, power-off = 00 = 4sec
-  uint8_t PwrStatus = AXP.readStatus();
+  // uint8_t PwrStatus = AXP.readStatus();  // bit #0 = 1:by ext. power, 0:by power-on-button
+  // bool ExtPwrON = PwrStatus&1;
+  // if(!ExtPwrON) Parameters.PowerON=1;
+  // xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+  // Format_String(CONS_UART_Write, ExtPwrON ? "Power-ON by ext. power\n":"Power-ON by Power-ON button\n");
+  // xSemaphoreGive(CONS_Mutex);
   AXP.setLED_ON();
   AXP.setPowerOutput(AXP.OUT_DCDC1, 1);  // 3.3V on the pin header for LCD and BME280
   AXP.setDCDC1(3300);

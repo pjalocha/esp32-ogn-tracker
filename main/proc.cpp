@@ -410,7 +410,7 @@ static void ProcessRxPacket(OGN_RxPacket<OGN_Packet> *RxPacket, uint8_t RxPacket
      if(Signif || Warn) IGClog_FIFO.Write(*RxPacket);
 #endif
 #ifdef WITH_PFLAA
-    if( Parameters.Verbose                                                           // print PFLAA on the console for received packets
+    if( Parameters.Verbose    // print PFLAA on the console for received packets
 #ifdef WITH_LOOKOUT
     && (!Tgt)
 #endif
@@ -646,16 +646,17 @@ void vTaskPROC(void* pvParameters)
       else
       { RF_TxFIFO.Write();                                                // complete the write into the TxFIFO
 #ifdef WITH_ADSL
-        ADSL_Packet *Packet = ADSL_TxFIFO.getWrite();
-        Packet->Init();
-        Packet->setAddress (Parameters.Address);
-        Packet->setAddrTypeOGN(Parameters.AddrType);
-        Packet->setRelay(0);
-        Packet->setAcftTypeOGN(Parameters.AcftType);
-        Position->Encode(*Packet);
-        Packet->Scramble();                              // this call hangs when -Os is used to compile
-        Packet->setCRC();
-        ADSL_TxFIFO.Write();
+        if(RF_FreqPlan.Plan<=1)                                              // ADS-L only in Europe/Africa
+        { ADSL_Packet *Packet = ADSL_TxFIFO.getWrite();
+          Packet->Init();
+          Packet->setAddress (Parameters.Address);
+          Packet->setAddrTypeOGN(Parameters.AddrType);
+          Packet->setRelay(0);
+          Packet->setAcftTypeOGN(Parameters.AcftType);
+          Position->Encode(*Packet);
+          Packet->Scramble();
+          Packet->setCRC();
+          ADSL_TxFIFO.Write(); }
 #endif
         TxBackOff = 0;
         bool FloatAcft = Parameters.AcftType==3 || ( Parameters.AcftType>=0xB && Parameters.AcftType<=0xD);
@@ -666,7 +667,7 @@ void vTaskPROC(void* pvParameters)
       static uint8_t FNTbackOff=0;
       if(FNTbackOff) FNTbackOff--;
       // if( (SlotTime&0x07)==(RX_Random&0x07) )                            // every 8sec
-      else
+      else if(RF_FreqPlan.Plan<=1)
       { FANET_Packet *Packet = FNT_TxFIFO.getWrite();
         Packet->setAddress(Parameters.Address);
         Position->EncodeAirPos(*Packet, Parameters.AcftType, !Parameters.Stealth);

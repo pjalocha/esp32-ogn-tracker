@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <string.h>
+#include <math.h>
 
 #include "format.h"
 #include "ognconv.h"
@@ -409,5 +410,57 @@ int APRS2IGC(char *Out, const char *Inp, int GeoidSepar)             // convert 
   }
   Len+=5;
   Out[Len++]='\n'; Out[Len]=0; return Len; } // add NL, terminator and return length og the string
+
+// ==============================================================================================
+
+// https://en.wikipedia.org/wiki/Barometric_formula
+// https://www.engineeringtoolbox.com/standard-atmosphere-d_604.html
+
+const float g0 = 9.80665;
+const float M  = 0.0289644;
+const float R  = 8.3144598;
+
+static float BaroAlt(float P, float hb, float Pb, float Tb, float Lb, float gb=g0)
+{ if(Lb==0) return hb - logf(P/Pb)*(R*Tb)/(gb*M);
+  return hb + Tb/Lb*(1-powf(P/Pb, (R*Lb)/(gb*M))); }
+
+static float BaroPress(float h, float hb, float Pb, float Tb, float Lb, float gb=g0)
+{ if(Lb==0) return Pb*expf(-(gb*M/R)*(h-hb)/Tb);
+  return Pb*powf( (Tb-(h-hb)*Lb)/Tb, (gb*M)/(R*Lb)); }
+
+static class BaroRef
+{ public:
+   float hb, Pb, Tb, Lb, gb;
+} BaroRefTable[7] =
+{ //  [m]    [Pa]     [K]      [K/m]  [m/s^2]
+  {     0, 101325.00, 288.15,  0.0065, 9.807 },
+  { 11000,  22632.10, 216.65,  0     , 9.776 },
+  { 20000,   5474.89, 216.65, -0.0010, 9.745 },
+  { 32000,    868.02, 228.65, -0.0028, 9.715 },
+  { 47000,    110.91, 270.65,  0     , 9.654 },
+  { 51000,     66.94, 270.65,  0.0028, 9.654 },
+  { 71000,      3.96, 214.65,  0.0020, 9.594 }
+} ;
+
+float BaroTemp(float h)                     // temperature [K] at given altitude [m]
+{ int Idx=0;
+  for( ; Idx<6; Idx++)
+  { if(h<BaroRefTable[Idx+1].hb) break; }
+  BaroRef &Ref = BaroRefTable[Idx];
+  return Ref.Tb - (h-Ref.hb)*Ref.Lb; }      // [K]
+
+float BaroPress(float h)                   // pressure [Pa] at given altitude [m]
+{ int Idx=0;
+  for( ; Idx<6; Idx++)
+  { if(h<BaroRefTable[Idx+1].hb) break; }
+  BaroRef &Ref = BaroRefTable[Idx];
+  return BaroPress(h, Ref.hb, Ref.Pb, Ref.Tb, Ref.Lb /* , Ref.gb */ ); }
+
+float BaroAlt(float P)                     // altitude [m] for given pressure [Pa]
+{ int Idx=0;
+  for( ; Idx<6; Idx++)
+  { if(P>BaroRefTable[Idx+1].Pb) break; }
+  BaroRef &Ref = BaroRefTable[Idx];
+  return BaroAlt(P, Ref.hb, Ref.Pb, Ref.Tb, Ref.Lb /* , Ref.gb */ ); }
 
 // ==============================================================================================

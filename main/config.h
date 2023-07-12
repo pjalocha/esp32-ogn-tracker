@@ -77,7 +77,7 @@
 // #define WITH_ADSL
 // #define WITH_PAW
 // #define WITH_FANET
-// #define WITH_LORAWAN
+#define WITH_LORAWAN
 
 #define WITH_AP                            // WiFi Access Point: can work together with BT_SPP
 #define WITH_AP_BUTTON                     // only starts when button pressed at sartup

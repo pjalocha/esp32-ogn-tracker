@@ -181,7 +181,8 @@ static void ProcBaro(void)
              Noise=(IntSqrt(25*Noise)+64)>>7;                        // [0.1 Pa] noise (RMS) measured on the pressure
 
     int32_t Pressure=BaroPipe.Aver;                                  // [1/16Pa]
-    int32_t StdAltitude = Atmosphere::StdAltitude((Pressure+8)>>4);  // [0.1 m]
+    // int32_t StdAltitude = Atmosphere::StdAltitude((Pressure+8)>>4);  // [0.1 m]
+    int32_t StdAltitude = floorf(BaroAlt((1.0f/16)*Pressure)*10+0.5);
     int32_t ClimbRate4sec = ((Pressure-PressDelay.Input(Pressure))*PLR)/3200; // [0.01m/sec] climb rate over 4 sec.
 #ifdef WITH_VARIO
     VarioSound(ClimbRate);

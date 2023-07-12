@@ -63,6 +63,28 @@ void app_main(void)
 #endif
     IO_Configuration();                      // initialize the GPIO/UART/I2C/SPI for Radio, GPS, OLED, Baro
 
+#ifdef WITH_AXP
+    uint8_t PwrStatus = AXP.readStatus();  // bit #0 = 1:by ext. power, 0:by power-on-button
+    bool ExtPwrON = PwrStatus&1;
+    xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
+    Format_String(CONS_UART_Write, ExtPwrON ? "Power-ON by ext. power\n":"Power-ON by Power-ON button\n");
+    if(ExtPwrON)
+    { Format_String(CONS_UART_Write, "Power-ON by ext. power\n");
+      if(!Parameters.PowerON)
+      { AXP.setLED(4);
+        vTaskDelay(500);
+        AXP.setPowerOutput(AXP.OUT_LDO2,  0); // turn off RFM power
+        AXP.setPowerOutput(AXP.OUT_LDO3,  0); // turn off GPS power
+        AXP.setPowerOutput(AXP.OUT_DCDC1, 0);
+        AXP.ShutDown();
+        vTaskDelay(1000); }
+    }
+    else
+    { Format_String(CONS_UART_Write, "Power-ON button\n");
+      if(!Parameters.PowerON) { Parameters.PowerON=1; Parameters.WriteToNVS(); }
+    }
+    xSemaphoreGive(CONS_Mutex);
+#endif
 #ifdef WITH_SD
     if(SD_isMounted())                       // if SD card succesfully mounted at startup
     { Parameters.SaveToFlash=0;

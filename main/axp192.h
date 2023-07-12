@@ -24,7 +24,9 @@ class AXP192
    static const uint8_t REG_CHARGE_1        = 0x33; // target voltage, current
    static const uint8_t REG_CHARGE_2        = 0x34;
    static const uint8_t REG_BACKUP_CHG      = 0x35; // backup battery charge
-   static const uint8_t REG_POK_SET         = 0x36; // press-key parameters
+   static const uint8_t REG_POK_SET         = 0x36; // Power-ON-Key parameters
+   static const uint8_t REG_DCDC_FREQ       = 0x37; // [0..15] DC-DC frequency adjust, 5%/bit
+   static const uint8_t REG_DCDC_MODE       = 0x80; // DC-DC1/2/3 mode PFM/PWM auto or PWM fixed
 
    static const uint8_t REG_INTEN1          = 0x40; // IRQ enable
    static const uint8_t REG_INTEN2          = 0x41;

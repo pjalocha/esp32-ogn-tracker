@@ -48,6 +48,7 @@ class FlashParameters
        int8_t         TxPower:  6; // [dBm] highest bit set => HW module (up to +20dBm Tx power)
        bool      RFchipTypeHW:  1; // is this RFM69HW (Tx power up to +20dBm) ?
       uint8_t        FreqPlan:  3; // 0=default or force given frequency hopping plan
+       bool         RelayMode:  1; // Static relay-mode: rarely transmit own position, priority to relays or other aircrafts
      } ;
    } ;
 
@@ -69,14 +70,16 @@ class FlashParameters
    { uint16_t Flags;
      struct
      { bool SaveToFlash:1;   // Save parameters from the config file to Flash
-       bool       hasBT:1;   // has BT interface on the console
-       bool       BT_ON:1;   // BT on after power up
+       bool PowerON    :1;
+       bool SpareBit   :1;
+       // bool       hasBT:1;   // has BT interface on the console
+       // bool       BT_ON:1;   // BT on after power up
        bool manGeoidSepar:1; // GeoidSepar is manually configured as the GPS or MAVlink are not able to deliver it
        bool     Encrypt:1;   // encrypt the position packets
        uint8_t  NavMode:3;   // GPS navigation mode/model
        uint8_t  Verbose:2;   //
        uint8_t  NavRate:3;   // [Hz] GPS position report rate
-        int8_t TimeCorr:3;   // [sec] it appears for ArduPilot you need to correct time by 3 seconds which is likley the leap-second issue
+        int8_t TimeCorr:3;   // [sec] it appears for ArduPilot you need to correct time by 3 seconds which is likely the leap-second issue
      } ;
    } ;                       //
 
@@ -267,6 +270,8 @@ uint16_t StratuxPort;
     CONprot        =      0xFF;
     PressCorr      =         0; // [0.25Pa]
     TimeCorr       =         0; // [sec]
+
+    PowerON        =         1;
 
     FreqPlan       =    DEFAULT_FreqPlan; // [0..5]
     PPSdelay       =    DEFAULT_PPSdelay; // [ms]
@@ -495,7 +500,7 @@ uint16_t StratuxPort;
     Len+=Format_String(Line+Len, " SX1262");
 #endif
     Line[Len++]='/';
-    Len+=Format_SignDec(Line+Len, (int16_t)TxPower);
+    Len+=Format_SignDec(Line+Len, (int32_t)TxPower);
     Len+=Format_String(Line+Len, "dBm");
     Line[Len++]=' '; Len+=Format_SignDec(Line+Len, (int32_t)RFchipFreqCorr, 2, 1); Len+=Format_String(Line+Len, "ppm");
     Len+=Format_String(Line+Len, " CON:");
@@ -521,7 +526,7 @@ uint16_t StratuxPort;
     Len+=Format_String(Line+Len, ",FreqPlan=");
     Line[Len++]='0'+FreqPlan;
     Len+=Format_String(Line+Len, ",TxPower=");
-    Len+=Format_SignDec(Line+Len, (int16_t)TxPower);
+    Len+=Format_SignDec(Line+Len, (int32_t)TxPower);
     Len+=NMEA_AppendCheckCRNL(Line, Len);
     Line[Len]=0; return Len; }
 

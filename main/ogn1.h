@@ -811,7 +811,8 @@ class OGN1_Packet          // Packet structure for the OGN tracker
    void clrBaro(void)                   { Position.BaroMSB=0; Position.BaroAltDiff=0; }
    int16_t getBaroAltDiff(void) const   { int16_t AltDiff=Position.BaroAltDiff; if(Position.BaroMSB==0) AltDiff|=0xFF00; return AltDiff; }
    void setBaroAltDiff(int32_t AltDiff)
-   { if(AltDiff<(-255)) AltDiff=(-255); else if(AltDiff>255) AltDiff=255;
+   { // if(AltDiff<(-255)) AltDiff=(-255); else if(AltDiff>255) AltDiff=255;
+     if(AltDiff<(-255) || AltDiff>255) { clrBaro(); return; }
      Position.BaroMSB = (AltDiff&0xFF00)==0; Position.BaroAltDiff=AltDiff&0xFF; }
    void EncodeStdAltitude(int32_t StdAlt) { setBaroAltDiff((StdAlt-DecodeAltitude())); }
    int32_t DecodeStdAltitude(void) const { return (DecodeAltitude()+getBaroAltDiff()); }

@@ -238,6 +238,53 @@ class ADSL_Packet
 
 // --------------------------------------------------------------------------------------------------------
 
+   int WriteStxJSON(char *JSON) const                              // Stratux JSON message
+   { int Len=0;
+     uint32_t Address=getAddress();
+     Len+=Format_String(JSON+Len, "\"addr\":\"");
+     Len+=Format_Hex(JSON+Len, (uint8_t) (Address>>16));
+     Len+=Format_Hex(JSON+Len, (uint16_t)(Address));
+     JSON[Len++]='\"';
+     JSON[Len++]=',';
+     Len+=Format_String(JSON+Len, "\"addr_type\":");
+     JSON[Len++] = HexDigit(getAddrTypeOGN());
+     Len+=Format_String(JSON+Len, ",\"acft_type\":\"");
+     JSON[Len++] = HexDigit(getAcftTypeOGN());
+     // Len+=Format_String(JSON+Len, ",\"acft_cat\":\"");
+     // Len+=Format_Hex(JSON+Len, AcftCat);
+     JSON[Len++]='\"';
+
+     Len+=Format_String(JSON+Len, ",\"lat_deg\":");
+     Len+=Format_SignDec(JSON+Len, getLatUBX(), 8, 7, 1);
+     Len+=Format_String(JSON+Len, ",\"lon_deg\":");
+     Len+=Format_SignDec(JSON+Len, getLonUBX(), 8, 7, 1);
+
+     Len+=Format_String(JSON+Len, ",\"track_deg\":");
+     Len+=Format_UnsDec(JSON+Len, ((uint32_t)225*getTrack()+16)>>5, 2, 1);
+     Len+=Format_String(JSON+Len, ",\"speed_mps\":");
+     Len+=Format_UnsDec(JSON+Len, ((uint32_t)getSpeed()*10+2)>>2, 2, 1);
+     Len+=Format_String(JSON+Len, ",\"climb_mps\":");
+     Len+=Format_SignDec(JSON+Len, ((int32_t)getClimb()*10+4)>>3, 2, 1, 1);
+
+     Len+=Format_String(JSON+Len, ",\"alt_hae_m\":");
+     Len+=Format_SignDec(JSON+Len, getAlt(), 1, 0, 1);
+
+     if(getRelay()) Len+=Format_String(JSON+Len, ",\"relay\":1");
+
+     Len+=Format_String(JSON+Len, ",\"NACp\":");
+     JSON[Len++]='0'+HorizAccuracy;
+     Len+=Format_String(JSON+Len, ",\"NACv\":");
+     JSON[Len++]='0'+VelAccuracy;
+     // Len+=Format_String(JSON+Len, ",\"Emergency\":");
+     // JSON[Len++]='0'+Emergency;
+     // if(FlightState>0 && FlightState<3)
+     // { Len+=Format_String(JSON+Len, ",\"airborne\":");
+     //   Len+=Format_String(JSON+Len, FlightState==2?"true":"false"; }
+
+     return Len; }
+
+// --------------------------------------------------------------------------------------------------------
+
    void Scramble(void)
    { XXTEA_Encrypt_Key0(Word, 5, 6); }
 

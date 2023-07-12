@@ -733,13 +733,13 @@ extern "C"
 #ifdef WITH_LORAWAN
     bool WANtx = 0;
     if(WAN_BackOff) WAN_BackOff--;
-    else if(Parameters.TxPower!=(-32))                                         // decide to transmit in this slot
+    else if(RF_FreqPlan.Plan<=1 && Parameters.TxPower!=(-32))                       // decide to transmit in this slot
     { if(WANdev.State==0 || WANdev.State==2)                                   //
       { WANtx=1; SlotEnd=1220; }
     }
 #endif
 #ifdef WITH_ADSL
-    if(ADSL_Slot==1 && ADSL_TxPkt)
+    if(RF_FreqPlan.Plan<=1 && ADSL_Slot==1 && ADSL_TxPkt)
       TimeSlot(TxChan, SlotEnd-TimeSync_msTime(), ADSL_TxPkt, TRX.averRSSI, 0, TxTime);
     else
 #endif
@@ -750,7 +750,7 @@ extern "C"
 #ifdef WITH_LORAWAN
    if(!WANtx && TxPkt0 && TxPkt0->Packet.Header.AddrType && WANdev.State!=1 && WANdev.State!=3)         // if no WAN transmission/reception scheduled
 #else
-   if(TxPkt0 && TxPkt0->Packet.Header.AddrType)
+   if(RF_FreqPlan.Plan<=1 && TxPkt0 && TxPkt0->Packet.Header.AddrType)
 #endif
    { PAW_Packet Packet; Packet.Clear();
      OGN1_Packet TxPkt = TxPkt0->Packet;

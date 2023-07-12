@@ -42,7 +42,7 @@
 #define STR(macro) QUOTE(macro)
 
 #ifndef VERSION
-#define VERSION 0.1.3
+#define VERSION 0.1.5
 #endif
 
 static char Line[128];

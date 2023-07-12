@@ -107,4 +107,8 @@ uint8_t DecodeAscii85(uint32_t &Word,  const char *Ascii);  // Decode 5-char Asc
 
 int APRS2IGC(char *Out, const char *Inp, int GeoidSepar);   // convert APRS message to IGC B-record
 
+float BaroTemp(float h);                    // temperature [K] at given altitude [m]
+float BaroPress(float h);                   // pressure [Pa] at given altitude [m]
+float BaroAlt(float P);                     // altitude [m] for given pressure [Pa]
+
 #endif // __OGNCONV_H__
