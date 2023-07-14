@@ -657,10 +657,10 @@ extern "C"
     //   CONS_UART_Write('0'+ADSL_Slot);
     //   Format_String(CONS_UART_Write, "\n"); }
 #endif
-    const uint8_t *TxPktData0=0;
-    const uint8_t *TxPktData1=0;
-    const OGN_TxPacket<OGN_Packet> *TxPkt0 = RF_TxFIFO.getRead(0);             // get 1st packet from TxFIFO
-    const OGN_TxPacket<OGN_Packet> *TxPkt1 = RF_TxFIFO.getRead(1);             // get 2nd packet from TxFIFO
+    const uint8_t *TxPktData0=0;                                               // pointers to OGN packet data to be sent
+    const uint8_t *TxPktData1=0;                                               // during the two time slots
+    const OGN_TxPacket<OGN_Packet> *TxPkt0 = RF_TxFIFO.getRead(0);             // get 1st packet from TxFIFO (NULL if none)
+    const OGN_TxPacket<OGN_Packet> *TxPkt1 = RF_TxFIFO.getRead(1);             // get 2nd packet from TxFIFO (NULL if none)
     if(TxPkt0) TxPktData0=TxPkt0->Byte();                                      // if 1st is not NULL then get its data
     if(TxPkt1) TxPktData1=TxPkt1->Byte();                                      // if 2nd if not NULL then get its data
           else TxPktData1=TxPktData0;                                          // but if NULL then take copy of the 1st packet
@@ -670,11 +670,11 @@ extern "C"
       { const uint8_t *Tmp=TxPktData0; TxPktData0=TxPktData1; TxPktData1=Tmp; } // swap 1st and 2nd packet data
     }
 #ifdef WITH_ADSL
-    if(ADSL_Slot==0 && ADSL_TxPkt)
+    if(Parameters.TxADSL && RF_FreqPlan.Plan<=1 && ADSL_Slot==0 && ADSL_TxPkt)
       TimeSlot(TxChan, 800-TimeSync_msTime(), ADSL_TxPkt, TRX.averRSSI, 0, TxTime);
     else
 #endif
-      TimeSlot(TxChan, 800-TimeSync_msTime(), TxPktData0, TRX.averRSSI, 0, TxTime); // run a Time-Slot till 0.800sec
+      TimeSlot(TxChan, 800-TimeSync_msTime(), Parameters.TxOGN?TxPktData0:0, TRX.averRSSI, 0, TxTime); // run a Time-Slot till 0.800sec
 
     TRX.setModeStandby();
     TxChan = RF_FreqPlan.getChannel(RF_SlotTime, 1, 1);                        // transmit channel
@@ -733,25 +733,25 @@ extern "C"
 #ifdef WITH_LORAWAN
     bool WANtx = 0;
     if(WAN_BackOff) WAN_BackOff--;
-    else if(RF_FreqPlan.Plan<=1 && Parameters.TxPower!=(-32))                       // decide to transmit in this slot
+    else if(Parameters.TxWAN && RF_FreqPlan.Plan<=1 && Parameters.TxPower!=(-32)) // decide to transmit in this slot
     { if(WANdev.State==0 || WANdev.State==2)                                   //
       { WANtx=1; SlotEnd=1220; }
     }
 #endif
 #ifdef WITH_ADSL
-    if(RF_FreqPlan.Plan<=1 && ADSL_Slot==1 && ADSL_TxPkt)
+    if(Parameters.TxADSL && RF_FreqPlan.Plan<=1 && ADSL_Slot==1 && ADSL_TxPkt)
       TimeSlot(TxChan, SlotEnd-TimeSync_msTime(), ADSL_TxPkt, TRX.averRSSI, 0, TxTime);
     else
 #endif
-      TimeSlot(TxChan, SlotEnd-TimeSync_msTime(), TxPktData1, TRX.averRSSI, 0, TxTime);
+      TimeSlot(TxChan, SlotEnd-TimeSync_msTime(), Parameters.TxOGN?TxPktData1:0, TRX.averRSSI, 0, TxTime);
 
 #ifdef WITH_PAW
    static uint8_t PAWtxBackOff = 4;
 #ifdef WITH_LORAWAN
-   if(!WANtx && TxPkt0 && TxPkt0->Packet.Header.AddrType && WANdev.State!=1 && WANdev.State!=3)         // if no WAN transmission/reception scheduled
+   if(Parameters.TxPAW && RF_FreqPlan.Plan<=1 && !WANtx && TxPkt0 && TxPkt0->Packet.Header.AddrType && WANdev.State!=1 && WANdev.State!=3)         // if no WAN transmission/reception scheduled
 #else
-   if(RF_FreqPlan.Plan<=1 && TxPkt0 && TxPkt0->Packet.Header.AddrType)
-#endif
+   if(Parameters.TxPAW && RF_FreqPlan.Plan<=1 && TxPkt0 && TxPkt0->Packet.Header.AddrType)
+#endif // WITH_LORAWAN
    { PAW_Packet Packet; Packet.Clear();
      OGN1_Packet TxPkt = TxPkt0->Packet;
      TxPkt.Dewhiten();                                                // de-whiten the OGN packet so it can be converted to PAW format

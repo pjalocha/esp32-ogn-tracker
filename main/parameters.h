@@ -179,6 +179,34 @@ uint16_t StratuxPort;
   uint8_t AppKey[16];
 #endif
 
+  union
+  { uint16_t TxProtMask;
+    struct
+    { bool TxSpare:1;
+      bool TxOGN:1;
+      bool TxADSL:1;
+      bool TxPAW:1;
+      bool TxFNT:1;
+      bool TxWAN:1;
+      bool TxADSB:1;
+      bool TxODID:1;
+    } ;
+  } ;
+
+  union
+  { uint16_t RxProtMask;
+    struct
+    { bool RxSpare:1;
+      bool RxOGN:1;
+      bool RxADSL:1;
+      bool RxPAW:1;
+      bool RxFNT:1;
+      bool RxWAN:1;
+      bool RxADSB:1;
+      bool RxODID:1;
+    } ;
+  } ;
+
   uint32_t CheckSum;
 
 #ifdef WITH_APRS
@@ -247,6 +275,8 @@ uint16_t StratuxPort;
     TxPower        =        14; // [dBm] for RFM69HW
     RFchipTypeHW   =         1;
 #endif
+    TxProtMask       =    0xFF;
+    RxProtMask       =    0xFF;
 
     Flags          =         0;
 #ifdef WITH_GPS_UBX
@@ -691,9 +721,15 @@ uint16_t StratuxPort;
     if(strcmp(Name, "GNSS")==0)
     { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
       GNSS=Mode; return 1; }
+    if(strcmp(Name, "TxProtMask")==0)
+    { int32_t Mask=0; if(Read_Int(Mask, Value)<=0) return 0;
+      TxProtMask=Mask; return 1; }
+    if(strcmp(Name, "RxProtMask")==0)
+    { int32_t Mask=0; if(Read_Int(Mask, Value)<=0) return 0;
+      RxProtMask=Mask; return 1; }
     if(strcmp(Name, "PageMask")==0)
-    { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
-      PageMask=Mode; return 1; }
+    { int32_t Mask=0; if(Read_Int(Mask, Value)<=0) return 0;
+      PageMask=Mask; return 1; }
     if(strcmp(Name, "InitialPage")==0)
     { int32_t Mode=0; if(Read_Int(Mode, Value)<=0) return 0;
       InitialPage=Mode; return 1; }
@@ -871,6 +907,8 @@ uint16_t StratuxPort;
     Write_Hex    (Line, "CONprot"   ,          CONprot,        1); strcat(Line, " #  [ mask]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_SignDec(Line, "TxPower"   ,          TxPower          ); strcat(Line, " #  [  dBm]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_UnsDec (Line, "TxHW"      ,(uint32_t)RFchipTypeHW     ); strcat(Line, " #  [ bool]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_Hex    (Line, "TxProtMask" ,    (uint32_t)TxProtMask,2); strcat(Line, " #  [ mask]\n"); if(fputs(Line, File)==EOF) return EOF;
+    Write_Hex    (Line, "RxProtMask" ,    (uint32_t)RxProtMask,2); strcat(Line, " #  [ mask]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_UnsDec (Line, "FreqPlan"  ,(uint32_t)FreqPlan         ); strcat(Line, " #  [ 0..5]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_Float1 (Line, "FreqCorr"  , (int32_t)RFchipFreqCorr   ); strcat(Line, " #  [  ppm]\n"); if(fputs(Line, File)==EOF) return EOF;
     Write_SignDec(Line, "TempCorr"  , (int32_t)RFchipTempCorr   ); strcat(Line, " #  [ degC]\n"); if(fputs(Line, File)==EOF) return EOF;
@@ -942,6 +980,8 @@ uint16_t StratuxPort;
     Write_Hex    (Line, "CONprot"   ,          CONprot,        1); strcat(Line, " #  [ mask]\n"); Format_String(Output, Line);
     Write_SignDec(Line, "TxPower"   ,          TxPower          ); strcat(Line, " #  [  dBm]\n"); Format_String(Output, Line);
     Write_UnsDec (Line, "TxHW"      ,(uint32_t)RFchipTypeHW     ); strcat(Line, " #  [ bool]\n"); Format_String(Output, Line);
+    Write_Hex    (Line, "TxProtMask" ,    (uint32_t)TxProtMask,2); strcat(Line, " #  [ mask]\n"); Format_String(Output, Line);
+    Write_Hex    (Line, "RxProtMask" ,    (uint32_t)RxProtMask,2); strcat(Line, " #  [ mask]\n"); Format_String(Output, Line);
     Write_UnsDec (Line, "FreqPlan"  ,(uint32_t)FreqPlan         ); strcat(Line, " #  [ 0..5]\n"); Format_String(Output, Line);
     Write_Float1 (Line, "FreqCorr"  , (int32_t)RFchipFreqCorr   ); strcat(Line, " #  [  ppm]\n"); Format_String(Output, Line);
     Write_SignDec(Line, "TempCorr"  , (int32_t)RFchipTempCorr   ); strcat(Line, " #  [ degC]\n"); Format_String(Output, Line);

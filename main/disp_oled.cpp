@@ -42,7 +42,7 @@
 #define STR(macro) QUOTE(macro)
 
 #ifndef VERSION
-#define VERSION 0.1.5
+#define VERSION 0.1.6
 #endif
 
 static char Line[128];
@@ -824,8 +824,8 @@ void OLED_DrawID(u8g2_t *OLED, GPS_Position *GPS)
   else
   {
 #ifdef WITH_FollowMe
-  u8g2_DrawStr(OLED, 15, 44, "FollowMe868");
-  u8g2_DrawStr(OLED, 20, 56, "by AVIONIX");
+  u8g2_DrawStr(OLED, 15, 37, "FollowMe868");
+  u8g2_DrawStr(OLED, 20, 49, "by AVIONIX");
 #endif
   }
   // u8g2_SetFont(OLED, u8g2_font_5x8_tr);

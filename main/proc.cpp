@@ -667,7 +667,7 @@ void vTaskPROC(void* pvParameters)
       static uint8_t FNTbackOff=0;
       if(FNTbackOff) FNTbackOff--;
       // if( (SlotTime&0x07)==(RX_Random&0x07) )                            // every 8sec
-      else if(RF_FreqPlan.Plan<=1)
+      else if(Parameters.TxFNT && RF_FreqPlan.Plan<=1)
       { FANET_Packet *Packet = FNT_TxFIFO.getWrite();
         Packet->setAddress(Parameters.Address);
         Position->EncodeAirPos(*Packet, Parameters.AcftType, !Parameters.Stealth);
