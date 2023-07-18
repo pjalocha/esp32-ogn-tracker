@@ -67,9 +67,10 @@ void app_main(void)
     uint8_t PwrStatus = AXP.readStatus();  // bit #0 = 1:by ext. power, 0:by power-on-button
     bool ExtPwrON = PwrStatus&1;
     xSemaphoreTake(CONS_Mutex, portMAX_DELAY);
-    Format_String(CONS_UART_Write, ExtPwrON ? "Power-ON by ext. power\n":"Power-ON by Power-ON button\n");
+    // Format_String(CONS_UART_Write, ExtPwrON ? "Power-ON by ext. power\n":"Power-ON by Power-ON button\n");
     if(ExtPwrON)
     { Format_String(CONS_UART_Write, "Power-ON by ext. power\n");
+#ifdef WITH_POWERON_MEMORY
       if(!Parameters.PowerON)
       { AXP.setLED(4);
         vTaskDelay(500);
@@ -78,6 +79,7 @@ void app_main(void)
         AXP.setPowerOutput(AXP.OUT_DCDC1, 0);
         AXP.ShutDown();
         vTaskDelay(1000); }
+#endif
     }
     else
     { Format_String(CONS_UART_Write, "Power-ON button\n");
